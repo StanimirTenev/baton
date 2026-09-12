@@ -23,7 +23,11 @@ git clone https://github.com/StanimirTenev/baton ~/.baton
 ~/.baton/install.sh
 ```
 
-**Windows** — double-click `install.cmd`, or from a terminal:
+**Windows, fresh machine with no Claude Code** — double-click `setup-windows.cmd`. It
+installs Claude Code (Anthropic's own native installer — no administrator, no Node.js, needs
+internet) and then Baton, in one step.
+
+**Windows, Claude Code already present** — double-click `install.cmd`, or from a terminal:
 
 ```
 git clone https://github.com/StanimirTenev/baton %USERPROFILE%\.baton
