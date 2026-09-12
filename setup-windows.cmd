@@ -40,6 +40,12 @@ if %errorlevel%==0 (
 )
 echo.
 
+rem --- 1b. Make sure claude is on PATH (the native installer does not always add it) ---
+set "PATHFIX=%~dp0baton\ensure-claude-path.ps1"
+if not exist "%PATHFIX%" set "PATHFIX=%~dp0ensure-claude-path.ps1"
+if exist "%PATHFIX%" powershell -NoProfile -ExecutionPolicy Bypass -File "%PATHFIX%"
+echo.
+
 rem --- 2. Baton ------------------------------------------------------------
 rem Works whether Baton is in a "baton\" subfolder (USB layout) or right here (a clone).
 set "BATON_DIR=%~dp0baton"
