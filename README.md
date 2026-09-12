@@ -32,7 +32,10 @@ git clone https://github.com/StanimirTenev/baton %USERPROFILE%\.baton
 
 No git and no internet on the target machine? Copy this folder onto a USB stick, plug it
 in, and double-click `install.cmd`. The installer copies the hooks into your user profile,
-so the stick can come straight back out afterwards.
+so the stick can come straight back out afterwards. Put a Windows **embeddable Python**
+(from python.org) in a `python-win\` folder next to `install.cmd` and the installer will
+use it when the machine has no Python of its own — so the stick needs nothing installed on
+the target at all.
 
 Then open `/hooks` once (or restart) so Claude Code reloads its settings. Or just point an
 agent at this repository and say: **"read the README and install it."**
@@ -55,9 +58,11 @@ or a USB stick — can be removed afterwards. Run it twice and the second run re
 everything is already in place. Add `--dry-run` (or `-DryRun` on Windows) to see the
 changes without making them.
 
-Requires `python3` on PATH — the hooks are Python, one implementation for Linux, macOS and
-Windows. On Windows without Python, the installer prints the one-line, no-administrator
-`winget` command to add it for your user.
+Requires Python — the hooks are Python, one implementation for Linux, macOS and Windows.
+The interpreter's absolute path is baked into the hook, so a hook never depends on `PATH`
+at run time. On Windows without Python, the installer uses a bundled copy if one sits in
+`python-win\` (the USB build carries it), otherwise it prints the one-line,
+no-administrator `winget` command to add it for your user.
 
 ## What you get
 

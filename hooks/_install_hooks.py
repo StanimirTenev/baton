@@ -4,10 +4,13 @@
 Writes baton.local.json (task root + logbook name) next to the hooks, then merges the
 two hook commands into settings.json without disturbing anything already there.
 
-Usage: _install_hooks.py <settings.json> <hookdir> <barepy> <dry:0|1> <home> <logbook>
+Usage: _install_hooks.py <settings.json> <hookdir> <pyexe> <dry:0|1> <home> <logbook>
 
-`barepy` is a launcher name found on PATH (python / python3 / py) — emitted UNQUOTED so
-the command runs under bash, cmd and PowerShell alike; only the script path is quoted.
+`pyexe` is the ABSOLUTE path to the Python interpreter. The hooks are installed in the
+exec ("args") form — `command` is that interpreter, spawned directly with the script as an
+argument, no shell. That sidesteps the whole Windows tangle at once: no PATH lookup (a hook
+runs in whatever environment the harness gives it, which may not carry Python on PATH), no
+quoting, no space-in-path breakage, no PowerShell-vs-bash difference.
 """
 import json
 import os
@@ -15,7 +18,7 @@ import sys
 
 
 def main() -> int:
-    settings_path, hookdir, barepy, dry_s, home, logbook = sys.argv[1:7]
+    settings_path, hookdir, pyexe, dry_s, home, logbook = sys.argv[1:7]
     dry = dry_s == "1"
 
     # 1. local config the hooks read at runtime (so the command needs no env prefix)
@@ -29,9 +32,13 @@ def main() -> int:
         print("  local config written")
 
     wanted = {
-        "SessionStart": f'{barepy} "{os.path.join(hookdir, "baton_session_start.py")}"',
-        "Stop": f'{barepy} "{os.path.join(hookdir, "baton_stop.py")}"',
+        "SessionStart": os.path.join(hookdir, "baton_session_start.py"),
+        "Stop": os.path.join(hookdir, "baton_stop.py"),
     }
+
+    def is_baton(h):
+        blob = str(h.get("command", "")) + " ".join(h.get("args", []) or [])
+        return "baton_" in blob
 
     data = {}
     if os.path.exists(settings_path):
@@ -46,21 +53,22 @@ def main() -> int:
     hooks = data.setdefault("hooks", {})
     changed = False
 
-    for event, command in wanted.items():
-        entries = hooks.setdefault(event, [])
-        existing = [h for group in entries for h in group.get("hooks", [])
-                    if "baton_" in str(h.get("command", ""))]
+    for event, script in wanted.items():
+        entry = {"type": "command", "command": pyexe, "args": [script], "timeout": 20}
+        groups = hooks.setdefault(event, [])
+        existing = [h for group in groups for h in group.get("hooks", []) if is_baton(h)]
         if existing:
             for h in existing:
-                if h.get("command") != command:
-                    h["command"] = command
+                if h.get("command") != pyexe or h.get("args") != [script]:
+                    h.pop("command", None); h.pop("args", None)
+                    h.update({"command": pyexe, "args": [script]})
                     changed = True
-                    print(f"  {event}: hook path updated")
+                    print(f"  {event}: hook updated")
                     break
             else:
                 print(f"  {event}: hook already installed")
             continue
-        entries.append({"hooks": [{"type": "command", "command": command, "timeout": 20}]})
+        groups.append({"hooks": [entry]})
         changed = True
         print(f"  {event}: hook installed")
 

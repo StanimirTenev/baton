@@ -21,29 +21,48 @@ $Logbook   = if ($env:BATON_LOGBOOK) { $env:BATON_LOGBOOK } else { "LOGBOOK.md" 
 
 function Say($m) { Write-Host "  $m" }
 
-# Find a Python launcher on PATH. The hooks are Python; one implementation for every OS.
-$BarePy = $null
+# A Python interpreter. The hooks are Python; one implementation for every OS.
+# Order: one on PATH, else the copy bundled next to this script (a flash stick carries it),
+# else tell the user the one-line, no-administrator winget command.
+$PyLauncher = $null   # something runnable now, to run the merge step
 foreach ($cand in @("py", "python", "python3")) {
     $cmd = Get-Command $cand -ErrorAction SilentlyContinue
     if ($cmd) {
         # `py` with no args can hang waiting for input on some setups; probe with -V.
-        try { & $cand -V *> $null; if ($LASTEXITCODE -eq 0) { $BarePy = $cand; break } } catch {}
+        try { & $cand -V *> $null; if ($LASTEXITCODE -eq 0) { $PyLauncher = $cand; break } } catch {}
     }
 }
-if (-not $BarePy) {
-    Write-Host "baton: Python was not found on PATH." -ForegroundColor Yellow
+
+$Bundled = Join-Path $Repo "python-win\python.exe"
+if (-not $PyLauncher -and (Test-Path -LiteralPath $Bundled)) {
+    # No Python on the machine — use the bundled one, copied into the profile so it
+    # outlives the flash drive.
+    $BundledDst = Join-Path $Install "python-win"
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Force -Path $Install | Out-Null
+        Copy-Item (Join-Path $Repo "python-win") $BundledDst -Recurse -Force
+    }
+    $PyLauncher = Join-Path $BundledDst "python.exe"
+    Say "no Python on the machine - using the bundled interpreter"
+}
+
+if (-not $PyLauncher) {
+    Write-Host "baton: Python was not found, and no bundled copy is next to this script." -ForegroundColor Yellow
     Write-Host "Install it once, for your user only (no administrator):"
     Write-Host "    winget install -e --id Python.Python.3.12 --scope user"
     Write-Host "Open a new terminal so PATH refreshes, then run this installer again."
+    Write-Host "(Or use the USB build of Baton, which carries Python with it.)"
     exit 1
 }
+# absolute interpreter path — baked into the hook so it never depends on PATH at run time
+$PyExe = (& $PyLauncher -c "import sys; print(sys.executable)").Trim()
 
 Write-Host "Baton"
 Say "repo:     $Repo"
 Say "config:   $ClaudeDir"
 Say "tasks:    $Tasks"
 Say "logbook:  $Logbook"
-Say "python:   $BarePy"
+Say "python:   $PyExe"
 if ($DryRun) { Say "(dry run - nothing will be written)" }
 Write-Host ""
 
@@ -86,7 +105,7 @@ if ($DryRun) {
 
 # 4. local config + hooks, merged into settings.json without disturbing anything else
 $dryArg = if ($DryRun) { "1" } else { "0" }
-& $BarePy (Join-Path $Repo "hooks\_install_hooks.py") $Settings $HookDir $BarePy $dryArg $Tasks $Logbook
+& $PyLauncher (Join-Path $Repo "hooks\_install_hooks.py") $Settings $HookDir $PyExe $dryArg $Tasks $Logbook
 
 Write-Host ""
 Write-Host "Done. Open /hooks once in Claude Code (or restart) so it reloads settings.json."

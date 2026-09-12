@@ -24,8 +24,8 @@ if [ -z "$PY" ]; then
   echo "baton: needs python3 on PATH (the hooks are Python, one implementation for every OS)" >&2
   exit 1
 fi
-# bare launcher name, emitted unquoted into the hook command
-BAREPY="$(basename "$PY")"
+# absolute interpreter path — baked into the hook so it never depends on PATH at run time
+PYEXE="$("$PY" -c 'import sys; print(sys.executable)')"
 
 say() { printf '  %s\n' "$*"; }
 
@@ -69,7 +69,7 @@ else
 fi
 
 # 4. local config + hooks, merged into settings.json without disturbing anything else
-"$PY" "$REPO/hooks/_install_hooks.py" "$SETTINGS" "$HOOKDIR" "$BAREPY" "$DRY_RUN" "$TASKS" "$LOGBOOK"
+"$PY" "$REPO/hooks/_install_hooks.py" "$SETTINGS" "$HOOKDIR" "$PYEXE" "$DRY_RUN" "$TASKS" "$LOGBOOK"
 
 echo
 echo "Done. Open /hooks once (or restart) so the harness reloads settings.json."
