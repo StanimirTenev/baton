@@ -44,6 +44,14 @@ the target at all.
 Then open `/hooks` once (or restart) so Claude Code reloads its settings. Or just point an
 agent at this repository and say: **"read the README and install it."**
 
+### Dev tools (git, gh, node/npm, ripgrep, python)
+
+Claude Code itself is self-contained, but real work usually wants a toolchain. `tools-windows.cmd`
+installs **git, GitHub CLI, Node.js + npm, ripgrep, and Python** via winget. These install
+machine-wide, so it needs administrator (accept the UAC prompts); re-running is safe. Git for
+Windows gives Claude Code its Bash tool, `gh` drives PRs and issues, `node`/`npm` run MCP servers,
+`rg` is fast search. It is kept separate from the Baton install, which needs no administrator.
+
 ### Why `install.cmd` and not the `.ps1` directly
 
 On Windows a bare `.ps1` often stops with *"running scripts is disabled on this system"* —
