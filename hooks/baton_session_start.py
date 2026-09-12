@@ -14,18 +14,23 @@ from datetime import datetime
 from pathlib import Path
 
 MAX_TASKS = 6
+DATED_HEADING = re.compile(
+    r"^\d{4}-\d\d-\d\d(?:[ T]\d\d:\d\d)?\s*[\u2014\u2013-]\s*(?P<title>.+)$"
+)
 
 
-def logbook_name() -> str:
-    """Name of the logbook file. Localisable: BATON_LOGBOOK=DNEVNIK.md works fine."""
-    return os.environ.get("BATON_LOGBOOK") or "LOGBOOK.md"
-
-
-def baton_home() -> Path:
-    return Path(os.environ.get("BATON_HOME") or (Path.home() / "tasks")).expanduser()
-
-
-DATED_HEADING = re.compile(r"^\d{4}-\d\d-\d\d(?:[ T]\d\d:\d\d)?\s*[\u2014\u2013-]\s*(?P<title>.+)$")
+def config() -> tuple[Path, str]:
+    """Task root and logbook name: env var, then baton.local.json next to this file,
+    then the defaults. The local file lets the hook command stay a plain
+    `python "hook.py"` that runs under any shell, with no env prefix."""
+    cfg = {}
+    try:
+        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8"))
+    except Exception:
+        cfg = {}
+    home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")
+    logbook = os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"
+    return Path(home).expanduser(), logbook
 
 
 def first_entry_title(logbook: Path) -> str:
@@ -42,8 +47,7 @@ def first_entry_title(logbook: Path) -> str:
     return ""
 
 
-def describe(folder: Path) -> str:
-    name = logbook_name()
+def describe(folder: Path, name: str) -> str:
     logbook = folder / name
     if not logbook.is_file():
         return f"- {folder.name} — NO {name} (nothing was ever recorded here)"
@@ -53,7 +57,7 @@ def describe(folder: Path) -> str:
 
 
 def main() -> int:
-    root = baton_home()
+    root, name = config()
     if not root.is_dir():
         return 0
 
@@ -62,25 +66,20 @@ def main() -> int:
         return 0
 
     folders.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    listed = [describe(p) for p in folders[:MAX_TASKS]]
+    listed = [describe(p, name) for p in folders[:MAX_TASKS]]
     more = len(folders) - len(listed)
 
     context = (
         f"Baton — task folders in {root}, most recently touched first:\n"
         + "\n".join(listed)
         + (f"\n- ...and {more} more" if more > 0 else "")
-        + f"\n\nBefore working on any of these, read its {logbook_name()} first — it "
-        "is the only record of what previous sessions did. When you finish a session "
-        f"of work on a task, prepend an entry to that task's {logbook_name()}."
+        + f"\n\nBefore working on any of these, read its {name} first — it is the only "
+        "record of what previous sessions did. When you finish a session of work on a "
+        f"task, prepend an entry to that task's {name}."
     )
 
     json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "SessionStart",
-                "additionalContext": context,
-            }
-        },
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}},
         sys.stdout,
     )
     return 0

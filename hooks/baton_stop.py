@@ -4,7 +4,7 @@
 Catches the failure Baton exists to prevent: work happened inside a task folder and
 no logbook entry was written for it.
 
-A folder is "unrecorded" when it holds a file newer than its own LOGBOOK.md. That is a
+A folder is "unrecorded" when it holds a file newer than its own logbook. That is a
 narrow test on purpose — a session that touched no task folder is never interrupted.
 
 When something is unrecorded the turn is handed back to the agent with a note naming the
@@ -20,13 +20,17 @@ SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cach
 GRACE_SECONDS = 90  # a file saved moments ago is still being worked on
 
 
-def logbook_name() -> str:
-    """Name of the logbook file. Localisable: BATON_LOGBOOK=DNEVNIK.md works fine."""
-    return os.environ.get("BATON_LOGBOOK") or "LOGBOOK.md"
-
-
-def baton_home() -> Path:
-    return Path(os.environ.get("BATON_HOME") or (Path.home() / "tasks")).expanduser()
+def config() -> tuple[Path, str]:
+    """Task root and logbook name: env var, then baton.local.json next to this file,
+    then the defaults — the same resolution the SessionStart hook uses."""
+    cfg = {}
+    try:
+        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8"))
+    except Exception:
+        cfg = {}
+    home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")
+    logbook = os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"
+    return Path(home).expanduser(), logbook
 
 
 def newest_work_mtime(folder: Path, logbook: str) -> float:
@@ -43,8 +47,7 @@ def newest_work_mtime(folder: Path, logbook: str) -> float:
     return newest
 
 
-def unrecorded(root: Path) -> list[str]:
-    name = logbook_name()
+def unrecorded(root: Path, name: str) -> list[str]:
     out = []
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
         logbook = folder / name
@@ -67,22 +70,22 @@ def main() -> int:
     if payload.get("stop_hook_active"):
         return 0
 
-    root = baton_home()
+    root, name = config()
     if not root.is_dir():
         return 0
 
-    stale = unrecorded(root)
+    stale = unrecorded(root, name)
     if not stale:
         return 0
 
-    listed = "\n".join(f"  - {name}" for name in stale)
+    listed = "\n".join(f"  - {folder}" for folder in stale)
     json.dump(
         {
             "decision": "block",
             "reason": (
-                f"Baton: these task folders hold work newer than their {logbook_name()}:\n"
+                f"Baton: these task folders hold work newer than their {name}:\n"
                 f"{listed}\n\n"
-                f"Prepend an entry to each one's {logbook_name()} before finishing — what was "
+                f"Prepend an entry to each one's {name} before finishing — what was "
                 "asked, what was done, the result, and what is still open. Write it for "
                 "the next session, which will have none of this conversation.\n\n"
                 "If the change was incidental and genuinely needs no entry, say so in one "

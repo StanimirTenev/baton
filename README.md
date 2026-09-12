@@ -16,23 +16,48 @@ written at the end. The hooks are executed by the harness, not by the agent's ju
 
 ## Install
 
+**Linux / macOS:**
+
 ```bash
 git clone https://github.com/StanimirTenev/baton ~/.baton
 ~/.baton/install.sh
 ```
 
-Then open `/hooks` once (or restart) so Claude Code reloads its settings.
+**Windows** — double-click `install.cmd`, or from a terminal:
 
-Or just point an agent at this repository and say: **"read the README and install it."**
-That is the intended path — the instructions below are written to be executed, not admired.
+```
+git clone https://github.com/StanimirTenev/baton %USERPROFILE%\.baton
+%USERPROFILE%\.baton\install.cmd
+```
 
-Nothing is overwritten. The installer appends to `~/.claude/CLAUDE.md`, merges two entries
-into `~/.claude/settings.json`, and creates `~/tasks/`. Run it twice and the second run
-reports that everything is already in place. `./install.sh --dry-run` shows the changes
-without making them.
+No git and no internet on the target machine? Copy this folder onto a USB stick, plug it
+in, and double-click `install.cmd`. The installer copies the hooks into your user profile,
+so the stick can come straight back out afterwards.
 
-Requires `python3` on PATH — the hooks are Python so that one implementation covers Linux,
-macOS and Windows.
+Then open `/hooks` once (or restart) so Claude Code reloads its settings. Or just point an
+agent at this repository and say: **"read the README and install it."**
+
+### Why `install.cmd` and not the `.ps1` directly
+
+On Windows a bare `.ps1` often stops with *"running scripts is disabled on this system"* —
+the PowerShell execution policy. `install.cmd` sidesteps it the documented way: a `.cmd`
+file is not itself governed by the execution policy, and it launches PowerShell with
+`-ExecutionPolicy Bypass` **scoped to that one process**. No administrator, and the
+machine's policy is left exactly as it was. It is not a security bypass — it is the
+per-process scope PowerShell provides for exactly this.
+
+### What it does, on every OS
+
+Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/`, appends to
+`~/.claude/CLAUDE.md`, merges two entries into `~/.claude/settings.json`, and creates
+`~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
+or a USB stick — can be removed afterwards. Run it twice and the second run reports that
+everything is already in place. Add `--dry-run` (or `-DryRun` on Windows) to see the
+changes without making them.
+
+Requires `python3` on PATH — the hooks are Python, one implementation for Linux, macOS and
+Windows. On Windows without Python, the installer prints the one-line, no-administrator
+`winget` command to add it for your user.
 
 ## What you get
 
