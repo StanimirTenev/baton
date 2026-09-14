@@ -130,6 +130,21 @@ nothing else. So record what you would need to continue: what was decided and wh
 verified and how, what is still unknown, and which mistakes were already paid for — so they
 are not paid for twice.
 
+## Ignoring files that change on their own
+
+Some task folders hold a file that legitimately changes without needing a new logbook entry —
+a live transcript, a rotating log, generated output. Drop a `.batonignore` in the task folder
+(gitignore-style: one glob per line, `#` for comments) and the Stop hook skips those when
+deciding whether work went unrecorded:
+
+```
+transcript.txt
+*.log
+build/*
+```
+
+The Stop hook also names the newest unrecorded file, so you can see at a glance what tripped it.
+
 ## Logbook is not memory
 
 They are different jobs and must not merge:

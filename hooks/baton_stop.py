@@ -11,6 +11,7 @@ When something is unrecorded the turn is handed back to the agent with a note na
 folder. `stop_hook_active` is honoured, so this can block at most once per turn and can
 never trap a session in a loop.
 """
+import fnmatch
 import json
 import os
 import sys
@@ -18,6 +19,21 @@ from pathlib import Path
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache"}
 GRACE_SECONDS = 90  # a file saved moments ago is still being worked on
+
+
+def ignore_patterns(folder: Path) -> list[str]:
+    """Globs from a .batonignore in the task folder (gitignore-style, one per line,
+    '#' comments). Use it for files that legitimately change without needing a logbook
+    entry — a live transcript, a rotating log, generated output."""
+    try:
+        lines = (folder / ".batonignore").read_text("utf-8").splitlines()
+    except OSError:
+        return []
+    return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
+
+
+def is_ignored(rel: str, name: str, patterns: list[str]) -> bool:
+    return any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(name, p) for p in patterns)
 
 
 def config() -> tuple[Path, str]:
@@ -33,30 +49,41 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-def newest_work_mtime(folder: Path, logbook: str) -> float:
-    newest = 0.0
+def newest_work(folder: Path, logbook: str) -> tuple[float, str]:
+    """Newest work-file mtime in the folder, and that file's name. Skips the logbook,
+    dotfiles, SKIP_DIRS, and anything matched by the folder's .batonignore."""
+    patterns = ignore_patterns(folder)
+    newest, newest_name = 0.0, ""
     for dirpath, dirnames, filenames in os.walk(folder):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
         for name in filenames:
             if name == logbook or name.startswith("."):
                 continue
+            rel = os.path.relpath(os.path.join(dirpath, name), folder)
+            if is_ignored(rel, name, patterns):
+                continue
             try:
-                newest = max(newest, (Path(dirpath) / name).stat().st_mtime)
+                m = (Path(dirpath) / name).stat().st_mtime
             except OSError:
                 continue
-    return newest
+            if m > newest:
+                newest, newest_name = m, rel
+    return newest, newest_name
 
 
 def unrecorded(root: Path, name: str) -> list[str]:
     out = []
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
         logbook = folder / name
-        work = newest_work_mtime(folder, name)
+        work, newest_name = newest_work(folder, name)
         if work == 0.0:
             continue
         logged = logbook.stat().st_mtime if logbook.is_file() else 0.0
         if work > logged + GRACE_SECONDS:
-            out.append(folder.name if logbook.is_file() else f"{folder.name} (no {name} at all)")
+            if logbook.is_file():
+                out.append(f"{folder.name} (newest: {newest_name})")
+            else:
+                out.append(f"{folder.name} (no {name} at all; newest: {newest_name})")
     return out
 
 
