@@ -76,21 +76,20 @@ if (Test-Path -LiteralPath $Tasks -PathType Container) {
 
 # 2. instructions
 $ClaudeMd = Join-Path $ClaudeDir "CLAUDE.md"
-if ($DryRun) {
+$alreadyThere = (Test-Path -LiteralPath $ClaudeMd) -and (Select-String -LiteralPath $ClaudeMd -Pattern "Installed by Baton" -Quiet)
+if ($alreadyThere) {
+    Say "instructions already present - left as they are"
+} elseif ($DryRun) {
     Say "would append Baton section to $ClaudeMd"
 } else {
     if (-not (Test-Path -LiteralPath $ClaudeDir)) { New-Item -ItemType Directory -Force -Path $ClaudeDir | Out-Null }
-    if ((Test-Path -LiteralPath $ClaudeMd) -and (Select-String -LiteralPath $ClaudeMd -Pattern "Installed by Baton" -Quiet)) {
-        Say "instructions already present - left as they are"
-    } else {
-        $body = Get-Content -LiteralPath (Join-Path $Repo "CLAUDE.md") -Raw -Encoding UTF8
-        if (Test-Path -LiteralPath $ClaudeMd) { $body = "`n`n---`n`n" + $body }
-        # UTF-8 without BOM, so the file reads cleanly everywhere.
-        $enc = New-Object System.Text.UTF8Encoding($false)
-        $existing = if (Test-Path -LiteralPath $ClaudeMd) { [IO.File]::ReadAllText($ClaudeMd, $enc) } else { "" }
-        [IO.File]::WriteAllText($ClaudeMd, $existing + $body, $enc)
-        Say "instructions appended to $ClaudeMd"
-    }
+    $body = Get-Content -LiteralPath (Join-Path $Repo "CLAUDE.md") -Raw -Encoding UTF8
+    if (Test-Path -LiteralPath $ClaudeMd) { $body = "`n`n---`n`n" + $body }
+    # UTF-8 without BOM, so the file reads cleanly everywhere.
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    $existing = if (Test-Path -LiteralPath $ClaudeMd) { [IO.File]::ReadAllText($ClaudeMd, $enc) } else { "" }
+    [IO.File]::WriteAllText($ClaudeMd, $existing + $body, $enc)
+    Say "instructions appended to $ClaudeMd"
 }
 
 # 3. copy the runtime hooks to a permanent location, so the flash drive can be removed
@@ -103,14 +102,16 @@ if ($DryRun) {
     Say "hooks copied to $HookDir"
 }
 
-# 3b. the inventory skill — maps work that existed before Baton (run it once: /baton-inventory)
-$SkillDir = Join-Path $ClaudeDir "skills\baton-inventory"
-if ($DryRun) {
-    Say "would copy skill to $SkillDir"
-} else {
-    New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
-    Copy-Item (Join-Path $Repo "skills\baton-inventory\SKILL.md") $SkillDir -Force
-    Say "skill copied to $SkillDir"
+# 3b. skills — /baton-inventory (map existing work) and /baton-plan (goal -> research -> plan)
+foreach ($skill in Get-ChildItem -Directory (Join-Path $Repo "skills")) {
+    $SkillDir = Join-Path $ClaudeDir ("skills\" + $skill.Name)
+    if ($DryRun) {
+        Say "would copy skill to $SkillDir"
+    } else {
+        New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
+        Copy-Item (Join-Path $skill.FullName "SKILL.md") $SkillDir -Force
+        Say "skill copied to $SkillDir"
+    }
 }
 
 # 4. local config + hooks, merged into settings.json without disturbing anything else
@@ -121,3 +122,4 @@ Write-Host ""
 Write-Host "Done. Open /hooks once in Claude Code (or restart) so it reloads settings.json."
 Write-Host "Then: make a folder in $Tasks, put a $Logbook in it, and the hooks take over."
 Write-Host "Existing work on this machine? Run /baton-inventory once to map it into task folders."
+Write-Host "A big new goal? Start it with /baton-plan (research rounds, then the plan)."

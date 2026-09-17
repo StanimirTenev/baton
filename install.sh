@@ -46,17 +46,15 @@ else
 fi
 
 # 2. instructions
-if [ "$DRY_RUN" = 1 ]; then
+if [ -f "$CLAUDE_DIR/CLAUDE.md" ] && grep -q 'Installed by Baton' "$CLAUDE_DIR/CLAUDE.md"; then
+  say "instructions already present — left as they are"
+elif [ "$DRY_RUN" = 1 ]; then
   say "would append Baton section to $CLAUDE_DIR/CLAUDE.md"
 else
   mkdir -p "$CLAUDE_DIR"
-  if [ -f "$CLAUDE_DIR/CLAUDE.md" ] && grep -q 'Installed by Baton' "$CLAUDE_DIR/CLAUDE.md"; then
-    say "instructions already present — left as they are"
-  else
-    [ -f "$CLAUDE_DIR/CLAUDE.md" ] && printf '\n\n---\n\n' >> "$CLAUDE_DIR/CLAUDE.md"
-    cat "$REPO/CLAUDE.md" >> "$CLAUDE_DIR/CLAUDE.md"
-    say "instructions appended to $CLAUDE_DIR/CLAUDE.md"
-  fi
+  [ -f "$CLAUDE_DIR/CLAUDE.md" ] && printf '\n\n---\n\n' >> "$CLAUDE_DIR/CLAUDE.md"
+  cat "$REPO/CLAUDE.md" >> "$CLAUDE_DIR/CLAUDE.md"
+  say "instructions appended to $CLAUDE_DIR/CLAUDE.md"
 fi
 
 # 3. copy the runtime hooks to a permanent location, so the source can be removed
@@ -68,14 +66,17 @@ else
   say "hooks copied to $HOOKDIR"
 fi
 
-# 3b. the inventory skill — maps work that existed before Baton (run it once: /baton-inventory)
-if [ "$DRY_RUN" = 1 ]; then
-  say "would copy skill to $CLAUDE_DIR/skills/baton-inventory"
-else
-  mkdir -p "$CLAUDE_DIR/skills/baton-inventory"
-  cp "$REPO/skills/baton-inventory/SKILL.md" "$CLAUDE_DIR/skills/baton-inventory/"
-  say "skill copied to $CLAUDE_DIR/skills/baton-inventory"
-fi
+# 3b. skills — /baton-inventory (map existing work) and /baton-plan (goal → research → plan)
+for skill in "$REPO"/skills/*/; do
+  name="$(basename "$skill")"
+  if [ "$DRY_RUN" = 1 ]; then
+    say "would copy skill to $CLAUDE_DIR/skills/$name"
+  else
+    mkdir -p "$CLAUDE_DIR/skills/$name"
+    cp "$skill/SKILL.md" "$CLAUDE_DIR/skills/$name/"
+    say "skill copied to $CLAUDE_DIR/skills/$name"
+  fi
+done
 
 # 4. local config + hooks, merged into settings.json without disturbing anything else
 "$PY" "$REPO/hooks/_install_hooks.py" "$SETTINGS" "$HOOKDIR" "$PYEXE" "$DRY_RUN" "$TASKS" "$LOGBOOK"
@@ -84,3 +85,4 @@ echo
 echo "Done. Open /hooks once (or restart) so the harness reloads settings.json."
 echo "Then: make a folder in $TASKS, put a $LOGBOOK in it, and the hooks take over."
 echo "Existing work on this machine? Run /baton-inventory once to map it into task folders."
+echo "A big new goal? Start it with /baton-plan (research rounds, then the plan)."

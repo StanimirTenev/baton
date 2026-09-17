@@ -84,6 +84,11 @@ Work that predates Baton is mapped once with `/baton-inventory`. The skill searc
 machine, you confirm each task's state, and only then does it create folders with
 reconstructed logbooks.
 
+A large new goal starts with `/baton-plan`. The agent formulates the goal with you, then runs
+research rounds with sources and a verifier. It builds the plan backwards from the goal,
+and you decide at every checkpoint. Research is never skipped in favour of a plan written
+from memory.
+
 A task parked on purpose gets `sastoyanie: zamrazena` in its header. SessionStart lists
 it but never offers it as work.
 

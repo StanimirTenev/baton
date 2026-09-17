@@ -64,7 +64,7 @@ per-process scope PowerShell provides for exactly this.
 ### What it does, on every OS
 
 Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
-inventory skill into `~/.claude/skills/baton-inventory/`, appends to
+skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`), appends to
 `~/.claude/CLAUDE.md`, merges two entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
 or a USB stick — can be removed afterwards. Run it twice and the second run reports that
@@ -95,6 +95,32 @@ When the evidence conflicts, memory and history decide the state and files decid
 location. A file date tells you when something was touched, not whether it is finished.
 On its first run the file-only agents misjudged state three times, and memory was right
 each time.
+
+### A big new goal: `/baton-plan`
+
+For a task that runs in several directions at once (launching a product, finding
+customers), the second skill runs a loop in which **research comes before the plan**:
+
+1. **Goal first.** You and the agent agree on the result you expect and how you will
+   know you reached it. The task folder gets a `PLAN.md` v0, drafted from what the agent
+   already knows and labelled as such. That draft is the yardstick for what research
+   changed.
+2. **Research round.** 6–10 agents run in parallel, one narrow angle each, taken from the
+   open questions: competitors, prices, buyers, regulation, channels, and so on. Two agents
+   run every time: one that reads your own files and memory, and a devil's advocate
+   against the current plan. Each agent writes a table of claims with sources. A claim
+   without a source is marked as inferred.
+3. **Verify.** An independent agent checks the claims the plan rests on against primary
+   sources. `FAKTI.md` records every fact with its status and source.
+4. **Plan vN.** The plan is built backwards from the goal. It starts with a section on
+   what changed since the last version and why. Long-lead "doors" (listings, partners,
+   standards) are started first.
+5. **Human checkpoint.** You make the decisions. The open questions go into the next
+   round. The loop stops when nothing blocks the plan, or after three rounds.
+
+Agents work in English. The consolidated output comes back in your language. In its first
+real use, the first round changed the plan's core argument, and the second round changed
+the shape of the product and caught a factual error left over from round one.
 
 ## What you get
 
@@ -230,6 +256,11 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.1.0**
+- **`/baton-plan`:** set the goal, then run research rounds with a verifier, then a plan
+  built backwards from the goal, with a human checkpoint every round.
+- **Installers:** copy every skill in `skills/`.
+
 **v2.0.0**
 - **Task header.** A task can record its state, who holds the next move, a completion
   criterion, a deadline, the next action and a priority.
@@ -280,7 +311,7 @@ having been done.
 ## Uninstall
 
 Remove the two `baton_` entries from `~/.claude/settings.json`, delete the Baton section
-from `~/.claude/CLAUDE.md`, and remove `~/.claude/baton`, `~/.claude/skills/baton-inventory` and
+from `~/.claude/CLAUDE.md`, and remove `~/.claude/baton`, `~/.claude/skills/baton-inventory`, `~/.claude/skills/baton-plan` and
 `~/.baton`. Your task folders are plain directories
 of plain Markdown — they keep working without any of this, which is the point.
 
