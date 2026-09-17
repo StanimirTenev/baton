@@ -134,10 +134,30 @@ Then wait. Record every decision in `VAPROSI.md` and the logbook. A decision tha
 overturns an older rule goes into memory too, marked "changed on <date>, because …",
 with the old rule kept as a warning.
 
-## 5. After the loop
+## 5. After the loop — lessons and the task tree
 
-When no open question blocks the plan, split the plan into sub-tasks. Each one gets its
-own Baton folder, linked from PLAN.md. Research swarms stay for research. Judgement
-(price, name, letters, strategy) stays with the human, and building goes to agents only
-where the success criterion can be checked by a machine and there is a hard cap on
-effort.
+When research ends (no blocking question left, or the round cap is reached), write
+`DARVO.md` (the task tree) and show it to the human. This is the hand-over from research
+to execution.
+
+1. **Lessons across all rounds.** One table: the lesson, which round produced it (and which
+   round corrected it), and its status (verified / computed / an agent's claim). Add one
+   line on the method: what each round changed.
+2. **The tree, from the goal down to tasks.** Branches are the "what must be true" items
+   from the plan. Each leaf is a task with exactly one state:
+   - **✅** done
+   - **▶** can be done now, by the agent, without waiting
+   - **🧑** waits for a human decision (numbered as in `VAPROSI.md`)
+   - **🗣** waits for an outside person
+   - **⛔ ← X** blocked by X, where X is named explicitly
+   - **🔁** recurring
+
+   Put the decisions in their own branch at the top, because everything below waits on them.
+3. **"Can do now"** lists the ▶ tasks. **"Unlocks most"** names the one or two decisions or
+   conversations that unblock the most leaves.
+4. Then split into sub-tasks as the human decides. Each sub-task gets its own Baton folder,
+   linked from PLAN.md and DARVO.md.
+
+Research swarms stay for research. Judgement (price, name, letters, strategy) stays with
+the human, and building goes to agents only where the success criterion can be checked by
+a machine and there is a hard cap on effort.
