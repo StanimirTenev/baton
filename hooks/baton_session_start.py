@@ -58,7 +58,7 @@ def parse_frontmatter(text: str) -> dict:
     fm = {}
     for line in lines[1:]:
         if line.strip() == "---":
-            break
+            return fm
         s = line.strip()
         if not s or s.startswith("#") or ":" not in line:
             continue
@@ -72,7 +72,7 @@ def parse_frontmatter(text: str) -> dict:
         if cut != -1:
             val = val[:cut].strip()
         fm[key] = val.strip().strip("\"'")
-    return fm
+    return {}  # no closing fence: not a header, just a logbook that opens with ---
 
 
 def first_entry_title(text: str) -> str:
@@ -141,7 +141,7 @@ def main() -> int:
             continue
         dl = deadline(fm)
         rec = {"name": f.name, "fm": fm, "dl": dl}
-        if not is_us(fm):
+        if not is_us(fm) or sast in ("chakashta", "чакаща", "waiting"):
             # someone/something else is on the hook — a person OR a condition
             # (a disk to arrive). Never in "we can progress now", even with a deadline.
             external.append(rec)
@@ -167,8 +167,10 @@ def main() -> int:
             line_for(r["name"], r["fm"]) for r in recurring))
     if external:
         def ext_tail(r):
-            t = f"  (чака: {r['fm'].get('na_hod')}"
-            return t + (f", срок {r['dl']})" if r["dl"] else ")")
+            bits = [] if is_us(r["fm"]) else [f"чака: {r['fm'].get('na_hod')}"]
+            if r["dl"]:
+                bits.append(f"срок {r['dl']}")
+            return f"  ({', '.join(bits)})" if bits else ""
         blocks.append("⛔ Чакат ВЪНШЕН / блокирани (за сведение):\n" + "\n".join(
             line_for(r["name"], r["fm"], ext_tail(r)) for r in external))
     if plain:
@@ -196,17 +198,24 @@ def main() -> int:
     if finished:
         tail = f"\n\n✅ Приключени (не се пипат): {', '.join(sorted(finished))}"
 
-    context = (
+    summary = (
         f"Baton — задачите в {root}, подредени по кой е на ход и приоритет:\n\n"
         + "\n\n".join(blocks)
         + tail
+    )
+    context = (
+        summary
         + f"\n\nПреди работа по някоя — прочети нейния {name} (той е записът от предишни сесии; "
         f"front-matter хедърът горе носи текущото състояние). След работа — впиши нов запис най-отгоре "
         f"и обнови хедъра, ако състоянието се е сменило."
     )
 
     json.dump(
-        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}},
+        {
+            # additionalContext reaches only the agent; systemMessage is what the human sees
+            "systemMessage": summary,
+            "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context},
+        },
         sys.stdout,
     )
     return 0
