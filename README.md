@@ -256,6 +256,13 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.1.1**
+- **Windows files with a BOM.** Logbooks, `.batonignore` and `settings.json` that start with one (as
+  PowerShell 5.1's `Set-Content -Encoding UTF8` writes them) are now read correctly. Before this fix, such a
+  logbook lost its header, the first ignore pattern did nothing, and the installer refused to write.
+- **Installer output** uses plain hyphens, so a Windows console no longer shows garbled characters.
+- **Tested on Windows PowerShell 5.1** (`install.cmd` / `install.ps1`, both hooks, Cyrillic names).
+
 **v2.1.0**
 - **`/baton-plan`:** set the goal, then run research rounds with a verifier, then a plan
   built backwards from the goal, with a human checkpoint every round.
