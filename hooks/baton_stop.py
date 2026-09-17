@@ -26,7 +26,7 @@ def ignore_patterns(folder: Path) -> list[str]:
     '#' comments). Use it for files that legitimately change without needing a logbook
     entry — a live transcript, a rotating log, generated output."""
     try:
-        lines = (folder / ".batonignore").read_text("utf-8").splitlines()
+        lines = (folder / ".batonignore").read_text("utf-8-sig").splitlines()
     except OSError:
         return []
     return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
@@ -41,7 +41,7 @@ def config() -> tuple[Path, str]:
     then the defaults — the same resolution the SessionStart hook uses."""
     cfg = {}
     try:
-        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8"))
+        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         cfg = {}
     home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")

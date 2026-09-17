@@ -33,7 +33,7 @@ DATED_HEADING = re.compile(
 def config() -> tuple[Path, str]:
     cfg = {}
     try:
-        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8"))
+        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         cfg = {}
     home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")
@@ -43,7 +43,7 @@ def config() -> tuple[Path, str]:
 
 def read_head(logbook: Path) -> str:
     try:
-        return logbook.read_text(encoding="utf-8", errors="replace")
+        return logbook.read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
         return ""
 

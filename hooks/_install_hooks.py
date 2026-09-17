@@ -43,10 +43,10 @@ def main() -> int:
     data = {}
     if os.path.exists(settings_path):
         try:
-            with open(settings_path, encoding="utf-8") as fh:
+            with open(settings_path, encoding="utf-8-sig") as fh:
                 data = json.load(fh)
         except Exception as exc:
-            print(f"  settings.json is not valid JSON ({exc}) — fix it first, nothing written",
+            print(f"  settings.json is not valid JSON ({exc}) - fix it first, nothing written",
                   file=sys.stderr)
             return 1
 
@@ -73,7 +73,7 @@ def main() -> int:
         print(f"  {event}: hook installed")
 
     if dry:
-        print("  (dry run — settings.json not written)")
+        print("  (dry run - settings.json not written)")
     elif changed:
         os.makedirs(os.path.dirname(settings_path) or ".", exist_ok=True)
         tmp = settings_path + ".baton-tmp"
