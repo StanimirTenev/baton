@@ -1,6 +1,6 @@
 ---
 name: baton-plan
-description: Start a large or multi-direction task the Baton way. Set the goal first, run parallel research rounds from several angles, keep facts with sources apart from open questions, and build the plan backwards from the goal, re-planning after each round with the human at every checkpoint. Use when a new goal arrives ("we want to start selling X", "launch Y") or when asked to research and plan before acting.
+description: Start a large or multi-direction task the Baton way. Set the goal first, run up to two parallel research rounds from several angles, keep facts with sources apart from open questions, and build the plan backwards from the goal, re-planning after each round with the human at every checkpoint. Use when a new goal arrives ("we want to start selling X", "launch Y") or when asked to research and plan before acting.
 ---
 
 # Baton plan — goal → research rounds → plan
@@ -10,8 +10,11 @@ or it is researched with no question in mind. This skill runs a loop that avoids
 
 **goal → questions → research round → verified facts → plan vN → human decides → next round**
 
-It stops when no open question still blocks the plan, or after **3 rounds**. What is
-still unclear by then goes to the human as a decision.
+It stops when no open question still blocks the plan, or after **2 rounds**. Two rounds
+are the default because the second already changes the plan substantially and a third
+returns less than it costs; run a third only if the human asks for it. What is still
+unclear by then goes to the human as a decision, or into the plan as a task (a cheap
+test, a question for a lawyer). After that the plan is **executed**, not researched further.
 
 Task root and logbook name come from `~/.claude/baton/hooks/baton.local.json` (`home`,
 `logbook`). The files below are written into `<task root>/<task>/`.
