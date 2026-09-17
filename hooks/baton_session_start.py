@@ -125,7 +125,7 @@ def main() -> int:
     if not folders:
         return 0
 
-    overdue, recurring, on_us, external, plain, finished = [], [], [], [], [], []
+    overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
     today = date.today()
 
     for f in folders:
@@ -136,8 +136,12 @@ def main() -> int:
             plain.append(f)
             continue
         sast = str(fm.get("sastoyanie", "")).strip().lower()
-        if sast in ("priklyuchila", "приключила", "done"):
+        if sast in ("priklyuchila", "priklyuchena", "приключила", "приключена", "done"):
             finished.append(f.name)
+            continue
+        if sast in ("zamrazena", "замразена", "frozen", "paused"):
+            # parked on purpose: shown for the record, never offered as work
+            frozen.append(f.name)
             continue
         dl = deadline(fm)
         rec = {"name": f.name, "fm": fm, "dl": dl}
@@ -191,17 +195,17 @@ def main() -> int:
             block += f"\n- ...and {more} more"
         blocks.append(block)
 
-    if not blocks:
+    if not blocks and not frozen and not finished:
         return 0
 
-    tail = ""
+    if frozen:
+        blocks.append(f"❄️ Замразени (не се предлагат): {', '.join(sorted(frozen))}")
     if finished:
-        tail = f"\n\n✅ Приключени (не се пипат): {', '.join(sorted(finished))}"
+        blocks.append(f"✅ Приключени (не се пипат): {', '.join(sorted(finished))}")
 
     summary = (
         f"Baton — задачите в {root}, подредени по кой е на ход и приоритет:\n\n"
         + "\n\n".join(blocks)
-        + tail
     )
     context = (
         summary

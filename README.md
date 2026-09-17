@@ -70,6 +70,25 @@ or a USB stick — can be removed afterwards. Run it twice and the second run re
 everything is already in place. Add `--dry-run` (or `-DryRun` on Windows) to see the
 changes without making them.
 
+### Existing work: `/baton-inventory`
+
+The installer also copies one skill, `~/.claude/skills/baton-inventory/`. Baton starts
+empty, but the machine rarely does. Run `/baton-inventory` once after installing:
+
+1. **Scan.** Four read-only agents search the machine at the same time. They cover git
+   repositories, loose files, Claude Code memory and history, and project folders.
+2. **Review.** The results are gathered into one inventory: tasks with a next step,
+   recurring work, frozen, done, files that belong to existing tasks, and risks found on the
+   way (a repository with no remote, a readable private key). **You confirm the state of
+   each item.**
+3. **Apply.** Only then are task folders created. Each logbook opens with an entry marked
+   *reconstructed*, and nothing is moved.
+
+When the evidence conflicts, memory and history decide the state and files decide the
+location. A file date tells you when something was touched, not whether it is finished.
+On its first run the file-only agents misjudged state three times, and memory was right
+each time.
+
 Requires Python — the hooks are Python, one implementation for Linux, macOS and Windows.
 The interpreter's absolute path is baked into the hook, so a hook never depends on `PATH`
 at run time. On Windows without Python, the installer uses a bundled copy if one sits in

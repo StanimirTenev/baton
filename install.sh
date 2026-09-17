@@ -68,9 +68,19 @@ else
   say "hooks copied to $HOOKDIR"
 fi
 
+# 3b. the inventory skill — maps work that existed before Baton (run it once: /baton-inventory)
+if [ "$DRY_RUN" = 1 ]; then
+  say "would copy skill to $CLAUDE_DIR/skills/baton-inventory"
+else
+  mkdir -p "$CLAUDE_DIR/skills/baton-inventory"
+  cp "$REPO/skills/baton-inventory/SKILL.md" "$CLAUDE_DIR/skills/baton-inventory/"
+  say "skill copied to $CLAUDE_DIR/skills/baton-inventory"
+fi
+
 # 4. local config + hooks, merged into settings.json without disturbing anything else
 "$PY" "$REPO/hooks/_install_hooks.py" "$SETTINGS" "$HOOKDIR" "$PYEXE" "$DRY_RUN" "$TASKS" "$LOGBOOK"
 
 echo
 echo "Done. Open /hooks once (or restart) so the harness reloads settings.json."
 echo "Then: make a folder in $TASKS, put a $LOGBOOK in it, and the hooks take over."
+echo "Existing work on this machine? Run /baton-inventory once to map it into task folders."

@@ -103,6 +103,16 @@ if ($DryRun) {
     Say "hooks copied to $HookDir"
 }
 
+# 3b. the inventory skill — maps work that existed before Baton (run it once: /baton-inventory)
+$SkillDir = Join-Path $ClaudeDir "skills\baton-inventory"
+if ($DryRun) {
+    Say "would copy skill to $SkillDir"
+} else {
+    New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
+    Copy-Item (Join-Path $Repo "skills\baton-inventory\SKILL.md") $SkillDir -Force
+    Say "skill copied to $SkillDir"
+}
+
 # 4. local config + hooks, merged into settings.json without disturbing anything else
 $dryArg = if ($DryRun) { "1" } else { "0" }
 & $PyLauncher (Join-Path $Repo "hooks\_install_hooks.py") $Settings $HookDir $PyExe $dryArg $Tasks $Logbook
@@ -110,3 +120,4 @@ $dryArg = if ($DryRun) { "1" } else { "0" }
 Write-Host ""
 Write-Host "Done. Open /hooks once in Claude Code (or restart) so it reloads settings.json."
 Write-Host "Then: make a folder in $Tasks, put a $Logbook in it, and the hooks take over."
+Write-Host "Existing work on this machine? Run /baton-inventory once to map it into task folders."

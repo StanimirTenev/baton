@@ -79,4 +79,11 @@ Two hooks ship with Baton and do not depend on the agent remembering any of the 
 - **Stop** checks whether a task folder has files newer than its `LOGBOOK.md`, and if so
   returns the turn to the agent with a note saying which one is unrecorded.
 
+Work that predates Baton is mapped once with `/baton-inventory`. The skill searches the
+machine, you confirm each task's state, and only then does it create folders with
+reconstructed logbooks.
+
+A task parked on purpose gets `sastoyanie: zamrazena` in its header. SessionStart lists
+it but never offers it as work.
+
 The rule is the fallback. The hooks are what actually holds.
