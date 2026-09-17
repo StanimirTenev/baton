@@ -63,12 +63,19 @@ per-process scope PowerShell provides for exactly this.
 
 ### What it does, on every OS
 
-Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/`, appends to
+Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
+inventory skill into `~/.claude/skills/baton-inventory/`, appends to
 `~/.claude/CLAUDE.md`, merges two entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
 or a USB stick — can be removed afterwards. Run it twice and the second run reports that
 everything is already in place. Add `--dry-run` (or `-DryRun` on Windows) to see the
 changes without making them.
+
+Requires Python — the hooks are Python, one implementation for Linux, macOS and Windows.
+The interpreter's absolute path is baked into the hook, so a hook never depends on `PATH`
+at run time. On Windows without Python, the installer uses a bundled copy if one sits in
+`python-win\` (the USB build carries it), otherwise it prints the one-line,
+no-administrator `winget` command to add it for your user.
 
 ### Existing work: `/baton-inventory`
 
@@ -89,12 +96,6 @@ location. A file date tells you when something was touched, not whether it is fi
 On its first run the file-only agents misjudged state three times, and memory was right
 each time.
 
-Requires Python — the hooks are Python, one implementation for Linux, macOS and Windows.
-The interpreter's absolute path is baked into the hook, so a hook never depends on `PATH`
-at run time. On Windows without Python, the installer uses a bundled copy if one sits in
-`python-win\` (the USB build carries it), otherwise it prints the one-line,
-no-administrator `winget` command to add it for your user.
-
 ## What you get
 
 ```
@@ -108,19 +109,67 @@ no-administrator `winget` command to add it for your user.
     replacement-procedure.pdf
 ```
 
-**SessionStart** injects the recently touched task folders and the date of each last entry,
-so a session never opens blind:
+**SessionStart** tells the session which task comes first, so it never opens blind.
+Tasks with a header (see below) are grouped by who holds the next move and sorted by
+priority. The human sees the same list the agent gets:
 
 ```
-Baton — task folders in /home/you/tasks, most recently touched first:
-- migrate-billing — last entry 2026-03-14 17:20: schema diff, two columns unresolved
-- broken-disk — last entry 2026-03-09 20:41: disk identified, procedure written
+Baton — задачите в /home/you/tasks, подредени по кой е на ход и приоритет:
+
+⏳ Чакат ТЕБ / може да продължим сега:
+- migrate-billing [visok] — decide tax_region before the run
+
+🔁 Постоянни:
+- weekly-report [nisak] — Monday export
+
+⛔ Чакат ВЪНШЕН / блокирани (за сведение):
+- broken-disk [sreden] — zpool replace  (чака: new disk (delivery))
+
+❄️ Замразени (не се предлагат): old-scraper
+
+✅ Приключени (не се пипат): schema-audit
 ```
+
+The groups mean overdue (a deadline within 3 days), on us, recurring, waiting on someone
+else, frozen and done. A task with no header falls back to the v1 line: its name, the date
+of its last entry, and that entry's title.
+
+> The group labels and header keys are Bulgarian (transliterated), because that is where
+> Baton was built. English values are accepted where noted below.
 
 **Stop** checks whether any task folder holds a file newer than its `LOGBOOK.md`. If one
 does, the turn is handed back with a note naming it. The test is deliberately narrow: a
 session that touched no task folder is never interrupted, and `stop_hook_active` is honoured
 so it can block at most once per turn.
+
+## The task header (v2)
+
+A logbook can open with a small header. It is optional. With a header, SessionStart knows
+what the task *means* right now, not only when it was last touched.
+
+```markdown
+---
+sastoyanie: aktivna          # state
+na_hod: nie                  # who holds the next move: nie (= us) or a name / a condition
+kriterii_zavarshvane: "migration ran, row counts match"   # when is it done
+vremevi_kriterii: po_izbor   # po_izbor (any time) | postoyanno (recurring) | YYYY-MM-DD (deadline)
+sledvashto: "decide tax_region before the run"             # the next concrete action
+prioritet: visok             # visok | sreden | nisak  (high | medium | low)
+---
+```
+
+| `sastoyanie` | meaning | also accepted |
+|---|---|---|
+| `aktivna` | in progress | |
+| `chakashta` | waiting on someone or something external | `waiting` |
+| `postoyanna` | recurring, never finishes | |
+| `zamrazena` | parked on purpose; listed, never offered as work | `frozen`, `paused` |
+| `priklyuchila` | done; listed, not touched | `priklyuchena`, `done` |
+
+For `na_hod`, anything other than `nie` / `us` / `me` / `self` (or empty) counts as "waiting
+on someone else". A task waiting on someone never lands in "on us", even with a deadline.
+The parser is deliberately small: `key: value` lines, quoted strings, `[a, b]` lists and
+trailing ` #` comments. It is not full YAML, so Baton needs no dependencies.
 
 ## The logbook entry
 
@@ -179,6 +228,26 @@ and you get a file that is too long to load every session and too disordered to 
 [`docs/memory-layout.md`](docs/memory-layout.md) covers the other half: index, one folder
 per project, a short state file under 150 lines, chronology in a separate history file.
 
+## Versions
+
+**v2.0.0**
+- **Task header.** A task can record its state, who holds the next move, a completion
+  criterion, a deadline, the next action and a priority.
+- **SessionStart groups by meaning.** Tasks are grouped by who holds the next move
+  (overdue, on us, recurring, waiting, frozen, done) and sorted by priority. The human sees
+  the list too (`systemMessage`).
+- **`/baton-inventory`.** The installers ship this skill. It maps work that predates Baton
+  into task folders, and you confirm each item before anything is written.
+- **Fixes.** A waiting task never shows as "on us". An unclosed `---` is not read as a header.
+- Header-less logbooks behave exactly as in v1.
+
+**v1.0.0**
+- **Task folders and logbooks**, with a SessionStart hook that lists recent tasks and a Stop
+  hook that catches unrecorded work (`.batonignore` supported).
+- **Installers.** Linux and macOS, plus Windows: `install.cmd`, one-step `setup-windows.cmd`,
+  and `tools-windows.cmd` for the dev toolchain.
+- **Hooks run without PATH**, and a bundled Python covers Windows machines without one.
+
 ## Why this exists
 
 A server had a disk fail. It was diagnosed, the replacement was worked out, and a careful
@@ -211,7 +280,8 @@ having been done.
 ## Uninstall
 
 Remove the two `baton_` entries from `~/.claude/settings.json`, delete the Baton section
-from `~/.claude/CLAUDE.md`, and remove `~/.baton`. Your task folders are plain directories
+from `~/.claude/CLAUDE.md`, and remove `~/.claude/baton`, `~/.claude/skills/baton-inventory` and
+`~/.baton`. Your task folders are plain directories
 of plain Markdown — they keep working without any of this, which is the point.
 
 ## Not solved here

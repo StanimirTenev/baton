@@ -75,7 +75,8 @@ New state replaces old state in the memory file. The logbook only ever grows.
 
 Two hooks ship with Baton and do not depend on the agent remembering any of the above:
 
-- **SessionStart** lists the recently touched task folders and the date of each last entry.
+- **SessionStart** lists the task folders grouped by who holds the next move and sorted by
+  priority (from each logbook's header), or by last entry when a logbook has no header.
 - **Stop** checks whether a task folder has files newer than its `LOGBOOK.md`, and if so
   returns the turn to the agent with a note saying which one is unrecorded.
 
