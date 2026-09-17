@@ -81,10 +81,13 @@ Mechanics:
   cannot write files.
 - **Shared context.** Write `razuznavane/kragg-N/BRIEF.md` first: the verified facts so
   far plus the rules below. Every prompt starts with "read BRIEF.md".
-- **One agent, one narrow angle.** The web search budget per agent is limited (about 200
-  searches). Keep questions narrow, prefer fetching known official URLs, and split any
-  deep question into two agents. If an official site blocks bots, use its official
-  mirror; for EUR-Lex that is `publications.europa.eu/resource/celex/<CELEX>`.
+- **One agent, one narrow angle.** The web search budget (about 200 searches) is
+  shared by the **whole session**, not given to each agent, and it does not refill
+  between rounds. Plan how to spend it across rounds: keep questions narrow, prefer
+  fetching known official URLs, and put the deepest questions in the first round. Once
+  the budget is spent, agents can only fetch pages they already know, so say so to the
+  human before launching another round. If an official site blocks bots, use its
+  official mirror; for EUR-Lex that is `publications.europa.eu/resource/celex/<CELEX>`.
 - **Rules for every agent:**
   - Work and write in **English**. Only the consolidated output is in the human's
     language.
