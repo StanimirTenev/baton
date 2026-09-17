@@ -153,9 +153,11 @@ to execution.
    - **🔁** recurring
 
    Put the decisions in their own branch at the top, because everything below waits on them.
-3. **"Can do now"** lists the ▶ tasks. **"Unlocks most"** names the one or two decisions or
+3. **Priority order of the branches.** Ask the human which two or three branches unlock
+   everything else, and put that order at the top of `DARVO.md`. The rest follow in order.
+4. **"Can do now"** lists the ▶ tasks. **"Unlocks most"** names the one or two decisions or
    conversations that unblock the most leaves.
-4. Then split into sub-tasks as the human decides. Each sub-task gets its own Baton folder,
+5. Then split into sub-tasks as the human decides. Each sub-task gets its own Baton folder,
    linked from PLAN.md and DARVO.md.
 
 Research swarms stay for research. Judgement (price, name, letters, strategy) stays with
