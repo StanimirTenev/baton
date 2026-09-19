@@ -284,6 +284,18 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.2.0**
+- **Shelf life.** Two optional header fields, `vyarno_kum` and `pregled_sled`, make a snapshot
+  announce its own age instead of reading as current; when the period passes, the task is listed
+  at session start with how late the review is.
+- **An unverified claim is a debt.** A `FAKTI.md` / `FACTS.md` row marked inferred or as an
+  unchecked agent's claim is dated by its round heading and reported after thirty days. A row
+  verified against a source, or checked locally, is never reported at any age.
+- **`/baton-plan`:** two research rounds by default, then execute; every round runs an own-assets
+  and a devil's-advocate agent; research ends with a task tree (`DARVO.md`) carrying a priority
+  order of branches.
+- **First tests.** 15 of them, running the hook as a module.
+
 **v2.1.1**
 - **Windows files with a BOM.** Logbooks, `.batonignore` and `settings.json` that start with one (as
   PowerShell 5.1's `Set-Content -Encoding UTF8` writes them) are now read correctly. Before this fix, such a
