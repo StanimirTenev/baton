@@ -96,6 +96,18 @@ location. A file date tells you when something was touched, not whether it is fi
 On its first run the file-only agents misjudged state three times, and memory was right
 each time.
 
+### Two paths, and the cheap one is the default
+
+**The direct path** needs no skill: read the logbook, do the work, write the entry. The hooks
+already enforce it. One letter, one fix, one decision, one measurement — this is most work.
+
+**The swarm** is `/baton-plan`, and it costs. Measured on real rounds: seven agents ≈ 1.3 million
+tokens and half an hour; four agents ≈ 660 thousand. Worth it when there is something to
+**measure** or a written **claim to attack**; not worth it for judgement — a price, a name, a
+letter — where a swarm returns opinions, and opinions do not improve by being seven.
+
+The test: *what would the round check its answer against?* No answer, no round.
+
 ### A big new goal: `/baton-plan`
 
 For a task that runs in several directions at once (launching a product, finding
@@ -225,6 +237,21 @@ A debt is not an error. It is a claim that has to be paid — verified, or dropp
 produced this feature was a day old when it nearly cancelled a plan; at thirty days it would have
 been quoted as a fact by a session that had never seen it written.
 
+## The board
+
+```
+python3 tools/baton_tablo.py --out tablo.html --open
+```
+
+One local HTML file: what is on your move, what waits on someone else, what is late, and every
+shelf-life warning. It reuses the hook's own parsing rather than reading the headers a second
+way — two readers of one header that disagree is a defect waiting to happen, and the board is
+the one that would be believed, because it is prettier.
+
+It is generated, never edited. The logbooks are the record; this is a view of them. Nothing is
+uploaded and nothing leaves the machine, which is the reason it is a file rather than a hosted
+page: logbooks carry client matter, and a board is not worth sending it anywhere.
+
 ## Retiring a constraint
 
 Research adds. Almost nothing retires, and a rule nobody retires goes on steering the plan from a
@@ -313,6 +340,10 @@ per project, a short state file under 150 lines, chronology in a separate histor
 ## Versions
 
 **v2.2.0**
+- **The board.** `tools/baton_tablo.py` writes one local HTML file with the same state
+  the session-start hook reports, laid out to be read at a glance.
+- **Two paths, priced.** The direct path needs no skill; the swarm costs roughly 1.3M tokens
+  for seven agents, and the README says when it is worth it.
 - **Retiring a constraint.** `/baton-plan` re-scores every constraint a round touched into
   `OGRANICHENIYA.md` — stands / falls / awaits a check — and Baton checks the register against the
   files, so a constraint written down as fallen whose text is still there is reported.

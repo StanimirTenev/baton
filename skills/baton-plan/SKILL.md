@@ -19,6 +19,35 @@ test, a question for a lawyer). After that the plan is **executed**, not researc
 Task root and logbook name come from `~/.claude/baton/hooks/baton.local.json` (`home`,
 `logbook`). The files below are written into `<task root>/<task>/`.
 
+## Before you run this at all: is it a swarm question?
+
+Baton has two paths, and this skill is the expensive one. Most work is not this.
+
+**The direct path** is what the hooks already enforce and needs no skill: read the task's
+logbook, do the work, write the entry. One letter, one fix, one decision, one measurement you
+can take yourself. It costs what the work costs.
+
+**The swarm** — this skill — runs 6 to 10 agents a round. Measured: a seven-agent round came to
+roughly 1.3 million tokens and 30 minutes; a four-agent round, 660 thousand. That is the price,
+and it should be spent deliberately rather than by habit.
+
+Take the swarm when one of these is true:
+
+- **there is something to measure** — a corpus, a rival tool, a number somebody else published;
+- **there is a written claim to attack** — ours or theirs, that a round can confirm or refute;
+- **the angles are genuinely parallel** and one agent would have to do them in series anyway.
+
+Take the direct path when:
+
+- **it is judgement** — a price, a name, a letter, whether to build something. A swarm returns
+  opinions here, and opinions do not get better by being seven;
+- **it is one thing** — a fix, a reply, a release;
+- **there is nothing on disk and nothing published to check against.** A round with no source
+  produces confident prose, which is worse than an honest "we do not know".
+
+The test that has held so far: *what would the round check its answer against?* If there is no
+answer to that, the round will not produce a fact — it will produce a longer file.
+
 ## 0. Formulate the goal (with the human, before any agent runs)
 
 1. **The expected result.** Make it concrete and checkable. "First paid order, then
