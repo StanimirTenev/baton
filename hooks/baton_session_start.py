@@ -84,6 +84,18 @@ def parse_frontmatter(text: str) -> dict:
             inner = val[1:-1].strip()
             fm[key] = [x.strip().strip("\"'") for x in inner.split(",") if x.strip()]
             continue
+        # A quoted value runs to the LAST quote on the line, and a `#` inside it
+        # is text. Two truncations were found this way, both silent, because a
+        # cut pointer reads exactly like a whole one: `... GitHub issue #1 ...`
+        # was cut at the `#`, and then -- with a first-quote rule -- a value
+        # quoting someone ("he said "wait"") was cut at the inner quote. Prose
+        # with quotes in it is the normal case here; a comment after a quoted
+        # value is not.
+        if val[:1] in ('"', "'"):
+            end = val.rfind(val[0])
+            if end > 0:
+                fm[key] = val[1:end]
+                continue
         cut = val.find(" #")
         if cut != -1:
             val = val[:cut].strip()
@@ -250,6 +262,30 @@ def retired_but_present(folder: Path) -> list[str]:
     return still
 
 
+# A pointer is one sentence: what to do next. Past this many characters it has
+# stopped pointing and started holding state -- and state held in two places is
+# state that goes stale in one of them.
+POINTER_MAX = 240
+
+
+def pointer_drift(fm: dict) -> int | None:
+    """`sledvashto` that has grown from a pointer into a record.
+
+    The field exists to say what the next move is. The logbook says what was done
+    and the detail files say what is true; when those get copied into the pointer
+    "so it is visible at session start", the same fact now lives in two places and
+    only one of them gets corrected. One memory index carried "we are still waiting
+    for the paper" for five days after the paper had arrived and been read, because
+    the detail file was updated and the pointer was not.
+
+    Length is a proxy, not the thing itself, and it is the only honest one available:
+    a hook cannot tell a stale sentence from a current one. What it can tell is that
+    a one-sentence field is now a paragraph, which is when the copying has happened.
+    """
+    text = str(fm.get("sledvashto", "")).strip()
+    return len(text) if len(text) > POINTER_MAX else None
+
+
 def is_us(fm: dict) -> bool:
     return str(fm.get("na_hod", "")).strip().lower() in US
 
@@ -306,6 +342,10 @@ def main() -> int:
             count, age = debt
             stale.append(f"- {f.name} — {count} непроверени твърдения (статус И/А), "
                          f"най-старото на {age} дни")
+        drift = pointer_drift(fm)
+        if drift:
+            stale.append(f"- {f.name} — `sledvashto` е {drift} знака: показалец, който вече "
+                         f"носи състояние. Състоянието живее в дневника, тук стои следващият ход")
         alive = retired_but_present(f)
         if alive:
             stale.append(f"- {f.name} — ограничение, отбелязано като **паднало**, но текстът му "
