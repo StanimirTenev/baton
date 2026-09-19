@@ -17,7 +17,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 MAX_PLAIN = 6                 # cap only on the fall-back (header-less) list
@@ -28,6 +28,22 @@ PRIORITY_RANK = {"visok": 0, "висок": 0, "sreden": 1, "среден": 1, "n
 DATED_HEADING = re.compile(
     r"^\d{4}-\d\d-\d\d(?:[ T]\d\d:\d\d)?\s*[\u2014\u2013-]\s*(?P<title>.+)$"
 )
+
+
+# A claim nobody has verified does not improve with age. After this many days an
+# inference or an unchecked agent's claim is reported as a debt rather than a
+# fact, because the cost of a stale one is not that it is old -- it is that it
+# reads exactly like a verified one.
+STALE_CLAIM_DAYS = 30
+
+# `## Кръг 4 — 19.09.2026` or `## Round 4 — 2026-09-19`: the date a block of
+# claims was written, which is the only date a claim in it can carry.
+CLAIM_BLOCK = re.compile(
+    r"^#{2,3}\s+.*?[\u2014\u2013-]\s*(\d{4}-\d\d-\d\d|\d\d\.\d\d\.\d{4})", re.M)
+
+# A row in a facts table whose status column says the claim was inferred (И / I)
+# or taken from an agent without independent checking (А / A).
+UNVERIFIED_ROW = re.compile(r"^\s*\|.*\|\s*(И|I|А|A)\s*\|", re.M)
 
 
 def config() -> tuple[Path, str]:
@@ -101,6 +117,74 @@ def deadline(fm: dict):
     return None
 
 
+def _as_date(raw) -> date | None:
+    """A date out of `2026-09-19` or `19.09.2026`, or None."""
+    text = str(raw or "").strip()
+    for pattern in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(text, pattern).date()
+        except ValueError:
+            continue
+    return None
+
+
+def review_due(fm: dict, today: date):
+    """When this task's current-state header should be looked at again.
+
+    `vyarno_kum` is the date the header was last true; `pregled_sled` is how long
+    that is expected to hold ("30d", "6m"). Neither is required -- a task without
+    them behaves exactly as before. The point of the pair is that a snapshot
+    announces its own age instead of being read as current, which is how a
+    coverage table written for one version came to be quoted three versions later.
+    """
+    since = _as_date(fm.get("vyarno_kum") or fm.get("вярно_към"))
+    if since is None:
+        return None
+    raw = str(fm.get("pregled_sled") or fm.get("преглед_след") or "").strip().lower()
+    match = re.fullmatch(r"(\d+)\s*([dдmм])?", raw)
+    if not match:
+        return None
+    count = int(match.group(1))
+    days = count * 30 if match.group(2) in ("m", "м") else count
+    due = since + timedelta(days=days)
+    return (due, (today - due).days) if due <= today else None
+
+
+def unverified_debt(folder: Path, today: date) -> tuple[int, int] | None:
+    """Claims in this task's facts file that nobody has checked, and how old.
+
+    Returns (count, age of the oldest block in days). A fact file keeps its
+    status column -- verified against a source, checked locally, an agent's word,
+    inferred -- and the last two are debts. They are not wrong; they are
+    unpaid. One of them ("auditors probably cannot take a commission") was
+    carried for a day and nearly cancelled a plan before anyone read the code it
+    claimed to summarise.
+    """
+    facts = folder / "FAKTI.md"
+    if not facts.is_file():
+        facts = folder / "FACTS.md"
+        if not facts.is_file():
+            return None
+    try:
+        text = facts.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return None
+
+    blocks = [(m.start(), _as_date(m.group(1))) for m in CLAIM_BLOCK.finditer(text)]
+    if not blocks:
+        return None
+    count, oldest = 0, None
+    for row in UNVERIFIED_ROW.finditer(text):
+        written = next((d for start, d in reversed(blocks) if start < row.start()), None)
+        if written is None:
+            continue
+        age = (today - written).days
+        if age >= STALE_CLAIM_DAYS:
+            count += 1
+            oldest = age if oldest is None else max(oldest, age)
+    return (count, oldest) if count else None
+
+
 def is_us(fm: dict) -> bool:
     return str(fm.get("na_hod", "")).strip().lower() in US
 
@@ -126,6 +210,7 @@ def main() -> int:
         return 0
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
+    stale: list[str] = []
     today = date.today()
 
     for f in folders:
@@ -143,6 +228,19 @@ def main() -> int:
             # parked on purpose: shown for the record, never offered as work
             frozen.append(f.name)
             continue
+
+        # Shelf life. A frozen or finished task is skipped above on purpose: a
+        # snapshot nobody is working from cannot mislead anybody.
+        due = review_due(fm, today)
+        if due:
+            _, late = due
+            stale.append(f"- {f.name} — прегледът на състоянието беше за преди {late} "
+                         f"{'ден' if late == 1 else 'дни'} (`vyarno_kum` + `pregled_sled`)")
+        debt = unverified_debt(f, today)
+        if debt:
+            count, age = debt
+            stale.append(f"- {f.name} — {count} непроверени твърдения (статус И/А), "
+                         f"най-старото на {age} дни")
         dl = deadline(fm)
         rec = {"name": f.name, "fm": fm, "dl": dl}
         if not is_us(fm) or sast in ("chakashta", "чакаща", "waiting"):
@@ -195,9 +293,15 @@ def main() -> int:
             block += f"\n- ...and {more} more"
         blocks.append(block)
 
-    if not blocks and not frozen and not finished:
+    if not blocks and not frozen and not finished and not stale:
         return 0
 
+    if stale:
+        blocks.append(
+            "⏳ Изтекъл срок на годност — прочети това, преди да стъпиш на него:\n"
+            + "\n".join(sorted(stale))
+            + "\n(Твърдение със статус И или А не е факт — то е дълг. Или се проверява, "
+              "или пада.)")
     if frozen:
         blocks.append(f"❄️ Замразени (не се предлагат): {', '.join(sorted(frozen))}")
     if finished:

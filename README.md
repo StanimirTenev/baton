@@ -181,6 +181,8 @@ kriterii_zavarshvane: "migration ran, row counts match"   # when is it done
 vremevi_kriterii: po_izbor   # po_izbor (any time) | postoyanno (recurring) | YYYY-MM-DD (deadline)
 sledvashto: "decide tax_region before the run"             # the next concrete action
 prioritet: visok             # visok | sreden | nisak  (high | medium | low)
+vyarno_kum: 2026-03-14       # optional: when this header was last true
+pregled_sled: 30d            # optional: how long that is expected to hold (30d, 6m)
 ---
 ```
 
@@ -196,6 +198,32 @@ For `na_hod`, anything other than `nie` / `us` / `me` / `self` (or empty) counts
 on someone else". A task waiting on someone never lands in "on us", even with a deadline.
 The parser is deliberately small: `key: value` lines, quoted strings, `[a, b]` lists and
 trailing ` #` comments. It is not full YAML, so Baton needs no dependencies.
+
+## Shelf life
+
+A record does not go wrong by being old. It goes wrong by being old and still reading exactly
+like a current one. Three of those, on three consecutive days, produced this feature: a
+comparison table written for one release quoted three releases later; a line marked at the time
+as an inference — "auditors probably cannot take a commission" — carried as settled until
+someone read the code of ethics it claimed to summarise, and found the opposite; two decisions
+left live in memory for weeks after the work had gone the other way.
+
+None of the three was a wrong fact. Each was a fact that had stopped being one.
+
+**Two optional header fields.** `vyarno_kum` is the date the header was last true;
+`pregled_sled` is how long that is expected to hold (`30d`, `6m`). When the period has passed,
+the task appears at session start under **Изтекъл срок на годност**, with how late it is. Neither
+field is required, and a task without them behaves exactly as it did before.
+
+**An unverified claim is a debt.** If a task keeps a `FAKTI.md` (or `FACTS.md`) whose rows carry
+a status column, Baton reads it. A row marked **И**/`I` (inferred) or **А**/`A` (an agent's claim,
+not independently checked) is dated by the round heading it sits under — `## Round 2 — 2026-09-19`
+— and once it is older than 30 days it is reported as a debt, with the count and the age of the
+oldest. Rows marked verified (**П**) or checked locally (**В**) are never reported, at any age.
+
+A debt is not an error. It is a claim that has to be paid — verified, or dropped. The one that
+produced this feature was a day old when it nearly cancelled a plan; at thirty days it would have
+been quoted as a fact by a session that had never seen it written.
 
 ## The logbook entry
 
