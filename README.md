@@ -227,15 +227,58 @@ None of the three was a wrong fact. Each was a fact that had stopped being one.
 the task appears at session start under **Изтекъл срок на годност**, with how late it is. Neither
 field is required, and a task without them behaves exactly as it did before.
 
-**An unverified claim is a debt.** If a task keeps a `FAKTI.md` (or `FACTS.md`) whose rows carry
-a status column, Baton reads it. A row marked **И**/`I` (inferred) or **А**/`A` (an agent's claim,
-not independently checked) is dated by the round heading it sits under — `## Round 2 — 2026-09-19`
-— and once it is older than 30 days it is reported as a debt, with the count and the age of the
-oldest. Rows marked verified (**П**) or checked locally (**В**) are never reported, at any age.
+**An unverified claim is a debt.** If a task keeps a claims register — `TVARDENIYA.md`,
+`CLAIMS.md`, `FAKTI.md` or `FACTS.md` — whose rows carry a status column, Baton reads it. A row
+marked **И**/`I` (inferred) or **А**/`A` (an agent's claim, not independently checked) is reported
+once it is older than 30 days, with the count and the age of the oldest. Rows marked verified
+(**П**) or checked locally (**В**) are never reported, at any age.
+
+A row dates itself when it can — a date, optionally with a time, in **a cell of its own** — and
+otherwise takes the date of the heading above it (`## Round 2 — 2026-09-19`). Both, because a
+register filled a row at a time over weeks has no meaningful block date, and a table written in
+one sitting has no row dates. The date has to be its own cell: matching a date anywhere in the row
+read `| last release 0.12.0 (14.08.2026) | А |` as a claim made in August, which is a date inside
+the claim. A detector that fires on the wrong thing gets switched off, and then the real ones go
+unread too.
+
+The time is allowed because a day is not always fine enough. On the day this was written six
+claims were made and five were falsified within it, two of them within an hour; dated only to the
+day, that register says nothing about what followed what. Ageing stays in days — a debt is not
+measured in hours — but the stamp keeps the order.
+
+A status cannot live in the logbook. The logbook is a record and does not get edited, while a
+status is exactly the thing that changes when someone finally checks. That is the same reason the
+constraints register is a file of its own.
 
 A debt is not an error. It is a claim that has to be paid — verified, or dropped. The one that
 produced this feature was a day old when it nearly cancelled a plan; at thirty days it would have
 been quoted as a fact by a session that had never seen it written.
+
+## A pointer that has grown into a record
+
+`sledvashto` says what the next move is. When state gets copied into it so that it is visible at
+session start, the same fact now lives in two places and only one of them gets corrected. Past
+**240 characters** Baton reports it: the field has stopped pointing and started holding state.
+
+Length is a proxy and the only honest one available — a hook cannot tell a stale sentence from a
+current one, but it can tell that a one-sentence field has become a paragraph, which is when the
+copying happened. One memory index carried "still waiting for the paper" for five days after the
+paper had arrived and been read, because the detail file was updated and the pointer was not.
+
+## The running hook is a copy
+
+The hooks execute from wherever they were installed, not from where they are developed. v2.2.0 of
+this project shipped a whole shelf-life layer — written, tested, tagged — and it never ran: the
+installed copy was two days old and 217 lines behind, and every session since had been assured by
+a hook that did not contain the check. The release notes said it was live. The repository agreed.
+The machine did not.
+
+Set `source` in `baton.local.json` (or `BATON_SOURCE`) to the directory the hooks are developed
+in, and Baton compares its own bytes against it and reports a difference at session start. It is
+optional: an install from a release configures no source and nothing is reported.
+
+A hook cannot verify that it was installed. It can ask the same question somewhere it can be
+answered.
 
 ## The board
 
@@ -338,6 +381,17 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.3.0**
+- **A pointer that has grown into a record.** `sledvashto` past 240 characters is reported: state
+  copied into a pointer goes stale in one of its two homes.
+- **The running hook is a copy.** Baton compares its own bytes against the source it was built
+  from, after a release that was written, tested, tagged — and never ran, for two days.
+- **Claims carry their own stamp.** A claims register (`TVARDENIYA.md`, `CLAIMS.md`, `FAKTI.md`)
+  dates each row in a cell of its own, optionally with a time.
+- Two silent truncations fixed in the header parser: `#` inside a quoted value is text, and a
+  quoted value ends at the last quote on the line, not the first.
+- 67 tests.
 
 **v2.2.0**
 - **The board.** `tools/baton_tablo.py` writes one local HTML file with the same state
