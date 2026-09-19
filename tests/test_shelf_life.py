@@ -137,3 +137,115 @@ def test_an_english_facts_file_is_read_too(tmp_path):
         "## Round 1 — 2026-06-01\n\n| # | Claim | Status | Source |\n|---|---|---|---|\n"
         "| 1 | inferred | I | — |\n", encoding="utf-8")
     assert baton.unverified_debt(folder, TODAY)[0] == 1
+
+
+# --- the constraints register --------------------------------------------------
+#
+# Research adds; almost nothing retires. A round that found nineteen conflicts
+# retired none of them -- it produced banners, and the sentences stayed in the
+# documents the next round would quote. So "this constraint falls" is checked
+# against the file rather than believed.
+
+REGISTER = ("| id | статус | файл | текст |\n"
+            "|----|--------|------|-------|\n")
+
+
+def with_register(tmp_path: Path, rows: str, files: dict[str, str]) -> Path:
+    folder = tmp_path / "task"
+    folder.mkdir()
+    (folder / "OGRANICHENIYA.md").write_text(REGISTER + rows, encoding="utf-8")
+    for name, body in files.items():
+        (folder / name).write_text(body, encoding="utf-8")
+    return folder
+
+
+def test_a_constraint_marked_fallen_whose_text_is_gone_is_silent(tmp_path):
+    folder = with_register(
+        tmp_path,
+        "| O1 | пада | POZICIA.md | само ние разделяме прочетох от намерих |\n",
+        {"POZICIA.md": "Several tools report what they skipped.\n"})
+    assert baton.retired_but_present(folder) == []
+
+
+def test_a_constraint_marked_fallen_whose_text_is_still_there_is_reported(tmp_path):
+    """The failure this exists for: corrected in one document, left in the other."""
+    folder = with_register(
+        tmp_path,
+        "| O1 | пада | POZICIA.md | само ние разделяме прочетох от намерих |\n",
+        {"POZICIA.md": "Само ние разделяме прочетох от намерих — и това е активът.\n"})
+    assert baton.retired_but_present(folder) == ["O1 в POZICIA.md"]
+
+
+def test_a_constraint_that_stands_is_never_checked(tmp_path):
+    """A standing constraint is supposed to still be written down."""
+    folder = with_register(
+        tmp_path,
+        "| O2 | остава | MEMORY.md | не слагай търговски продукт на сайта |\n",
+        {"MEMORY.md": "Не слагай търговски продукт на сайта.\n"})
+    assert baton.retired_but_present(folder) == []
+
+
+def test_awaiting_a_check_is_not_a_retirement(tmp_path):
+    folder = with_register(
+        tmp_path,
+        "| O3 | чака проверка | MEMORY.md | одиторите не могат да вземат комисиона |\n",
+        {"MEMORY.md": "Одиторите не могат да вземат комисиона.\n"})
+    assert baton.retired_but_present(folder) == []
+
+
+def test_the_english_spellings_work(tmp_path):
+    folder = with_register(
+        tmp_path,
+        "| O1 | falls | NOTES.md | only this tool reports what it did not read |\n",
+        {"NOTES.md": "Only this tool reports what it did not read.\n"})
+    assert baton.retired_but_present(folder) == ["O1 в NOTES.md"]
+
+
+def test_a_line_reference_after_the_filename_is_tolerated(tmp_path):
+    """A register is written by hand and often carries file:line."""
+    folder = with_register(
+        tmp_path,
+        "| O1 | пада | POZICIA.md:34 | само ние разделяме |\n",
+        {"POZICIA.md": "само ние разделяме прочетох от намерих\n"})
+    assert baton.retired_but_present(folder) == ["O1 в POZICIA.md:34"]
+
+
+def test_a_phrase_too_short_to_search_for_is_skipped(tmp_path):
+    """Two words would match half the file and report every time."""
+    folder = with_register(tmp_path, "| O1 | пада | X.md | ние |\n",
+                           {"X.md": "ние ние ние\n"})
+    assert baton.retired_but_present(folder) == []
+
+
+def test_a_task_with_no_register_is_silent(tmp_path):
+    folder = tmp_path / "task"
+    folder.mkdir()
+    assert baton.retired_but_present(folder) == []
+
+
+def test_several_rows_are_all_reported(tmp_path):
+    folder = with_register(
+        tmp_path,
+        "| O1 | пада | A.md | the first fallen sentence |\n"
+        "| O2 | остава | A.md | the standing one |\n"
+        "| O3 | пада | B.md | the second fallen sentence |\n",
+        {"A.md": "the first fallen sentence, still here\nthe standing one\n",
+         "B.md": "the second fallen sentence, also still here\n"})
+    assert baton.retired_but_present(folder) == ["O1 в A.md", "O3 в B.md"]
+
+
+def test_emphasis_inside_the_sentence_does_not_hide_it(tmp_path):
+    """`**само ние** разделяме` and `само ние разделяме` are the same sentence.
+    Comparing raw text made them different strings — the wrong kind of exact."""
+    folder = with_register(
+        tmp_path,
+        "| O1 | пада | POZICIA.md | само ние разделяме прочетох от намерих |\n",
+        {"POZICIA.md": "„**само ние** разделяме прочетох от намерих\" — беше активът.\n"})
+    assert baton.retired_but_present(folder) == ["O1 в POZICIA.md"]
+
+
+def test_a_register_naming_a_file_that_is_not_there_is_reported(tmp_path):
+    """Skipping it quietly would be the very defect the register exists to catch:
+    a rule that looks retired because nobody could check it."""
+    folder = with_register(tmp_path, "| O1 | пада | GONE.md | a long enough phrase |\n", {})
+    assert baton.retired_but_present(folder) == ["O1: посоченият файл GONE.md го няма"]

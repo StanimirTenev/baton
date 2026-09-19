@@ -225,6 +225,34 @@ A debt is not an error. It is a claim that has to be paid — verified, or dropp
 produced this feature was a day old when it nearly cancelled a plan; at thirty days it would have
 been quoted as a fact by a session that had never seen it written.
 
+## Retiring a constraint
+
+Research adds. Almost nothing retires, and a rule nobody retires goes on steering the plan from a
+file no one re-reads. One project's second research round found nineteen such conflicts and
+retired none of them — it produced banners.
+
+So `/baton-plan` now ends a round by re-scoring every constraint it touched, into
+`OGRANICHENIYA.md` (or `CONSTRAINTS.md`), one row each:
+
+```markdown
+| id | статус | файл | текст |
+|----|--------|------|-------|
+| O1 | пада   | POZICIA.md | only this tool separates reading from finding |
+| O2 | остава | MEMORY.md  | no commercial product on the research site |
+```
+
+Three statuses and nothing else: **пада** / `falls`, **остава** / stands, **чака проверка** /
+awaits a check. The bar for retiring is the bar for asserting — a source or a measurement, never
+"it feels outdated". An inconvenient constraint is the one most likely to be true.
+
+**Baton checks the register against the files.** A row marked fallen whose text is still in the
+named file is reported at session start, because it did not fall — it was written down as having
+fallen. A file the register names and that is not there is reported too: skipping it quietly is
+the same defect, a rule that looks retired because nobody could check it.
+
+On its first real run this caught two sentences that a correction pass had already been through
+twice — one of them in the very document whose top carried a banner saying it was wrong.
+
 ## The logbook entry
 
 ```markdown
@@ -285,6 +313,9 @@ per project, a short state file under 150 lines, chronology in a separate histor
 ## Versions
 
 **v2.2.0**
+- **Retiring a constraint.** `/baton-plan` re-scores every constraint a round touched into
+  `OGRANICHENIYA.md` — stands / falls / awaits a check — and Baton checks the register against the
+  files, so a constraint written down as fallen whose text is still there is reported.
 - **Shelf life.** Two optional header fields, `vyarno_kum` and `pregled_sled`, make a snapshot
   announce its own age instead of reading as current; when the period passes, the task is listed
   at session start with how late the review is.

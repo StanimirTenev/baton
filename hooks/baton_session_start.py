@@ -185,6 +185,71 @@ def unverified_debt(folder: Path, today: date) -> tuple[int, int] | None:
     return (count, oldest) if count else None
 
 
+def _plain(text: str) -> str:
+    """Lower-cased, with markdown emphasis and quotes removed.
+
+    A sentence does not stop being the same sentence because someone bolded a
+    word inside it. Comparing the raw text made `**само ние** разделяме` and
+    `само ние разделяме` different strings, which is the wrong kind of exact.
+    """
+    return re.sub(r"[*_`\"'\u201e\u201c\u201d\u00ab\u00bb]", "", str(text)).lower().strip()
+
+
+# A row of the constraints register: | id | status | file | text |
+RETIRED_ROW = re.compile(
+    r"^\s*\|\s*([\w.-]+)\s*\|\s*(пада|падна|falls|fallen|retired)\s*\|"
+    r"\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$", re.M | re.I)
+
+
+def retired_but_present(folder: Path) -> list[str]:
+    """Constraints the register says have fallen, whose text is still where it said.
+
+    Research adds; almost nothing retires. A constraint that nobody retires goes on
+    steering the plan from a file no one re-reads, and writing "this one falls" in a
+    register is not retiring it -- the sentence is still in the document the next
+    round will quote. One project corrected such a sentence in its README, left it
+    in its positioning document, and found it again a round later.
+
+    So the register is checked against the files rather than believed: a row marked
+    fallen whose text is still in the named file is reported, and stays reported
+    until the text is gone.
+    """
+    register = folder / "OGRANICHENIYA.md"
+    if not register.is_file():
+        register = folder / "CONSTRAINTS.md"
+        if not register.is_file():
+            return []
+    try:
+        rows = register.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return []
+
+    still: list[str] = []
+    for ident, _status, where, phrase in RETIRED_ROW.findall(rows):
+        phrase = _plain(phrase)
+        if len(phrase) < 8:            # too short to search for without false hits
+            continue
+        where = where.strip()
+        name = where.split(":")[0].strip()
+        target = (folder / name).expanduser()
+        if not target.is_file():
+            target = Path(name).expanduser()
+        if not target.is_file():
+            # A register naming a file that is not there is not a pass. Skipping it
+            # silently is the same defect the register exists to catch: a rule that
+            # looks retired because nobody could check it.
+            still.append(f"{ident}: посоченият файл {where} го няма")
+            continue
+        try:
+            body = target.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            still.append(f"{ident}: {where} не се чете")
+            continue
+        if phrase in _plain(body):
+            still.append(f"{ident} в {where}")
+    return still
+
+
 def is_us(fm: dict) -> bool:
     return str(fm.get("na_hod", "")).strip().lower() in US
 
@@ -241,6 +306,10 @@ def main() -> int:
             count, age = debt
             stale.append(f"- {f.name} — {count} непроверени твърдения (статус И/А), "
                          f"най-старото на {age} дни")
+        alive = retired_but_present(f)
+        if alive:
+            stale.append(f"- {f.name} — ограничение, отбелязано като **паднало**, но текстът му "
+                         f"е още там: {', '.join(alive)}")
         dl = deadline(fm)
         rec = {"name": f.name, "fm": fm, "dl": dl}
         if not is_us(fm) or sast in ("chakashta", "чакаща", "waiting"):

@@ -116,9 +116,46 @@ Mechanics:
    Append a section per round, and state corrections to earlier rounds explicitly.
 3. **Conflicts** with older decisions in memory are **surfaced as decisions** for the
    human. Never smooth them over.
-4. **`PLAN.md` vN.** Put it on top, starting with **"what changed since v(N−1) and why"**.
+4. **Re-score the constraints — `OGRANICHENIYA.md`.** This is the step that stops research
+   from only ever adding. A round that discovers something almost always makes an older
+   rule wrong, and an older rule that nobody retires goes on steering the plan from a file
+   no one re-reads. Round 2 of one project found nineteen such conflicts and retired none of
+   them: it produced banners.
+
+   Every constraint the round touched gets exactly one status:
+
+   - **остава** (stands) — say why the new evidence does not reach it. A constraint left
+     standing without that sentence has not been re-scored, only skipped.
+   - **пада** (falls) — the evidence that killed it, **and every place it is still
+     written**. This is the whole point: a constraint lives in files, so one corrected in
+     the README and left in the other document has not fallen. One project corrected
+     "only this tool reports what it did not read" in its README and left the same sentence
+     in its positioning document, where the next round found it again.
+   - **чака проверка** (awaits check) — the one check that would settle it, and who does it.
+     A constraint cannot sit here twice: if the check was not done by the next round, it
+     falls to "stands" or "falls" on the evidence there is.
+
+   **The bar for retiring is the bar for asserting**: a source or a measurement. Not "it
+   feels outdated", and not "it is inconvenient" — an inconvenient constraint is the one
+   most likely to be true. A constraint the human set stays until the human is shown the
+   evidence and says otherwise; the module prepares that, it does not decide it.
+
+   Write the register so it can be checked by machine, one row per constraint:
+
+   ```markdown
+   | id | статус | файл | текст |
+   |----|--------|------|-------|
+   | O1 | пада   | POZICIA.md | само ние разделяме прочетох от намерих |
+   | O2 | остава | MEMORY.md  | не слагай търговски продукт на сайта |
+   ```
+
+   `текст` is a phrase short enough to search for and specific enough to find. Baton reads
+   this file at session start: a constraint marked **пада** whose text is **still in that
+   file** is reported, because it did not fall — it was only written down as having fallen.
+
+5. **`PLAN.md` vN.** Put it on top, starting with **"what changed since v(N−1) and why"**.
    Keep the previous version below it for comparison.
-5. **Update `VAPROSI.md`**: questions answered, new questions for the next round, and
+6. **Update `VAPROSI.md`**: questions answered, new questions for the next round, and
    decisions still pending.
 
 ## 4. Stop at the human (every round)
