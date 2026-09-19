@@ -57,6 +57,48 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
+def source_dir() -> Path | None:
+    """Where these hooks are developed, if this is a working copy rather than an install.
+
+    Optional and absent for anyone who installed from a release: then there is nothing
+    to compare against and nothing is reported.
+    """
+    try:
+        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+    except Exception:
+        return None
+    raw = os.environ.get("BATON_SOURCE") or cfg.get("source")
+    return Path(raw).expanduser() if raw else None
+
+
+def install_drift() -> list[str]:
+    """Hooks whose running copy differs from the source they are developed in.
+
+    The failure this exists for: v2.2.0 of this project shipped a whole shelf-life
+    layer -- written, tested, tagged -- and it never ran for two days, because the
+    running hooks are copies and nobody copied them. The release notes said it was
+    live. The repository agreed. The machine was running the previous version, and
+    every session since had been told, by a hook that did not contain the feature,
+    that everything was fine.
+
+    A hook cannot verify it was installed -- but it can compare its own bytes to the
+    file it was built from and say when they differ, which is the same question asked
+    somewhere it can actually be answered.
+    """
+    src = source_dir()
+    if src is None or not src.is_dir():
+        return []
+    out = []
+    for name in ("baton_session_start.py", "baton_stop.py"):
+        here, there = Path(__file__).with_name(name), src / name
+        try:
+            if here.is_file() and there.is_file() and here.read_bytes() != there.read_bytes():
+                out.append(name)
+        except OSError:
+            continue
+    return out
+
+
 def read_head(logbook: Path) -> str:
     try:
         return logbook.read_text(encoding="utf-8-sig", errors="replace")
@@ -313,6 +355,11 @@ def main() -> int:
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
     stale: list[str] = []
     today = date.today()
+
+    drifted = install_drift()
+    if drifted:
+        stale.append("- 🔴 РАБОТЕЩИТЕ КУКИ НЕ СА ОТ ИЗТОЧНИКА: " + ", ".join(drifted)
+                     + " — поправка, която не е инсталирана, не работи, колкото и да е тагната")
 
     for f in folders:
         lb = f / name
