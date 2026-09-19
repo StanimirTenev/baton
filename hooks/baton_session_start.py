@@ -45,6 +45,32 @@ CLAIM_BLOCK = re.compile(
 # or taken from an agent without independent checking (А / A).
 UNVERIFIED_ROW = re.compile(r"^\s*\|.*\|\s*(И|I|А|A)\s*\|", re.M)
 
+# Where a task keeps claims with a status. A logbook cannot hold them: it is a
+# record and does not get edited, while a status is exactly the thing that
+# changes when someone finally checks. So status lives in a register, for the
+# same reason the constraints register is not the logbook either.
+CLAIMS_FILES = ("FAKTI.md", "FACTS.md", "TVARDENIYA.md", "CLAIMS.md")
+
+# A date, optionally with a time, anywhere in a row: a claim carries its own
+# stamp instead of borrowing one from the heading above it. A register written a
+# row at a time, over weeks, has no meaningful block date -- and the age of a
+# claim is the whole point.
+#
+# The date must be a cell of its own -- a date column -- and not merely appear
+# somewhere in the row. A first attempt matched anywhere and read
+# `| last release 0.12.0 (14.08.2026) | А |` as a claim written on 14 August,
+# which is a date inside the claim, not the date the claim was made. A detector
+# that fires on the wrong thing gets switched off, and then the real ones go
+# unread too.
+#
+# The time is allowed because a day is not always fine enough. On 19.09.2026 six
+# claims were written and five were falsified within the same day, two of them
+# within an hour of being written; dated only to the day, that register would
+# say nothing about what followed what. Ageing stays in days -- a debt is not
+# measured in hours -- but the stamp keeps the order.
+ROW_DATE = re.compile(
+    r"^(\d{4}-\d\d-\d\d|\d\d\.\d\d\.\d{4})(?:[ T](\d\d:\d\d))?$")
+
 
 def config() -> tuple[Path, str]:
     cfg = {}
@@ -205,31 +231,45 @@ def review_due(fm: dict, today: date):
 
 
 def unverified_debt(folder: Path, today: date) -> tuple[int, int] | None:
-    """Claims in this task's facts file that nobody has checked, and how old.
+    """Claims this task has written down and nobody has checked, and how old.
 
-    Returns (count, age of the oldest block in days). A fact file keeps its
-    status column -- verified against a source, checked locally, an agent's word,
-    inferred -- and the last two are debts. They are not wrong; they are
-    unpaid. One of them ("auditors probably cannot take a commission") was
-    carried for a day and nearly cancelled a plan before anyone read the code it
-    claimed to summarise.
+    Returns (count, age of the oldest in days). A claims register keeps a status
+    column -- verified against a source, checked locally, an agent's word,
+    inferred -- and the last two are debts. They are not wrong; they are unpaid.
+    One of them ("auditors probably cannot take a commission") was carried for a
+    day and nearly cancelled a plan before anyone read the code it claimed to
+    summarise. Another ("this firm has no scanner of its own") was written with a
+    note that it needed checking, and the note was the last anyone saw of it until
+    it turned out to be false a day later, on the way into a letter.
+
+    A row dates itself when it can; otherwise it takes the date of the heading
+    above it. Both, because a register filled a row at a time has no block date
+    and a table written in one sitting has no row dates.
     """
-    facts = folder / "FAKTI.md"
-    if not facts.is_file():
-        facts = folder / "FACTS.md"
-        if not facts.is_file():
-            return None
+    for candidate in CLAIMS_FILES:
+        facts = folder / candidate
+        if facts.is_file():
+            break
+    else:
+        return None
     try:
         text = facts.read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
         return None
 
     blocks = [(m.start(), _as_date(m.group(1))) for m in CLAIM_BLOCK.finditer(text)]
-    if not blocks:
-        return None
     count, oldest = 0, None
     for row in UNVERIFIED_ROW.finditer(text):
-        written = next((d for start, d in reversed(blocks) if start < row.start()), None)
+        end = text.find("\n", row.start())
+        line = text[row.start():end if end != -1 else len(text)]
+        written = None
+        for cell in line.strip().strip("|").split("|"):
+            stamp = ROW_DATE.match(cell.strip())
+            if stamp:
+                written = _as_date(stamp.group(1))
+                break
+        if written is None:
+            written = next((d for start, d in reversed(blocks) if start < row.start()), None)
         if written is None:
             continue
         age = (today - written).days
