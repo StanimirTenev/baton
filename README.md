@@ -193,6 +193,7 @@ kriterii_zavarshvane: "migration ran, row counts match"   # when is it done
 vremevi_kriterii: po_izbor   # po_izbor (any time) | postoyanno (recurring) | YYYY-MM-DD (deadline)
 sledvashto: "decide tax_region before the run"             # the next concrete action
 prioritet: visok             # visok | sreden | nisak  (high | medium | low)
+umeniya: [db-migration]      # optional: the skills this task needs (see below)
 vyarno_kum: 2026-03-14       # optional: when this header was last true
 pregled_sled: 30d            # optional: how long that is expected to hold (30d, 6m)
 ---
@@ -210,6 +211,35 @@ For `na_hod`, anything other than `nie` / `us` / `me` / `self` (or empty) counts
 on someone else". A task waiting on someone never lands in "on us", even with a deadline.
 The parser is deliberately small: `key: value` lines, quoted strings, `[a, b]` lists and
 trailing ` #` comments. It is not full YAML, so Baton needs no dependencies.
+
+## Skills a task needs
+
+A task folder holds two things: **state** (the header) and **history** (the logbook). It
+does not hold the third — *how the work is done here*. The limits that bite, the check that
+has to run after the action, the number that must not be cited: that ends up scattered
+through entries, and is re-derived by whoever reads them next at the cost of reading the
+whole file, or is not derived at all and a paid-for mistake is repeated.
+
+`umeniya: [name, ...]` names what the task needs (`skills:` also works). The session-start
+line then carries `⟨умения: …⟩`, and the agent invokes what it needs on entering the task.
+
+Skills are read from `~/.claude/skills/<name>/SKILL.md`; point elsewhere with `BATON_SKILLS`
+or `"skills"` in `baton.local.json`.
+
+**Named, never loaded.** Baton says what a task needs. It does not reach into the session,
+and it does not fetch, update or adopt anything. That restraint matters more here than
+anywhere else it applies: a skill is *instructions*, and instructions fail silently where
+code fails loudly. A library that refreshed itself from a remote source would put whatever
+that source says today in charge of how the work is done today — no version, no diff, no
+review.
+
+Two things are reported, and the second is the dangerous one:
+
+- **missing** — loud: the header asks for something that is not installed, and nothing loads;
+- **stale** — quiet, and worse. A missing skill makes you think; a stale one makes you
+  confident. A skill written once and re-read fifty times is exactly where knowledge goes out
+  of date unnoticed. The test is the same one used for a drifted pointer: last written before
+  the task's last entry.
 
 ## Shelf life
 
