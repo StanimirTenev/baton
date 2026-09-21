@@ -382,6 +382,20 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.4.0**
+- **A pointer sending you to a file that has not moved since the work did.** The Stop hook
+  catches a folder whose files are newer than its logbook. The opposite is the one that reaches
+  a person: a decisions file *older* than the logbook, still listing questions that were answered
+  in some other folder. It looks right, it gets quoted at every session start, and it was handed
+  back as unfinished work three sessions running before the person said so.
+- **A crash is no longer silent.** The entry point still exits 0 — a hook must not break the
+  session it is helping — but it now prints the traceback to stderr. A `NameError` in `main()`
+  had made the whole report vanish while every unit test passed: the checks were tested, the
+  wiring that calls them was not.
+- **The report is tested as a whole**, run as a subprocess over a real folder tree. That test
+  fails on the wiring bug above; the unit tests do not.
+- 82 tests.
+
 **v2.3.0**
 - **A pointer that has grown into a record.** `sledvashto` past 240 characters is reported: state
   copied into a pointer goes stale in one of its two homes.

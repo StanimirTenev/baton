@@ -368,6 +368,54 @@ def pointer_drift(fm: dict) -> int | None:
     return len(text) if len(text) > POINTER_MAX else None
 
 
+# A pointer naming a working file -- a decisions list, a questions file, a plan.
+NAMED_FILE = re.compile(r"`?\b([A-Za-z0-9][A-Za-z0-9_.\-]*\.md)\b`?")
+
+
+def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
+    """A pointer sending you to a file that has not moved since the work did.
+
+    The hooks catch a folder whose files are newer than its logbook. They do not
+    catch the opposite, which turns out to be the one that actually reaches a
+    person: a decisions file that is *older* than the logbook. Nothing about it
+    looks wrong. It is well written, it lists open questions, and the pointer
+    quotes it at the top of every session -- so it gets read first and believed.
+
+    What it cannot know is that the questions were answered somewhere else. A
+    negative corpus asked for in one task's decisions file was built two days
+    later in another task's folder and shipped in a release; the question stayed
+    open where it had been asked, and was handed back as unfinished work three
+    sessions running before the person said so.
+
+    So: when `sledvashto` names a file that is in this folder, and that file has
+    not been touched since the logbook's last entry, say so. It is not a claim
+    that the file is wrong -- only that work was recorded after it was last read,
+    which is exactly when a snapshot goes stale and exactly when nobody looks.
+
+    A name that is not a file in this folder is left alone. The pointer may
+    legitimately mention the memory index or a document elsewhere, and a hook
+    that cannot check something must not imply that it did.
+    """
+    try:
+        book_day = date.fromtimestamp((folder / logbook).stat().st_mtime)
+    except OSError:
+        return []
+    out: list[str] = []
+    for name in sorted({n for n in NAMED_FILE.findall(str(fm.get("sledvashto", "")))
+                        if n.lower() != logbook.lower()}):
+        target = folder / name
+        if not target.is_file():
+            continue
+        try:
+            seen = date.fromtimestamp(target.stat().st_mtime)
+        except OSError:
+            continue
+        gap = (book_day - seen).days
+        if gap >= 1:
+            out.append(f"{name} (последно пипан {seen}, дневникът върви до {book_day})")
+    return out
+
+
 def is_us(fm: dict) -> bool:
     return str(fm.get("na_hod", "")).strip().lower() in US
 
@@ -433,6 +481,11 @@ def main() -> int:
         if drift:
             stale.append(f"- {f.name} — `sledvashto` е {drift} знака: показалец, който вече "
                          f"носи състояние. Състоянието живее в дневника, тук стои следващият ход")
+        behind = stale_reference(f, name, fm)
+        if behind:
+            stale.append(f"- {f.name} — `sledvashto` праща към {', '.join(behind)}. "
+                         f"Работено е след като този файл е четен за последно — сверѝ дали "
+                         f"част от исканото в него вече не е направено (възможно в друга папка)")
         alive = retired_but_present(f)
         if alive:
             stale.append(f"- {f.name} — ограничение, отбелязано като **паднало**, но текстът му "
@@ -529,5 +582,11 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except Exception:
-        # A hook must never break the session it is trying to help.
+        # A hook must never break the session it is trying to help -- but it must not
+        # disappear either. Exiting 0 in silence is how a NameError in main() once let
+        # the whole report vanish while every unit test still passed: the functions were
+        # tested, the wiring was not. The traceback goes to stderr, where it costs the
+        # session nothing and is there when someone wonders why Baton said nothing.
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         sys.exit(0)
