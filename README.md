@@ -388,6 +388,9 @@ per project, a short state file under 150 lines, chronology in a separate histor
   a person: a decisions file *older* than the logbook, still listing questions that were answered
   in some other folder. It looks right, it gets quoted at every session start, and it was handed
   back as unfinished work three sessions running before the person said so.
+  Its limit, stated because a check nobody knows the edge of gets trusted past it: it compares
+  against *this* folder's logbook, so it is blind to work done elsewhere while nothing here was
+  touched. The rule covers that half — an answered question is written back where it was asked.
 - **A crash is no longer silent.** The entry point still exits 0 — a hook must not break the
   session it is helping — but it now prints the traceback to stderr. A `NameError` in `main()`
   had made the whole report vanish while every unit test passed: the checks were tested, the
