@@ -416,6 +416,70 @@ def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
     return out
 
 
+def skills_root() -> Path:
+    """Where the skills live. `~/.claude/skills` unless told otherwise."""
+    try:
+        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+    except Exception:
+        cfg = {}
+    raw = os.environ.get("BATON_SKILLS") or cfg.get("skills") or "~/.claude/skills"
+    return Path(raw).expanduser()
+
+
+def skills_for(fm: dict) -> list[str]:
+    """What the task's header says it needs: `umeniya: [a, b]`."""
+    value = fm.get("umeniya") or fm.get("skills") or []
+    if isinstance(value, str):
+        value = [v.strip() for v in value.split(",") if v.strip()]
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
+    """Skills a task asks for that are missing, or older than the work.
+
+    A task carries state and history; it does not carry competence. Naming the
+    skills it needs is how the header supplies the third one -- and this is the
+    check that keeps the naming honest.
+
+    Two failures, and the second is the dangerous one.
+
+    **Missing** is loud: the header asks for something that is not installed, and
+    nothing will load.
+
+    **Stale** is quiet, and a stale skill is worse than a missing one, because a
+    missing skill makes you think while a stale one makes you confident. A skill
+    written once and re-read fifty times is exactly where knowledge goes out of
+    date without anybody noticing -- the same shape as a decisions file older than
+    the logbook, which is why the same comparison is used: last touched before the
+    task's last entry.
+
+    Nothing is fetched, updated or adopted here. The hook says what it sees; the
+    human decides. That rule matters more for skills than anywhere else in Baton,
+    because a skill is instructions, and instructions fail silently where code
+    fails loudly.
+    """
+    if not names:
+        return []
+    root = skills_root()
+    try:
+        book_day = date.fromtimestamp((folder / logbook).stat().st_mtime)
+    except OSError:
+        return []
+    out: list[str] = []
+    for name in names:
+        skill = root / name / "SKILL.md"
+        if not skill.is_file():
+            out.append(f"{name} — ЛИПСВА в {root}")
+            continue
+        try:
+            seen = date.fromtimestamp(skill.stat().st_mtime)
+        except OSError:
+            continue
+        if (book_day - seen).days >= 1:
+            out.append(f"{name} — писано {seen}, а дневникът върви до {book_day}")
+    return out
+
+
 def is_us(fm: dict) -> bool:
     return str(fm.get("na_hod", "")).strip().lower() in US
 
@@ -429,7 +493,11 @@ def line_for(name: str, fm: dict, tail: str = "") -> str:
     badge = f" [{p}]" if p else ""
     nxt = fm.get("sledvashto") or fm.get("kriterii_zavarshvane") or ""
     body = f" — {nxt}" if nxt else ""
-    return f"- {name}{badge}{body}{tail}"
+    # Named, not loaded. The agent reads this and invokes what it needs; the hook
+    # never reaches into the session to load anything on its behalf.
+    umeniya = skills_for(fm)
+    skills = f"  ⟨умения: {', '.join(umeniya)}⟩" if umeniya else ""
+    return f"- {name}{badge}{body}{tail}{skills}"
 
 
 def main() -> int:
@@ -481,6 +549,11 @@ def main() -> int:
         if drift:
             stale.append(f"- {f.name} — `sledvashto` е {drift} знака: показалец, който вече "
                          f"носи състояние. Състоянието живее в дневника, тук стои следващият ход")
+        bad_skills = skill_trouble(skills_for(fm), f, name)
+        if bad_skills:
+            stale.append(f"- {f.name} — умения, които хедърът иска: "
+                         + "; ".join(bad_skills)
+                         + ". Липсващо умение не се зарежда; остаряло се чете с доверие")
         behind = stale_reference(f, name, fm)
         if behind:
             stale.append(f"- {f.name} — `sledvashto` праща към {', '.join(behind)}. "

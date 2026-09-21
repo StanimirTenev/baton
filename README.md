@@ -382,6 +382,21 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.5.0**
+- **A task can name the skills it needs.** `umeniya: [name, ...]` in the header, and the
+  session-start line carries `⟨умения: …⟩`. A folder already holds state and history; this is
+  how it holds the third thing — how the work is done here — instead of leaving it to be
+  re-derived from the logbook by whoever reads it next, or not derived at all.
+- **Named, never loaded.** The hook says what a task needs; the agent invokes it. Baton does not
+  reach into the session, and it does not fetch, update or adopt anything. A skill is
+  instructions, and instructions fail silently where code fails loudly — so the human stays in
+  the loop by construction, not by policy.
+- **Missing is reported, and so is stale.** A missing skill is loud: nothing loads. A stale one
+  is quiet and worse, because a missing skill makes you think and a stale one makes you
+  confident. Stale is the same comparison as a drifted pointer: last written before the task's
+  last entry.
+- 94 tests.
+
 **v2.4.0**
 - **A pointer sending you to a file that has not moved since the work did.** The Stop hook
   catches a folder whose files are newer than its logbook. The opposite is the one that reaches
