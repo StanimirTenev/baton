@@ -490,6 +490,49 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
     return out
 
 
+# A plan is closed by saying what came of it, never by a tick.
+PLAN_CLOSED = {"zatvoren", "затворен", "closed", "priklyuchen", "приключен", "done"}
+
+
+def open_plan(folder: Path) -> str | None:
+    """A plan that was never closed, and the task it leaves unfinished.
+
+    Research was run, a plan was written, work was done against it -- and then the
+    plan was simply never closed. Nothing said so. The task looked active because
+    it *was* active, and the question of whether the plan had been carried out
+    never came back. Over six weeks this project ran reconnaissance, analysis and
+    planning repeatedly and closed a plan exactly never.
+
+    So: a task holding a `PLAN.md` that does not say it is closed is unfinished,
+    and it is reported every session rather than after some grace period. Unlike a
+    stale skill, this is not a guess about whether something went out of date --
+    the plan either says it is finished or it does not.
+
+    **Closing requires saying what came of it.** `sastoyanie: zatvoren` with no
+    `rezultat` is not closed; it is a tick, and a tick is how a check gets
+    satisfied without the thing behind it being true. A plan that was abandoned
+    closes the same way -- by saying so in the result.
+    """
+    plan = folder / "PLAN.md"
+    if not plan.is_file():
+        return None                      # not every task needs a plan
+    fm = parse_frontmatter(read_head(plan))
+    try:
+        age = (date.today() - date.fromtimestamp(plan.stat().st_mtime)).days
+    except OSError:
+        age = 0
+    old_note = f", последно пипан преди {age} дни" if age >= 1 else ""
+    state = str(fm.get("sastoyanie", "")).strip().lower()
+    if state not in PLAN_CLOSED:
+        if not fm:
+            return f"PLAN.md няма хедър, тъй че никога не е бил затварян{old_note}"
+        return f"PLAN.md е `{state or 'без състояние'}`{old_note}"
+    if not str(fm.get("rezultat") or fm.get("result") or "").strip():
+        return ("PLAN.md се обявява за затворен, но не казва какво излезе от него "
+                "(`rezultat:`) — затварянето без резултат е отметка")
+    return None
+
+
 def is_us(fm: dict) -> bool:
     return str(fm.get("na_hod", "")).strip().lower() in US
 
@@ -520,6 +563,7 @@ def main() -> int:
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
     stale: list[str] = []
+    unfinished: list[str] = []
     today = date.today()
 
     drifted = install_drift()
@@ -559,6 +603,9 @@ def main() -> int:
         if drift:
             stale.append(f"- {f.name} — `sledvashto` е {drift} знака: показалец, който вече "
                          f"носи състояние. Състоянието живее в дневника, тук стои следващият ход")
+        plan = open_plan(f)
+        if plan:
+            unfinished.append(f"- {f.name} — {plan}")
         bad_skills = skill_trouble(skills_for(fm), f, name)
         if bad_skills:
             stale.append(f"- {f.name} — умения, които хедърът иска: "
@@ -628,6 +675,14 @@ def main() -> int:
     if not blocks and not frozen and not finished and not stale:
         return 0
 
+    if unfinished:
+        # Its own block, above the shelf-life notes: an unclosed plan is not a
+        # note about ageing, it is work that was never finished.
+        blocks.append(
+            "⛔ НЕЗАТВОРЕНИ ПЛАНОВЕ — задачата се счита за неизпълнена:\n"
+            + "\n".join(sorted(unfinished))
+            + "\n(Затваря се със `sastoyanie: zatvoren` И `rezultat:` в PLAN.md — "
+              "какво излезе от него. Изоставен план се затваря по същия начин.)")
     if stale:
         blocks.append(
             "⏳ Изтекъл срок на годност — прочети това, преди да стъпиш на него:\n"

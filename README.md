@@ -413,6 +413,24 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.6.0**
+- **A plan that was never closed leaves the task unfinished, and it is reported every session.**
+  A task holding a `PLAN.md` that does not say it is closed is listed under its own heading, above
+  the shelf-life notes. No grace period: this is not a guess about whether something aged — the
+  plan either says it is finished or it does not.
+- **Closing requires saying what came of it.** `sastoyanie: zatvoren` with an empty `rezultat` is
+  not closed; it is a tick, and a tick is how a check gets satisfied without the thing behind it
+  being true. A plan that was abandoned closes the same way — by saying so.
+- `/baton-plan` now writes that header from v0, so a new plan is born closable.
+- The failure this exists for: a project ran reconnaissance, analysis and planning repeatedly over
+  six weeks and closed a plan exactly never. On its first run the check found four.
+- 103 tests.
+
+**v2.5.1**
+- **A detector that cries on a normal Tuesday gets switched off.** The staleness check for skills
+  compared at a day's granularity and fired on every active task the morning after the skills were
+  written. Fourteen days is the honest scale; `missing` is unchanged and still immediate.
+
 **v2.5.0**
 - **A task can name the skills it needs.** `umeniya: [name, ...]` in the header, and the
   session-start line carries `⟨умения: …⟩`. A folder already holds state and history; this is

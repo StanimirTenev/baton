@@ -229,3 +229,30 @@ to execution.
 Research swarms stay for research. Judgement (price, name, letters, strategy) stays with
 the human, and building goes to agents only where the success criterion can be checked by
 a machine and there is a hard cap on effort.
+
+
+## Closing the plan
+
+Every `PLAN.md` opens with a header, from v0:
+
+```markdown
+---
+sastoyanie: otvoren        # otvoren | zatvoren
+rezultat: ""               # what came of it — required to close
+---
+```
+
+The session-start hook reports a task whose plan does not say it is closed, **every
+session**, as unfinished work. There is no grace period, because this is not a guess about
+whether something aged: the plan either says it is finished or it does not.
+
+**Closing requires saying what came of it.** `sastoyanie: zatvoren` with an empty `rezultat`
+is not closed — it is a tick, and a tick is how a check gets satisfied without the thing
+behind it being true.
+
+**A plan that was abandoned closes the same way**: say so in the result. Giving up on a plan
+is a legitimate outcome and a recorded one; leaving it open forever is not.
+
+The failure this exists for: a project ran reconnaissance, analysis and planning repeatedly
+over six weeks and closed a plan exactly never. Nothing was wrong with any individual
+session. The question of whether the plan had been carried out simply never came back.
