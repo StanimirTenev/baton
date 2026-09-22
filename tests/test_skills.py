@@ -94,11 +94,23 @@ def test_a_skill_older_than_the_logbook_is_reported(tmp_path, monkeypatch):
     """The quiet one. Work was recorded after this skill was last written, so what
     it teaches may already have been superseded by what the logbook now says."""
     root = tmp_path / "skills"
-    _skill(root, "komentar", days_ago=5)
+    _skill(root, "komentar", days_ago=bss.SKILL_STALE_DAYS + 3)
     monkeypatch.setenv("BATON_SKILLS", str(root))
     folder = _task(tmp_path, book_days_ago=0)
     out = bss.skill_trouble(["komentar"], folder, LOGBOOK)
     assert len(out) == 1 and "ЛИПСВА" not in out[0]
+
+
+def test_a_skill_written_days_ago_is_not_stale_yet(tmp_path, monkeypatch):
+    """A skill does not go out of date because the logbook moved yesterday. The
+    first version fired on every active task the morning after the skills were
+    written — and a detector that cries on a normal Tuesday gets switched off,
+    taking the real signal with it."""
+    root = tmp_path / "skills"
+    _skill(root, "komentar", days_ago=bss.SKILL_STALE_DAYS - 1)
+    monkeypatch.setenv("BATON_SKILLS", str(root))
+    folder = _task(tmp_path, book_days_ago=0)
+    assert bss.skill_trouble(["komentar"], folder, LOGBOOK) == []
 
 
 def test_a_skill_newer_than_the_logbook_is_quiet(tmp_path, monkeypatch):
@@ -112,7 +124,7 @@ def test_a_skill_newer_than_the_logbook_is_quiet(tmp_path, monkeypatch):
 def test_each_named_skill_is_judged_separately(tmp_path, monkeypatch):
     root = tmp_path / "skills"
     _skill(root, "fresh", days_ago=0)
-    _skill(root, "old", days_ago=9)
+    _skill(root, "old", days_ago=bss.SKILL_STALE_DAYS + 5)
     monkeypatch.setenv("BATON_SKILLS", str(root))
     folder = _task(tmp_path)
     out = bss.skill_trouble(["fresh", "old", "gone"], folder, LOGBOOK)

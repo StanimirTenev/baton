@@ -416,6 +416,15 @@ def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
     return out
 
 
+# A skill does not go out of date because the logbook moved yesterday. The first
+# version compared at a day's granularity and fired on every active task the
+# morning after the skills were written, which is the failure mode of every
+# detector: one that cries on a normal Tuesday gets switched off, and then the
+# real signal goes with it. Weeks is the honest scale for "the task has moved on
+# substantially and nobody has revisited how it is done".
+SKILL_STALE_DAYS = 14
+
+
 def skills_root() -> Path:
     """Where the skills live. `~/.claude/skills` unless told otherwise."""
     try:
@@ -461,6 +470,7 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
     if not names:
         return []
     root = skills_root()
+    grace = SKILL_STALE_DAYS
     try:
         book_day = date.fromtimestamp((folder / logbook).stat().st_mtime)
     except OSError:
@@ -475,7 +485,7 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
             seen = date.fromtimestamp(skill.stat().st_mtime)
         except OSError:
             continue
-        if (book_day - seen).days >= 1:
+        if (book_day - seen).days >= grace:
             out.append(f"{name} — писано {seen}, а дневникът върви до {book_day}")
     return out
 

@@ -238,8 +238,9 @@ Two things are reported, and the second is the dangerous one:
 - **missing** — loud: the header asks for something that is not installed, and nothing loads;
 - **stale** — quiet, and worse. A missing skill makes you think; a stale one makes you
   confident. A skill written once and re-read fifty times is exactly where knowledge goes out
-  of date unnoticed. The test is the same one used for a drifted pointer: last written before
-  the task's last entry.
+  of date unnoticed. Reported when the skill was last written more than **14 days** before the
+  task's last entry: a skill does not go out of date because the logbook moved yesterday, and a
+  detector that cries on a normal Tuesday gets switched off, taking the real signal with it.
 
 ## Shelf life
 
@@ -425,7 +426,7 @@ per project, a short state file under 150 lines, chronology in a separate histor
   is quiet and worse, because a missing skill makes you think and a stale one makes you
   confident. Stale is the same comparison as a drifted pointer: last written before the task's
   last entry.
-- 94 tests.
+- 95 tests.
 
 **v2.4.0**
 - **A pointer sending you to a file that has not moved since the work did.** The Stop hook
