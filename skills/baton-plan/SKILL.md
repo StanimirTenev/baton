@@ -237,8 +237,8 @@ Every `PLAN.md` opens with a header, from v0:
 
 ```markdown
 ---
-sastoyanie: otvoren        # otvoren | zatvoren
-rezultat: ""               # what came of it — required to close
+sastoyanie: otvoren        # otvoren | izpalnen | izostaven
+rezultat: ""               # what came of it — required to close, either way
 ---
 ```
 
@@ -246,12 +246,17 @@ The session-start hook reports a task whose plan does not say it is closed, **ev
 session**, as unfinished work. There is no grace period, because this is not a guess about
 whether something aged: the plan either says it is finished or it does not.
 
-**Closing requires saying what came of it.** `sastoyanie: zatvoren` with an empty `rezultat`
-is not closed — it is a tick, and a tick is how a check gets satisfied without the thing
-behind it being true.
+**Closing requires saying what came of it.** A state with an empty `rezultat` is not closed —
+it is a tick, and a tick is how a check gets satisfied without the thing behind it being true.
 
-**A plan that was abandoned closes the same way**: say so in the result. Giving up on a plan
-is a legitimate outcome and a recorded one; leaving it open forever is not.
+**A plan ends in one of two ways, and they are not the same fact.** `izpalnen` — it was
+carried out. `izostaven` — it was given up on. Both finish the task and neither is a failure
+of record-keeping; giving up is a legitimate outcome, and leaving a plan open forever is not.
+
+But do not let one word cover both. A folder read six weeks later has to say *which*, and why
+— the reason a plan was abandoned is usually the most useful thing in it. This is the same
+refusal that runs through the rest of the project: "we read it" and "we found it" do not get
+to share a number either.
 
 The failure this exists for: a project ran reconnaissance, analysis and planning repeatedly
 over six weeks and closed a plan exactly never. Nothing was wrong with any individual

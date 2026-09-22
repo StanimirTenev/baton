@@ -490,8 +490,14 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
     return out
 
 
-# A plan is closed by saying what came of it, never by a tick.
-PLAN_CLOSED = {"zatvoren", "затворен", "closed", "priklyuchen", "приключен", "done"}
+# A plan ends in one of two ways, and they are not the same fact. "Carried out"
+# and "given up on" both finish a task and leave completely different histories
+# behind -- and a folder read six weeks later has to say which. `zatvoren` stays
+# accepted for plans closed before the distinction existed.
+PLAN_DONE = {"izpalnen", "изпълнен", "done", "carried_out"}
+PLAN_ABANDONED = {"izostaven", "изоставен", "abandoned", "otkazan", "отказан"}
+PLAN_CLOSED = PLAN_DONE | PLAN_ABANDONED | {"zatvoren", "затворен", "closed",
+                                            "priklyuchen", "приключен"}
 
 
 def open_plan(folder: Path) -> str | None:
@@ -508,10 +514,15 @@ def open_plan(folder: Path) -> str | None:
     stale skill, this is not a guess about whether something went out of date --
     the plan either says it is finished or it does not.
 
-    **Closing requires saying what came of it.** `sastoyanie: zatvoren` with no
-    `rezultat` is not closed; it is a tick, and a tick is how a check gets
-    satisfied without the thing behind it being true. A plan that was abandoned
-    closes the same way -- by saying so in the result.
+    **Closing requires saying what came of it.** A state with no `rezultat` is not
+    closed; it is a tick, and a tick is how a check gets satisfied without the
+    thing behind it being true.
+
+    **And a plan ends in one of two ways.** `izpalnen` -- it was carried out --
+    and `izostaven` -- it was given up on. Both finish the task; neither is a
+    failure of record-keeping. But they are different facts, and a folder read six
+    weeks later has to say which, the same way this project refuses to let
+    "we read it" and "we found it" share a number.
     """
     plan = folder / "PLAN.md"
     if not plan.is_file():
@@ -681,7 +692,7 @@ def main() -> int:
         blocks.append(
             "⛔ НЕЗАТВОРЕНИ ПЛАНОВЕ — задачата се счита за неизпълнена:\n"
             + "\n".join(sorted(unfinished))
-            + "\n(Затваря се със `sastoyanie: zatvoren` И `rezultat:` в PLAN.md — "
+            + "\n(Затваря се с `sastoyanie: izpalnen` ИЛИ `izostaven`, И `rezultat:` в PLAN.md — "
               "какво излезе от него. Изоставен план се затваря по същия начин.)")
     if stale:
         blocks.append(

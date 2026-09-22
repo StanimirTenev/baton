@@ -78,3 +78,30 @@ def test_the_line_says_how_long_it_has_sat(tmp_path):
 def test_english_spellings_close_it_too(tmp_path):
     plan = "---\nsastoyanie: closed\nresult: \"shipped\"\n---\n"
     assert bss.open_plan(_task(tmp_path, plan)) is None
+
+
+# --- carried out is not the same fact as given up on -------------------------
+
+def test_a_plan_carried_out_closes(tmp_path):
+    plan = "---\nsastoyanie: izpalnen\nrezultat: \"пуснато на четирите канала\"\n---\n"
+    assert bss.open_plan(_task(tmp_path, plan)) is None
+
+
+def test_a_plan_abandoned_closes_too(tmp_path):
+    """Giving up finishes the task. It is not a failure of record-keeping, and it
+    is not the same fact as having carried the plan out — the folder has to say
+    which, six weeks later."""
+    plan = "---\nsastoyanie: izostaven\nrezultat: \"гейтът не падна; парите отидоха другаде\"\n---\n"
+    assert bss.open_plan(_task(tmp_path, plan)) is None
+
+
+def test_abandoned_still_needs_a_result(tmp_path):
+    """Why we gave up is the part worth keeping."""
+    out = bss.open_plan(_task(tmp_path, "---\nsastoyanie: izostaven\n---\n"))
+    assert out is not None and "rezultat" in out
+
+
+def test_the_older_generic_closer_is_still_accepted(tmp_path):
+    """Plans closed before the distinction existed do not start failing."""
+    plan = "---\nsastoyanie: zatvoren\nrezultat: \"нещо\"\n---\n"
+    assert bss.open_plan(_task(tmp_path, plan)) is None

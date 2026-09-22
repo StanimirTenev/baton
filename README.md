@@ -418,13 +418,16 @@ per project, a short state file under 150 lines, chronology in a separate histor
   A task holding a `PLAN.md` that does not say it is closed is listed under its own heading, above
   the shelf-life notes. No grace period: this is not a guess about whether something aged — the
   plan either says it is finished or it does not.
-- **Closing requires saying what came of it.** `sastoyanie: zatvoren` with an empty `rezultat` is
-  not closed; it is a tick, and a tick is how a check gets satisfied without the thing behind it
-  being true. A plan that was abandoned closes the same way — by saying so.
+- **Closing requires saying what came of it.** A state with an empty `rezultat` is not closed; it
+  is a tick, and a tick is how a check gets satisfied without the thing behind it being true.
+- **A plan ends in one of two ways, and they are not the same fact.** `izpalnen` — carried out —
+  and `izostaven` — given up on. Both finish the task, and giving up is a legitimate recorded
+  outcome. But a folder read six weeks later has to say *which*, and why: the reason a plan was
+  abandoned is usually the most useful thing left in it.
 - `/baton-plan` now writes that header from v0, so a new plan is born closable.
 - The failure this exists for: a project ran reconnaissance, analysis and planning repeatedly over
   six weeks and closed a plan exactly never. On its first run the check found four.
-- 103 tests.
+- 107 tests.
 
 **v2.5.1**
 - **A detector that cries on a normal Tuesday gets switched off.** The staleness check for skills
