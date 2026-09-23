@@ -443,7 +443,108 @@ def tvardeniya(line: str) -> list[str]:
     return [p.strip() for p in parts if len(p.strip()) > 25][:9]
 
 
+def zaglavni_tvardeniya(fm: dict) -> list[tuple[str, str]]:
+    """(field, claim) for every assertion a task header makes.
+
+    A header is multi-claim by construction -- five fields, and `sledvashto`
+    routinely carries two sentences ("steps 0-7 are done and checked. What
+    remains is X"). `--zadachi` asks one question of the lot and answers "this
+    header no longer matches"; this answers WHICH part.
+
+    A field too short to be a sentence is its own claim: `sastoyanie: aktivna` is
+    an assertion about where the work stands, and the logbook can contradict it.
+    A dash is not -- that is what someone types to mean "nothing here".
+    """
+    out = []
+    for field in HEADER_CLAIMS:
+        value = str(fm.get(field, "")).strip()
+        if len(value) < 3 or not any(ch.isalnum() for ch in value):
+            continue
+        out.extend((field, piece) for piece in (tvardeniya(value) or [value]))
+    return out
+
+
+def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
+    """Every claim a task header makes, against the logbook under it.
+
+    The corpus `--koe` was built for -- index lines cut into claims -- is gone.
+    Measured 2026-09-23 on this machine: 0 of 45 index rows yield three claims and
+    13 yield none, because the index was compressed on purpose, so that a pointer
+    carries no state. That was right, and it left this mode without input: an index
+    that cannot rot is an index `--koe` cannot check.
+
+    Task headers rot by design -- that is what `sledvashto` is for -- and `--zadachi`
+    already asks the whole-header version of this question against these same
+    logbooks. So the corpus moves and the question stays.
+
+    ⚠️ One thing genuinely differs from the index corpus. There, a file cut at
+    `TSYAL` failed claims innocently: the evidence could sit anywhere, including
+    below the cut. A logbook is NEWEST-FIRST, so the same cut keeps the newest
+    entries -- which is the evidence a header's currency is judged against. The cut
+    is still announced, but it no longer means "a claim may fail for nothing".
+    """
+    hook = _hook()
+    dumi = cfg["poveritelni"]
+    whole = kniga.read_text(encoding="utf-8", errors="replace")
+    pairs = zaglavni_tvardeniya(hook.parse_frontmatter(whole))
+    if not pairs:
+        sys.exit(f"хедърът на {name} не носи твърдения, които да се проверяват")
+    body = whole.split("---", 2)[2].strip() if whole.startswith("---") else whole
+    pointer = "\n".join(f"{field}: {claim}" for field, claim in pairs)
+    # The WHOLE logbook, not the part that fits: a client named on page four is
+    # still named. Same rule as everywhere else here, and the reason is 13:20.
+    zadarzhano = poveritelno(f"{pointer}\n{whole}", name, dumi)
+    if zadarzhano:
+        sys.exit(f"⛔ отказано: „{zadarzhano}“ се среща в {name}. Не напуска машината.")
+
+    questions = {f"c{i}": {
+        "type": "noul",
+        "instructions": f"Does the logbook support this specific claim: \"{claim}\"?",
+        "criteria": {"true": "The entries state or confirm it",
+                     "false": "Not stated, contradicted, or reported differently"}}
+        for i, (_, claim) in enumerate(pairs)}
+    state = f"LOGBOOK ({kniga.name}), newest entries first:\n{body[:TSYAL]}"
+    spent = 0.0
+    try:
+        out = pitay(api_key, state, questions, name, dumi)
+        spent = out.get("usage", {}).get("cost", 0)
+    finally:
+        zapishi(cfg["home"], "koe-zadacha", name, len(pairs), spent)
+
+    zapisi = body.count("\n## ") + body.startswith("## ")
+    print(f"### {name} — хедърът срещу дневника си\n")
+    # Said before the numbers, all three, because each changes how they read.
+    print("⚠️ Границите 0.4 / 0.7 НЕ са мерени на този корпус. Подредба, не присъда.")
+    # Found by the positive control, 2026-09-23: a task whose header spoke of a
+    # review, a board and a submission came back "unsupported" on all four claims
+    # -- correctly, because its logbook is 562 characters and one entry, and
+    # mentions none of it. The criterion the model is given reads "Not stated,
+    # contradicted, or reported differently", so NEVER WRITTEN DOWN and WRITTEN AND
+    # THEN CONTRADICTED arrive as the same low number. They are not the same
+    # finding: one says the header is wrong, the other says the logbook is thin.
+    print("⚠️ „Не се подкрепя\" значи И „опровергано\", И „изобщо не се споменава\". "
+          "Двете не са едно и също.")
+    print(f"   Дневникът тук е {len(body)} знака, {zapisi} записа — "
+          f"{'тънък, тъй че ниското значи по-скоро „не пише", отколкото „не е вярно"' if len(body) < 2000 else 'достатъчен, за да носи опровержение'}.\n")
+    if len(body) > TSYAL:
+        print(f"⚠️ ДНЕВНИКЪТ Е РЯЗАН на {TSYAL} от {len(body)} знака. Дневникът е "
+              f"най-новите първо, тъй че отрязаното са НАЙ-СТАРИТЕ записи — точно "
+              f"обратното на индекса, където срезът валеше твърдения невинно.\n")
+    for value, field, claim in sorted(
+            (out["answers"][f"c{i}"]["noul"], f, c) for i, (f, c) in enumerate(pairs)):
+        mark = "🔴 НЕ СЕ ПОДКРЕПЯ" if value < 0.4 else (
+            "🟡 неясно      " if value < 0.7 else "   подкрепено  ")
+        print(f"{mark} {value:.2f}  {field}: {claim[:88]}")
+    print(f"\nцена: ${spent:.6f}")
+
+
 def koe(api_key: str, cfg: dict, target: str) -> None:
+    # A bare task name wins over an index target. Nothing in an index resolves to
+    # a task folder -- index targets carry a path, task names do not -- but the
+    # rule is written down and pinned rather than left to that staying true.
+    kniga = Path(cfg["home"]).expanduser() / target / cfg["logbook"]
+    if kniga.is_file():
+        return koe_zadacha(api_key, cfg, target, kniga)
     indeks = Path(cfg["indeks"]).expanduser()
     dumi, root = cfg["poveritelni"], indeks.parent
     pointer = next((p for p, t in pokazalci(indeks, None) if t == target), "")

@@ -27,7 +27,8 @@ spec.loader.exec_module(bp)
 def _cfg(tmp_path: Path, **over) -> dict:
     (tmp_path / "hooks").mkdir(exist_ok=True)
     return {"indeks": str(tmp_path / "INDEX.md"), "podbor": None,
-            "home": str(tmp_path), "poveritelni": ["klient", "Клиент"], **over}
+            "home": str(tmp_path), "logbook": "LOGBOOK.md",
+            "poveritelni": ["klient", "Клиент"], **over}
 
 
 # --- the list you have to make a decision about -----------------------------
@@ -186,6 +187,20 @@ def test_a_shortlist_narrows_the_index(tmp_path):
 # most expensive bug in this repo's history.
 
 
+def _echo(value: float = 0.9, cost: float = 0.0001):
+    """urlopen answering every question the request actually asked.
+
+    A fixture with hard-coded keys passes only while the caller happens to ask for
+    those keys, and `pitay` rejects a mismatched envelope -- correctly. So the mock
+    reads the request it was handed.
+    """
+    def reply(request, *a, **k):
+        asked = json.loads(request.data.decode())["questions"]
+        return _Reply({"answers": {name: {"noul": value} for name in asked},
+                       "usage": {"cost": cost}})
+    return reply
+
+
 class _Sequence:
     """urlopen returning the next value each call, and counting the calls."""
 
@@ -277,10 +292,151 @@ def test_koe_is_deliberately_left_alone(tmp_path, monkeypatch):
         encoding="utf-8")
     calls = {"n": 0}
 
-    def counted(*a, **k):
+    echo = _echo(0.5)
+
+    def counted(request, *a, **k):
         calls["n"] += 1
-        return _Reply({"answers": {"c0": {"noul": 0.5}}, "usage": {"cost": 0.0001}})
+        return echo(request)
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", counted)
     bp.koe("k", _cfg(tmp_path), "detail.md")
     assert calls["n"] == 1, "--koe е започнал да усреднява, без да е мерено"
+
+
+# --- --koe gets the corpus it lost -----------------------------------------
+#
+# `--koe` cuts a pointer into separate claims and asks the file about each. Its
+# corpus was index lines. Measured 2026-09-23 on this machine's index: 0 of 45
+# rows now yield three claims and 13 yield none, because the index was compressed
+# on purpose -- "a pointer carries no state". That decision was right and it left
+# this mode without input: an index that cannot rot is an index `--koe` cannot
+# check.
+#
+# Task headers are multi-claim by construction, and `--zadachi` already asks the
+# whole-header version of the same question against the same logbooks. So the
+# corpus moves; the question does not change.
+
+
+def _zadacha(tmp_path: Path, name: str = "zadacha", header: str = None,
+             body: str = "## 2026-09-23 — the supplier answered and the work went on\n") -> Path:
+    folder = tmp_path / name
+    folder.mkdir(exist_ok=True)
+    header = header or ('sledvashto: "waiting for the supplier. Then the second step follows."\n'
+                        'kriterii_zavarshvane: "the bus is live on all three"\n'
+                        'sastoyanie: aktivna\n'
+                        'na_hod: nie\n')
+    (folder / "DNEVNIK.md").write_text(f"---\n{header}---\n\n{body}", encoding="utf-8")
+    return folder
+
+
+def _koe_cfg(tmp_path: Path, **over) -> dict:
+    return _cfg(tmp_path, home=str(tmp_path), logbook="DNEVNIK.md", **over)
+
+
+def test_koe_takes_a_task_name_and_asks_its_logbook(tmp_path, monkeypatch, capsys):
+    """The dispatch rule: a bare argument naming a task folder that holds a logbook."""
+    _zadacha(tmp_path)
+    _index(tmp_path)
+    monkeypatch.setattr(bp.urllib.request, "urlopen", _echo())
+    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    out = capsys.readouterr().out
+    assert "zadacha" in out
+    assert "sledvashto" in out, "изходът не казва кое поле носи твърдението"
+    assert "kriterii_zavarshvane" in out
+
+
+def test_a_header_field_with_several_sentences_becomes_several_claims(tmp_path):
+    """`sledvashto` routinely carries more than one assertion; each is asked alone."""
+    pairs = bp.zaglavni_tvardeniya({
+        "sledvashto": "the first step is done and checked. The second waits on Monday.",
+        "sastoyanie": "aktivna"})
+    fields = [f for f, _ in pairs]
+    assert fields.count("sledvashto") == 2, pairs
+
+
+def test_a_short_field_falls_back_to_its_whole_value(tmp_path):
+    """`sastoyanie: aktivna` yields no sentence; the value itself is the claim."""
+    pairs = bp.zaglavni_tvardeniya({"sastoyanie": "aktivna"})
+    assert pairs == [("sastoyanie", "aktivna")]
+
+
+def test_an_empty_or_placeholder_field_is_not_a_claim(tmp_path):
+    """A dash is what someone types to mean "nothing here"."""
+    assert bp.zaglavni_tvardeniya({"sledvashto": "-", "chaka": "", "na_hod": "nie"}) \
+        == [("na_hod", "nie")]
+
+
+def test_koe_on_a_task_holds_on_the_whole_logbook_not_the_extract(tmp_path, monkeypatch):
+    """The guard reads the whole logbook: a client named on page four is still named."""
+    _zadacha(tmp_path, body="x" * (bp.TSYAL + 1000) + "\nnotes about Клиент further down\n")
+    monkeypatch.setattr(bp.urllib.request, "urlopen",
+                        lambda *a, **k: pytest.fail("изпратено въпреки преградата"))
+    with pytest.raises(SystemExit) as err:
+        bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    assert "Клиент" in str(err.value)
+
+
+def test_a_cut_logbook_says_the_cut_keeps_the_newest(tmp_path, monkeypatch, capsys):
+    """Newest-first is why this cut is sound where the index corpus's was not."""
+    _zadacha(tmp_path, body="y" * (bp.TSYAL + 500))
+    monkeypatch.setattr(bp.urllib.request, "urlopen", _echo())
+    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    out = capsys.readouterr().out
+    assert "РЯЗАН" in out
+    assert "НАЙ-СТАРИТЕ" in out, \
+        "срезът не казва КОЕ е отпаднало; при индекса беше обратното и това е разликата"
+
+
+def test_koe_on_a_task_still_draws_once(tmp_path, monkeypatch):
+    """No grey band here: the 0.7 edge has not been measured for flips."""
+    _zadacha(tmp_path)
+    calls = {"n": 0}
+
+    echo = _echo(0.5)
+
+    def counted(request, *a, **k):
+        calls["n"] += 1
+        return echo(request)
+
+    monkeypatch.setattr(bp.urllib.request, "urlopen", counted)
+    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    assert calls["n"] == 1
+
+
+def test_an_index_target_still_reaches_the_index_mode(tmp_path, monkeypatch, capsys):
+    """The old corpus is degraded, not removed. Nothing about it changes here."""
+    _zadacha(tmp_path)
+    (tmp_path / "INDEX.md").write_text(
+        "- [Row](detail.md) — this pointer makes a claim long enough to be cut out\n",
+        encoding="utf-8")
+    (tmp_path / "detail.md").write_text("The detail file says something.\n", encoding="utf-8")
+    monkeypatch.setattr(bp.urllib.request, "urlopen", _echo())
+    bp.koe("k", _koe_cfg(tmp_path), "detail.md")
+    assert "detail.md" in capsys.readouterr().out
+
+
+def test_a_thin_logbook_is_announced_before_the_numbers(tmp_path, monkeypatch, capsys):
+    """Found by the positive control, not by review.
+
+    A task whose header spoke of a review, a board and a submission came back
+    "unsupported" on all four claims. The tool was right -- its logbook is 562
+    characters and mentions none of it -- but "not supported" reads as "the header
+    is wrong" when it meant "nobody wrote it down". The criterion given to the
+    model merges the two, so the output has to separate them.
+    """
+    _zadacha(tmp_path, body="## 2026-09-17 — restored from the inventory\n")
+    monkeypatch.setattr(bp.urllib.request, "urlopen", _echo(0.1))
+    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    out = capsys.readouterr().out
+    assert "изобщо не се споменава" in out, \
+        'не разделя опровергано от никога-не-писано'
+    assert "не пише" in out, "тънък дневник не е отбелязан като тънък"
+    assert "1 записа" in out, "броят записи не се показва — четящият не вижда колко е тънък"
+
+
+def test_a_full_logbook_is_not_called_thin(tmp_path, monkeypatch, capsys):
+    """The other direction: a real logbook must not carry the warning's excuse."""
+    _zadacha(tmp_path, body="## 2026-09-23 — an entry\n" + "детайли. " * 400)
+    monkeypatch.setattr(bp.urllib.request, "urlopen", _echo(0.1))
+    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    assert "не пише" not in capsys.readouterr().out

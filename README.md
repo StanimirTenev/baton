@@ -421,6 +421,53 @@ can support anything and a low score there means "don't know", not "no".
 The same cut is why `--dali` keeps flagging a pointer whose correction is recorded deep in the
 file: the fix is real, the extract cannot see it. Read what it flags; do not trust it.
 
+### `--koe` takes a task name
+
+`--koe` cuts a pointer into separate claims and asks the source about each. Its corpus was
+index lines. Measured 2026-09-23 on the index this was built against:
+
+| | before | after |
+|---|---|---|
+| rows yielding **0** claims | 2 | **13** |
+| rows yielding **≥3** claims | **10** | **0** |
+| most claims on one row | 4 | 2 |
+
+The index had been compressed on purpose, so that a pointer carries no state. That was
+right, and it left this mode without input: **an index that cannot rot is an index `--koe`
+cannot check.** The two rules are in tension by design, and the tension is worth naming.
+
+Task headers rot by design — that is what `sledvashto` is for — and `--zadachi` already asks
+the whole-header version of this question against the same logbooks. So `--koe <task-name>`
+asks it per claim:
+
+```
+$ baton_pregled.py --koe qrp-benchmark
+🔴 НЕ СЕ ПОДКРЕПЯ 0.14  sastoyanie: priklyuchila
+🔴 НЕ СЕ ПОДКРЕПЯ 0.28  na_hod: nie
+🟡 неясно        0.50  kriterii_zavarshvane: бенчмарк срещу труда — направен (14/30)
+```
+
+`--zadachi` had flagged that task at 0.66; this says **which part**. A bare task name that
+holds a logbook wins over an index target; an index path still reaches the old mode.
+
+**Two things this output says before the numbers, because both change how they read:**
+
+- The 0.4 / 0.7 cutoffs come from the index corpus and have **not** been measured here.
+- **"Not supported" means both "contradicted" and "never mentioned."** The criterion the
+  model is given merges them, and they are not the same finding: one says the header is
+  wrong, the other says the logbook is thin. Found by the positive control — a task whose
+  header spoke of a review, a board and a submission came back unsupported on all four
+  claims, correctly, because its logbook is 562 characters and mentions none of it. So the
+  logbook's size and entry count are printed, and a thin one is named as thin.
+
+⚠️ A logbook is **newest-first**, so the `TSYAL` cut keeps the newest entries — the evidence
+a header's currency is judged against. On the index corpus the same cut fell anywhere and
+failed claims innocently. Same cut, opposite meaning; the announcement says which.
+
+⚠️ `tvardeniya()` also extracts link text and trigger phrases as "claims"
+(`*история:* [сесии и commit-и](…)`). On the old index those were diluted by real ones; on
+the new one they are most of what is left. Flagged, not fixed.
+
 ### The grey band: one draw near the threshold is partly a coin flip
 
 Measured 2026-09-23 on 45 pointers, **three identical runs of the same request**. The model
@@ -555,6 +602,21 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.10.0**
+- **`--koe` takes a task name.** Its old corpus is gone: 0 of 45 index rows now yield three
+  claims and 13 yield none, because the index was compressed so that a pointer carries no
+  state. An index that cannot rot is an index `--koe` cannot check. Task headers rot by
+  design, so the corpus moves and the question stays. `--zadachi` says a header no longer
+  matches; this says which claim.
+- Each header field is a claim, and `sledvashto` is usually two. A field too short to be a
+  sentence is its own claim; a dash is not.
+- **Found by the positive control, not by review:** "not supported" covers both
+  *contradicted* and *never mentioned*, and a thin logbook makes every claim look wrong. The
+  output now says so, and prints the logbook's size and entry count.
+- The cut means the opposite here: logbooks are newest-first, so it keeps the newest entries.
+- **What this does not change:** the index mode is untouched, no threshold moved, and `--koe`
+  still draws once — the 0.7 edge has not been measured for flips, so it gets no grey band.
 
 **v2.9.0**
 - **The grey band: three draws averaged near the threshold.** `--dali` and `--zadachi` draw
