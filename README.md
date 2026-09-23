@@ -384,6 +384,25 @@ A held row stops *itself*, not the run — otherwise the only way to get a revie
 the barrier. Every run appends to `$BATON_HOME/.pregled-dnevnik.tsv`: what was sent, when,
 what it cost.
 
+### `--zadachi`: the header against its own logbook
+
+```
+python3 tools/baton_pregled.py --zadachi
+```
+
+Same shape, different corpus: a header's `sledvashto` and `kriterii_zavarshvane` are pointers,
+and the logbook under them is the source. A task marked finished on a criterion its own latest
+entry retracted is the same rot as a stale index line — and equally invisible to string
+matching. It found exactly that on the first run here.
+
+⚠️ **Measured, and the measurement is not flattering.** On the corpus here: 13 of 19 tasks were
+held by the confidentiality guard, because interlinked projects mention each other constantly.
+Of the six that ran, five scored above the memory-index threshold — a number that flags almost
+everything is an ordering, not a verdict. The largest logbook scored lowest, which suggests the
+score partly tracks logbook length rather than staleness; six rows is far too few to say so.
+
+Read what it ranks. Do not carry the threshold here.
+
 ### Two questions, opposite amounts of evidence
 
 Measured, and the easiest thing here to get backwards:
@@ -498,6 +517,18 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.8.0**
+- **`--zadachi`: every task header against its own logbook.** A header's `sledvashto` and
+  `kriterii_zavarshvane` are pointers and the logbook under them is the source, so the same
+  question applies. On its first run here it found a task marked *finished*, on a criterion its
+  own latest entry had retracted — listed as done in every session since.
+- The measurement is in the README next to the feature, and it is not flattering: 13 of 19 tasks
+  held by the guard, five of the remaining six above a threshold measured elsewhere. An ordering
+  to read, not a number to trust.
+- Fixed while building it: the mode took the logbook's *name* from a second config read, found no
+  logbooks at all, and reported a clean run costing $0. A check that finds nothing looks exactly
+  like a check that found nothing wrong.
 
 **v2.7.1** — security fix in `tools/baton_pregled.py`, released the day v2.7.0 shipped
 - **The confidentiality guard read the first 4000 characters of a payload of up to 28000.** It

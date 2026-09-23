@@ -3,6 +3,7 @@
 
     python3 tools/baton_pregled.py --dali            # has a pointer gone stale?
     python3 tools/baton_pregled.py --koe <file>      # which claim is unsupported?
+    python3 tools/baton_pregled.py --zadachi         # do the task headers still match?
 
 Optional, and off unless you configure it. **The hooks never call this and never
 touch the network.** Logbooks carry client matter; that is not a thing to send
@@ -34,6 +35,17 @@ One reason both ways: a summary judgement is DILUTED by a long text, while a sin
 claim has its evidence SOMEWHERE in it -- and a cut above that evidence fails the
 claim innocently.
 
+## `--zadachi`: the header against its own logbook
+
+Same shape, different corpus: a task header's `sledvashto` and `kriterii_zavarshvane` are
+pointers, and the logbook below them is the source. A header saying "waiting for the
+supplier" over a logbook whose last three entries are about something else is the same
+rot as a stale index line, and equally invisible to string matching.
+
+⚠️ **The threshold below was NOT measured on this corpus.** It was measured on a memory
+index. Task headers are shorter, logbooks are longer and newest-first. Treat `--zadachi`
+output as an ordering to look at, and measure your own threshold before trusting a number.
+
 ## The threshold
 
 `PRAG = 0.46`, measured by hand: 14 of 19 pointers checked personally, everything
@@ -47,6 +59,7 @@ hand, and move the number to where it separates yours.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -64,6 +77,26 @@ OTRYAZAK = 2600      # for --dali: the extract that question wants
 TSYAL = 28000        # for --koe: a CEILING, not a promise; it announces itself
 
 LINK = re.compile(r"\[([^\]]+)\]\(([^)#]+\.md)\)")
+
+HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
+
+# What a task header asserts about where the work stands. These are the pointers;
+# the logbook under them is the source of truth, exactly as an index line points at
+# a detail file.
+HEADER_CLAIMS = ("sledvashto", "kriterii_zavarshvane", "sastoyanie", "na_hod", "chaka")
+
+
+def _hook():
+    """The hook's own header parsing, reused rather than reimplemented.
+
+    Two readers of one header that disagree is a defect waiting to happen, and the
+    one that sends things over the network should not be the one that guessed.
+    """
+    spec = importlib.util.spec_from_file_location("baton_session_start", HOOK)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["baton_session_start"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def config() -> dict:
@@ -86,6 +119,7 @@ def config() -> dict:
         "indeks": os.environ.get("BATON_PREGLED_INDEKS") or cfg.get("pregled_indeks"),
         "podbor": os.environ.get("BATON_PREGLED_PODBOR") or cfg.get("pregled_podbor"),
         "home": os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks"),
+        "logbook": (os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"),
         "poveritelni": ([w.strip() for w in poveritelni.split(",") if w.strip()]
                         if poveritelni is not None else cfg.get("pregled_poveritelni")),
     }
@@ -289,6 +323,68 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     print(f"\nцена: ${spent:.6f}")
 
 
+def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
+    """Every task header against the logbook it sits on top of."""
+    hook = _hook()
+    root = Path(cfg["home"]).expanduser()
+    # The name comes from the SAME config chain as everything else here. Taking it
+    # from hook.config() read a different baton.local.json -- the source copy, which
+    # has none -- and the run silently found no logbooks at all and cost $0.
+    logbook_name = cfg["logbook"]
+    dumi = cfg["poveritelni"]
+    results, spent, zadarzhani, izpratani = [], 0.0, [], 0
+    try:
+        for folder in sorted(p for p in root.iterdir() if p.is_dir()
+                             and not p.name.startswith(".")):
+            if izbrani and not any(part in folder.name for part in izbrani):
+                continue
+            book = folder / logbook_name
+            if not book.is_file():
+                continue
+            whole = book.read_text(encoding="utf-8", errors="replace")
+            fm = hook.parse_frontmatter(whole)
+            claims = {k: v for k, v in fm.items() if k in HEADER_CLAIMS and str(v).strip()}
+            if not claims:
+                print(f"  ⚠️ без хедър — {folder.name}")
+                continue
+            body = whole.split("---", 2)[2].strip() if whole.startswith("---") else whole
+            pointer = "\n".join(f"{k}: {v}" for k, v in claims.items())
+            zadarzhano = poveritelno(f"{pointer}\n{whole}", folder.name, dumi)
+            if zadarzhano:
+                zadarzhani.append((folder.name, zadarzhano))
+                print(f"  ⛔ задържана ({zadarzhano}) — {folder.name}")
+                continue
+            state = (f"TASK HEADER (what it claims about where the work stands):\n{pointer}\n\n"
+                     f"LOGBOOK ({logbook_name}), newest entries first, the source of truth:\n"
+                     f"{body[:OTRYAZAK]}")
+            izpratani += 1
+            out = pitay(api_key, state, {"stale": {
+                "type": "noul",
+                "instructions": ("The header is only a pointer; the logbook is the source of "
+                                 "truth. Does the header assert anything the recent entries "
+                                 "contradict, have superseded, or now report differently — a "
+                                 "next step already taken, a state that has changed, someone "
+                                 "who is no longer the one holding the move?"),
+                "criteria": {"true": "The header says something the logbook no longer supports",
+                             "false": "Consistent, or asserts nothing the entries cover"}}},
+                folder.name, dumi)
+            value = out["answers"]["stale"]["noul"]
+            spent += out.get("usage", {}).get("cost", 0)
+            results.append((value, folder.name))
+            print(f"  {value:<5} {folder.name}")
+    finally:
+        zapishi(cfg["home"], "zadachi", root.name, izpratani, spent)
+
+    if zadarzhani:
+        print(f"\nЗАДЪРЖАНИ ({len(zadarzhani)}) — не са изпращани:")
+        for name, duma in zadarzhani:
+            print(f"  ⛔ {name} ({duma})")
+    print(f"\nПОДРЕДЕНИ ПО ПОДОЗРЕНИЕ — ⚠️ прагът НЕ е мерен на този корпус:")
+    for value, name in sorted(results, reverse=True):
+        print(f"  {'🔴' if value >= PRAG else '  '} {value:.2f}  {name}")
+    print(f"\nцена: ${spent:.6f}")
+
+
 def tvardeniya(line: str) -> list[str]:
     """Cut a pointer line into separate claims, on the separators prose uses."""
     body = re.sub(r"^\[[^\]]*\]\([^)]*\)\s*[—-]\s*", "", line)
@@ -347,13 +443,17 @@ def main() -> None:
     parser.add_argument("--dali", nargs="*", metavar="ЧАСТ",
                         help="остарял ли е показалецът (по желание: части от пътища)")
     parser.add_argument("--koe", metavar="ФАЙЛ", help="кое точно не се подкрепя")
+    parser.add_argument("--zadachi", nargs="*", metavar="ЧАСТ",
+                        help="хедърът на всяка задача срещу дневника ѝ")
     args = parser.parse_args()
-    if args.dali is None and not args.koe:
-        parser.error("избери --dali или --koe")
+    if args.dali is None and args.zadachi is None and not args.koe:
+        parser.error("избери --dali, --koe или --zadachi")
     cfg = config()
     api_key = klyuch()
     if args.koe:
         koe(api_key, cfg, args.koe)
+    elif args.zadachi is not None:
+        zadachi(api_key, cfg, set(args.zadachi))
     else:
         dali(api_key, cfg, set(args.dali))
 
