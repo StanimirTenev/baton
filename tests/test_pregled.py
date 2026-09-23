@@ -171,3 +171,116 @@ def test_a_shortlist_narrows_the_index(tmp_path):
     (tmp_path / "SHORT.md").write_text("| 1 | [Two](b/two.md) | |\n", encoding="utf-8")
     found = bp.pokazalci(tmp_path / "INDEX.md", tmp_path / "SHORT.md")
     assert [t for _, t in found] == ["b/two.md"]
+
+
+# --- the grey band: one draw near the threshold is partly a coin flip --------
+#
+# Measured 23.09.2026 on 45 pointers, three identical runs. The spread is
+# negligible where the model is confident (median 0.010) and LARGEST exactly
+# where the decision is made: ±0.12 and ±0.09 for the two rows whose mean sat
+# between 0.38 and 0.55. One row of 45 changed sides of the threshold between
+# identical runs -- 0.41 / 0.47 / 0.38 -- so it was flagged in one run of three.
+#
+# These tests pin the band, the averaging, the ledger, and the wiring into BOTH
+# modes that ask this question. A check that is written and never called is the
+# most expensive bug in this repo's history.
+
+
+class _Sequence:
+    """urlopen returning the next value each call, and counting the calls."""
+
+    def __init__(self, *values):
+        self.values = list(values)
+        self.calls = 0
+
+    def __call__(self, *a, **k):
+        self.calls += 1
+        value = self.values[min(self.calls - 1, len(self.values) - 1)]
+        return _Reply({"answers": {"stale": {"noul": value}},
+                       "usage": {"cost": 0.0001}})
+
+
+def _index(tmp_path: Path, target: str = "detail.md") -> None:
+    (tmp_path / "INDEX.md").write_text(f"- [Row]({target}) — asserts a thing\n",
+                                       encoding="utf-8")
+    (tmp_path / target).write_text("The detail file says something else.\n",
+                                   encoding="utf-8")
+
+
+def test_a_value_in_the_grey_band_is_drawn_three_times_and_averaged(
+        tmp_path, monkeypatch, capsys):
+    """0.41 / 0.47 / 0.38 is the measured row that flipped sides. Mean 0.42."""
+    _index(tmp_path)
+    seq = _Sequence(0.41, 0.47, 0.38)
+    monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
+    bp.dali("k", _cfg(tmp_path), set())
+    out = capsys.readouterr().out
+    assert seq.calls == 3, f"очаквани 3 тегления, направени {seq.calls}"
+    assert "0.42" in out
+    assert "0.41" in out and "0.47" in out and "0.38" in out, \
+        "трите тегления не се показват — числото изглежда като единично"
+
+
+def test_a_confident_value_is_drawn_once(tmp_path, monkeypatch, capsys):
+    """Outside the band the spread is a hundredth; paying three times is waste."""
+    _index(tmp_path)
+    seq = _Sequence(0.12)
+    monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
+    bp.dali("k", _cfg(tmp_path), set())
+    assert seq.calls == 1, f"очаквано 1 тегление, направени {seq.calls}"
+
+
+def test_a_high_value_is_drawn_once(tmp_path, monkeypatch):
+    """The band has an upper edge too: 0.90 is not in doubt."""
+    _index(tmp_path)
+    seq = _Sequence(0.90)
+    monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
+    bp.dali("k", _cfg(tmp_path), set())
+    assert seq.calls == 1
+
+
+def test_the_ledger_counts_every_draw_not_every_row(tmp_path, monkeypatch):
+    """What left the machine is three requests. The ledger says what left."""
+    _index(tmp_path)
+    monkeypatch.setattr(bp.urllib.request, "urlopen", _Sequence(0.50, 0.50, 0.50))
+    bp.dali("k", _cfg(tmp_path), set())
+    ledger = (tmp_path / ".pregled-dnevnik.tsv").read_text(encoding="utf-8")
+    assert "\t3\t" in ledger, f"описът не брои трите тегления:\n{ledger}"
+
+
+def test_zadachi_averages_in_the_band_too(tmp_path, monkeypatch, capsys):
+    """The same question on a different corpus. Wiring, not only the helper."""
+    folder = tmp_path / "zadacha"
+    folder.mkdir()
+    (folder / "DNEVNIK.md").write_text(
+        "---\nsledvashto: \"чака доставчика\"\nsastoyanie: aktivna\n---\n\n"
+        "## 2026-09-23 — доставчикът отговори и работата продължи\n", encoding="utf-8")
+    seq = _Sequence(0.41, 0.47, 0.38)
+    monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
+    bp.zadachi("k", _cfg(tmp_path, home=str(tmp_path), logbook="DNEVNIK.md"), set())
+    assert seq.calls == 3, f"--zadachi не усреднява: {seq.calls} тегления"
+    assert "0.42" in capsys.readouterr().out
+
+
+def test_koe_is_deliberately_left_alone(tmp_path, monkeypatch):
+    """Three paths ask a question here; the band was measured on two of them.
+
+    `--koe` asks a different question (one claim at a time, against the whole
+    file) and its spread has NOT been measured. Averaging it would carry a number
+    from one corpus to another, which is the mistake this whole feature exists to
+    correct. Pinned so nobody assumes it averages -- and so that measuring it
+    later is a deliberate change, not a discovery.
+    """
+    _index(tmp_path)
+    (tmp_path / "INDEX.md").write_text(
+        "- [Row](detail.md) — this pointer makes a claim long enough to be cut out\n",
+        encoding="utf-8")
+    calls = {"n": 0}
+
+    def counted(*a, **k):
+        calls["n"] += 1
+        return _Reply({"answers": {"c0": {"noul": 0.5}}, "usage": {"cost": 0.0001}})
+
+    monkeypatch.setattr(bp.urllib.request, "urlopen", counted)
+    bp.koe("k", _cfg(tmp_path), "detail.md")
+    assert calls["n"] == 1, "--koe е започнал да усреднява, без да е мерено"

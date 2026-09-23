@@ -421,6 +421,44 @@ can support anything and a low score there means "don't know", not "no".
 The same cut is why `--dali` keeps flagging a pointer whose correction is recorded deep in the
 file: the fix is real, the extract cannot see it. Read what it flags; do not trust it.
 
+### The grey band: one draw near the threshold is partly a coin flip
+
+Measured 2026-09-23 on 45 pointers, **three identical runs of the same request**. The model
+is not deterministic — an independent audit measured 50 identical requests returning 15
+distinct answers — so the question was how much that costs here:
+
+| | |
+|---|---|
+| median spread across 45 rows | **0.010** |
+| mean | 0.020 |
+| identical in all three runs | 6 of 45 |
+| **the two rows whose mean sat between 0.38 and 0.55** | **±0.12 and ±0.09** |
+
+The spread is negligible where the model is confident and **largest exactly where the
+decision is made**. The mean hides it: 0.02 sounds calm. One row of the 45 changed sides of
+the threshold between identical runs — 0.41 / 0.47 / 0.38 — so it was flagged in one run of
+three.
+
+So `--dali` and `--zadachi` draw **three times and average** when the first draw lands in
+`SIVA = (0.35, 0.60)`, and print the draws next to the mean, because a mean shown alone is
+indistinguishable from one draw. Outside the band a second draw buys a hundredth of a point
+and is not paid for. On a 45-row index this cost **$0.0040 instead of $0.0034**.
+
+⚠️ `--koe` is deliberately left alone: it asks a different question, one claim at a time
+against the whole file, and its spread has **not** been measured. Averaging it would carry a
+number from one corpus to another — the mistake this feature exists to correct.
+
+⚠️ The band, like the threshold, is measured on **one** corpus. Measure yours.
+
+Two things the same probe measured, worth knowing before trusting the output:
+
+- **The evidence does drive the answer.** Swap the detail file's body for an unrelated
+  file's and the value jumps 0.21 → 0.70, ten times the row's own spread. The audit's
+  "answers without reading the state" finding does not reproduce for this question shape.
+- **An empty body does not raise the number** (0.23 against 0.21). The question catches
+  *contradiction with present content*, not *absence of support* — a pointer whose file has
+  been emptied or truncated reads as fine.
+
 ### What the number is not
 
 `PRAG = 0.46` was measured by hand — 14 of 19 pointers checked personally, everything ≥0.47
@@ -517,6 +555,22 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.9.0**
+- **The grey band: three draws averaged near the threshold.** `--dali` and `--zadachi` draw
+  once, and three times averaged when the first draw lands in 0.35–0.60. Measured, not
+  assumed: three identical runs over 45 pointers put the median spread at 0.010 and the two
+  rows nearest the threshold at ±0.12 and ±0.09 — steady where the model is sure, unsteady
+  where it is asked to decide. One row of 45 changed sides between identical runs.
+- The draws are printed beside the mean. A mean shown alone looks exactly like a single draw,
+  and on the rows that land in the band the spread *is* the finding.
+- The ledger counts every draw, not every row: what left the machine is three requests.
+- **What this does not change:** no threshold moved, nothing is rewritten because a number was
+  high, and `--koe` is untouched because its spread has not been measured. The extra draws cost
+  about 15% more on a 45-row index.
+- Retired by measurement: the README previously said everything ≥0.47 turned out real and
+  everything ≤0.45 false. That is a 0.02 separation, inside a spread of 0.09–0.12 in exactly
+  that region. The number stays as an **ordering**; the sharp edge is gone.
 
 **v2.8.0**
 - **`--zadachi`: every task header against its own logbook.** A header's `sledvashto` and

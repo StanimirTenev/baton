@@ -46,14 +46,22 @@ rot as a stale index line, and equally invisible to string matching.
 index. Task headers are shorter, logbooks are longer and newest-first. Treat `--zadachi`
 output as an ordering to look at, and measure your own threshold before trusting a number.
 
-## The threshold
+## The threshold, and the band around it
 
-`PRAG = 0.46`, measured by hand: 14 of 19 pointers checked personally, everything
-≥0.47 turned out real and everything ≤0.45 false.
+`PRAG = 0.46`, measured by hand on 14 of 19 pointers checked personally.
 
-⚠️ Measured on ONE corpus of 19 rows, in one person's writing, in Bulgarian. It is a
-starting point, not a constant. Run it on your own index, check what it flags by
-hand, and move the number to where it separates yours.
+⚠️ It was once written here that everything ≥0.47 turned out real and everything
+≤0.45 false. **Retired by measurement on 2026-09-23**: that is a 0.02 separation,
+and three identical runs over 45 pointers put the spread at 0.09–0.12 in exactly
+that region. The number is an ORDERING. There is no sharp edge.
+
+That measurement is why `SIVA = (0.35, 0.60)` exists: inside the band a single draw
+is partly a coin flip, so `--dali` and `--zadachi` draw three times and average.
+See `stoynost()` for the numbers.
+
+⚠️ Both are measured on ONE corpus of 19 rows, in one person's writing, in Bulgarian.
+A starting point, not a constant. Run it on your own index, check what it flags by
+hand, and move the numbers to where they separate yours.
 """
 
 from __future__ import annotations
@@ -73,6 +81,8 @@ ENDPOINT = "https://openrouter.ai/api/alpha/decisions"
 MODEL = "~typesafe/jev-latest"
 
 PRAG = 0.46          # measured, not assumed -- see the module docstring
+SIVA = (0.35, 0.60)  # the band where one draw is partly a coin flip -- measured
+TEGLENIYA = 3        # draws inside that band, averaged
 OTRYAZAK = 2600      # for --dali: the extract that question wants
 TSYAL = 28000        # for --koe: a CEILING, not a promise; it announces itself
 
@@ -179,6 +189,41 @@ def poveritelno(text: str, etiket: str, dumi: list[str]) -> str:
         if duma.lower() in lower:
             return duma
     return ""
+
+
+def stoynost(api_key: str, state: str, questions: dict, etiket: str,
+             dumi: list[str], kluch: str = "stale") -> tuple[float, list[float], float]:
+    """One draw, or `TEGLENIYA` averaged inside the grey band.
+
+    Measured 2026-09-23 on 45 pointers, three identical runs of the same request:
+    the spread is negligible where the model is confident -- median 0.010, and 6
+    of 45 rows identical all three times -- and LARGEST exactly where the decision
+    is made. The two rows whose mean sat between 0.38 and 0.55 gave ±0.12 and
+    ±0.09, the largest in the corpus, and one of the 45 changed sides of the
+    threshold between identical runs: 0.41 / 0.47 / 0.38. It would have been
+    flagged in one run out of three.
+
+    So the model is steady where it is sure and unsteady where it is asked to
+    decide, and the average hides it: 0.02 sounds calm. Inside the band the mean
+    of three costs about three hundredths of a cent for the handful of rows that
+    land there; outside it, a second draw buys a hundredth of a point.
+
+    ⚠️ The band, like `PRAG`, is measured on ONE corpus. It is not a constant.
+
+    Returns (value, draws, cost) -- `draws` so the caller can print what it paid
+    for, because a mean printed alone looks exactly like a single draw.
+    """
+    out = pitay(api_key, state, questions, etiket, dumi)
+    draws = [out["answers"][kluch]["noul"]]
+    cost = out.get("usage", {}).get("cost", 0)
+    if SIVA[0] <= draws[0] <= SIVA[1]:
+        for _ in range(TEGLENIYA - 1):
+            # No `uid`: the audit that measured all this also measured that the
+            # cookbook's uid trick ADDS variance rather than revealing it.
+            again = pitay(api_key, state, questions, etiket, dumi)
+            draws.append(again["answers"][kluch]["noul"])
+            cost += again.get("usage", {}).get("cost", 0)
+    return sum(draws) / len(draws), draws, cost
 
 
 def pitay(api_key: str, state: str, questions: dict, etiket: str, dumi: list[str]) -> dict:
@@ -293,7 +338,7 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
                 print(f"  ⛔ задържан ({zadarzhano}) — {target}")
                 continue
             izpratani += 1   # counted BEFORE the send: the ledger records what left
-            out = pitay(api_key, state, {"stale": {
+            value, draws, cost = stoynost(api_key, state, {"stale": {
                 "type": "noul",
                 "instructions": ("The index line is only a pointer; the detail file is the source "
                                  "of truth. Does the index line assert anything the detail file "
@@ -301,10 +346,14 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
                 "criteria": {"true": "The index says something the file no longer supports",
                              "false": "Consistent, or asserts nothing the file covers"}}},
                 target, dumi)
-            value = out["answers"]["stale"]["noul"]
-            spent += out.get("usage", {}).get("cost", 0)
+            izpratani += len(draws) - 1   # the band's extra draws also left
+            spent += cost
             results.append((value, target))
-            print(f"  {value:<5} {target}")
+            # The draws are printed, never only the mean: a mean of three shown
+            # alone is indistinguishable from one draw, and the spread IS the
+            # finding on the rows that land here.
+            povtoreno = f"  ({' '.join(f'{d:.2f}' for d in draws)})" if len(draws) > 1 else ""
+            print(f"  {value:<5.2f} {target}{povtoreno}")
     finally:
         # Written even when the run falls over: text that left the machine does not
         # come back because the reply did not.
@@ -358,7 +407,7 @@ def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
                      f"LOGBOOK ({logbook_name}), newest entries first, the source of truth:\n"
                      f"{body[:OTRYAZAK]}")
             izpratani += 1
-            out = pitay(api_key, state, {"stale": {
+            value, draws, cost = stoynost(api_key, state, {"stale": {
                 "type": "noul",
                 "instructions": ("The header is only a pointer; the logbook is the source of "
                                  "truth. Does the header assert anything the recent entries "
@@ -368,10 +417,11 @@ def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
                 "criteria": {"true": "The header says something the logbook no longer supports",
                              "false": "Consistent, or asserts nothing the entries cover"}}},
                 folder.name, dumi)
-            value = out["answers"]["stale"]["noul"]
-            spent += out.get("usage", {}).get("cost", 0)
+            izpratani += len(draws) - 1
+            spent += cost
             results.append((value, folder.name))
-            print(f"  {value:<5} {folder.name}")
+            povtoreno = f"  ({' '.join(f'{d:.2f}' for d in draws)})" if len(draws) > 1 else ""
+            print(f"  {value:<5.2f} {folder.name}{povtoreno}")
     finally:
         zapishi(cfg["home"], "zadachi", root.name, izpratani, spent)
 
