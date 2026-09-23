@@ -364,6 +364,12 @@ In `hooks/baton.local.json`:
 | `pregled_podbor` | optional shortlist: only the targets it names are checked, so a long index need not be paid for whole |
 | `pregled_poveritelni` | substrings that must never leave the machine |
 
+The guard reads the **whole source file**, not the part that gets sent: the question is
+whether this document is about confidential matter, not whether the bytes that happened to fit
+contained the word. That is deliberately conservative and it costs coverage — on the corpus
+here it holds 10 of 19 rows. Holding too much is a list to narrow; holding too little is a
+disclosure.
+
 **`pregled_poveritelni` is required, and absent is not empty.** With the key missing the tool
 stops and tells you to decide; write `[]` if you really mean that nothing is held back. The
 match is on the path *and* the content, because material sits in an innocent folder and still
@@ -492,6 +498,18 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.7.1** — security fix in `tools/baton_pregled.py`, released the day v2.7.0 shipped
+- **The confidentiality guard read the first 4000 characters of a payload of up to 28000.** It
+  inspected one seventh of what it sent and passed the rest. Four files went out carrying a
+  client's name and an unreleased product's name, every occurrence past character 4000. The part
+  the guard read was clean, which is exactly why nothing looked wrong.
+- It now reads the **whole source file**, not the truncated extract: a client named on page four
+  is still named. Conservative on purpose — on the corpus here it holds 10 of 19 rows, and that
+  is the right direction to be wrong in.
+- Found by running the tool on real files and checking afterwards what had been sent. Not by
+  reading the line: the line had been read three times.
+- 132 tests, two of which fail against the old window.
 
 **v2.7.0**
 - **Every plan in the folder counts, not just `PLAN.md`.** A task running two efforts names them

@@ -76,6 +76,26 @@ def test_a_word_only_in_the_other_alphabet_is_not_found():
     assert bp.poveritelno("диск на Клиент", "n.md", ["klient", "Клиент"]) == "Клиент"
 
 
+def test_a_word_far_into_the_text_is_still_found():
+    """The leak: the guard read the first 4000 characters of a payload of 28000.
+
+    Four files went out with a client's name and an unreleased product's name in
+    them, every occurrence past character 4000. The part the guard read was clean,
+    which is why nothing looked wrong.
+    """
+    text = "safe text. " * 3000 + "и после за Клиент"
+    assert len(text) > 28000
+    assert bp.poveritelno(text, "n.md", ["Клиент"]) == "Клиент"
+
+
+def test_detail_hands_back_the_whole_file_for_the_guard(tmp_path):
+    """The guard judges the document, not the bytes that happened to fit."""
+    (tmp_path / "long.md").write_text("x" * 30000 + "Клиент", encoding="utf-8")
+    body, whole = bp.detail(tmp_path, "long.md", 28000)
+    assert len(body) == 28000 and "Клиент" not in body
+    assert bp.poveritelno(whole, "long.md", ["Клиент"]) == "Клиент"
+
+
 def test_a_held_text_never_reaches_the_network(monkeypatch):
     def boom(*a, **k):
         raise AssertionError("a request was sent")
@@ -127,10 +147,10 @@ def test_a_sound_reply_passes(monkeypatch):
 def test_detail_reports_the_full_length(tmp_path):
     (tmp_path / "small.md").write_text("---\nx: 1\n---\nshort", encoding="utf-8")
     (tmp_path / "big.md").write_text("я" * 40000, encoding="utf-8")
-    assert bp.detail(tmp_path, "small.md", 28000) == ("short", 5)
-    body, total = bp.detail(tmp_path, "big.md", 28000)
-    assert (len(body), total) == (28000, 40000)
-    assert bp.detail(tmp_path, "absent.md", 28000) == ("", 0)
+    assert bp.detail(tmp_path, "small.md", 28000) == ("short", "short")
+    body, whole = bp.detail(tmp_path, "big.md", 28000)
+    assert (len(body), len(whole)) == (28000, 40000)
+    assert bp.detail(tmp_path, "absent.md", 28000) == ("", "")
 
 
 # --- reading an index -------------------------------------------------------

@@ -128,8 +128,19 @@ def poveritelno(text: str, etiket: str, dumi: list[str]) -> str:
     Checks the path AND the content: material can sit in an innocent folder and
     still recount a client's business. Deliberately coarse -- a false hold costs
     one question, a false send does not come back.
+
+    **The whole text, every time.** The first version scanned the first 4000
+    characters of what it was about to send, while `--koe` sends up to 28000: the
+    guard inspected one seventh of the payload and passed the rest. Four files went
+    out carrying a client's name and an unreleased product's name, each of them
+    past character 4000. A barrier that samples is not a barrier, and the sampling
+    was invisible precisely because the part it read was clean.
+
+    Callers pass the WHOLE source file, not the truncated extract: the question is
+    whether this document is about confidential matter, not whether the bytes that
+    happened to fit contained the word.
     """
-    lower = f"{etiket} {text[:4000]}".lower()
+    lower = f"{etiket} {text}".lower()
     for duma in dumi:
         if duma.lower() in lower:
             return duma
@@ -203,8 +214,11 @@ def pokazalci(indeks: Path, podbor: Path | None) -> list[tuple[str, str]]:
     return out
 
 
-def detail(root: Path, target: str, limit: int) -> tuple[str, int]:
-    """The extract AND the full length, so the caller can say that it cut.
+def detail(root: Path, target: str, limit: int) -> tuple[str, str]:
+    """The extract AND the whole text: the caller needs both.
+
+    The whole text is what the confidentiality guard reads, and its length is what
+    says whether the extract cut anything.
 
     For `--dali` the cut is the rule and stays quiet. For `--koe` it is a ceiling,
     and a silent ceiling is the very defect this tool exists for: a claim whose
@@ -212,13 +226,13 @@ def detail(root: Path, target: str, limit: int) -> tuple[str, int]:
     """
     path = root / target
     if not path.is_file():
-        return "", 0
+        return "", ""
     text = path.read_text(encoding="utf-8", errors="replace")
     if text.startswith("---"):
         parts = text.split("---", 2)
         text = parts[2] if len(parts) > 2 else text
     text = text.strip()
-    return text[:limit], len(text)
+    return text[:limit], text
 
 
 def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
@@ -230,15 +244,16 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
         for pointer, target in pokazalci(indeks, podbor):
             if izbrani and not any(part in target for part in izbrani):
                 continue
-            body, _ = detail(root, target, OTRYAZAK)
+            body, tsyalo = detail(root, target, OTRYAZAK)
             if not body:
                 print(f"  ⚠️ няма файл — {target}")
                 continue
             state = (f"INDEX LINE (a pointer in an index):\n{pointer}\n\n"
                      f"DETAIL FILE ({target}), the source of truth:\n{body}")
             # A confidential row stops ITSELF, not the review: otherwise the only
-            # way to get a review is to remove the barrier.
-            zadarzhano = poveritelno(state, target, dumi)
+            # way to get a review is to remove the barrier. Judged on the WHOLE
+            # file, not the extract -- a client named on page four is still named.
+            zadarzhano = poveritelno(f"{pointer}\n{tsyalo}", target, dumi)
             if zadarzhano:
                 zadarzhani.append((target, zadarzhano))
                 print(f"  ⛔ задържан ({zadarzhano}) — {target}")
@@ -300,7 +315,7 @@ def koe(api_key: str, cfg: dict, target: str) -> None:
                      "false": "Not stated, contradicted, or reported differently"}}
         for i, claim in enumerate(pieces)}
     state = f"DETAIL FILE ({target}):\n{body}"
-    zadarzhano = poveritelno(state, target, dumi)
+    zadarzhano = poveritelno(f"{pointer}\n{tsyalo}", target, dumi)
     if zadarzhano:
         # Here the whole move stops: a person named this one file.
         sys.exit(f"⛔ отказано: „{zadarzhano}“ се среща в {target}. Не напуска машината.")
@@ -312,11 +327,11 @@ def koe(api_key: str, cfg: dict, target: str) -> None:
         zapishi(cfg["home"], "koe", target, len(pieces), spent)
 
     print(f"### {target}\n")
-    if tsyalo > TSYAL:
+    if len(tsyalo) > TSYAL:
         # Said BEFORE the numbers, because it changes how they read: below the cut
         # nothing can support anything, and a low score there means "don't know".
-        print(f"⚠️ ФАЙЛЪТ Е РЯЗАН на {TSYAL} от {tsyalo} знака "
-              f"({100 - TSYAL * 100 // tsyalo}% не е изпратен). "
+        print(f"⚠️ ФАЙЛЪТ Е РЯЗАН на {TSYAL} от {len(tsyalo)} знака "
+              f"({100 - TSYAL * 100 // len(tsyalo)}% не е изпратен). "
               f"Твърдение, чието доказателство е отдолу, пада НЕВИННО.\n")
     for value, claim in sorted((out["answers"][f"c{i}"]["noul"], c)
                                for i, c in enumerate(pieces)):
