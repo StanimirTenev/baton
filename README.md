@@ -450,6 +450,20 @@ $ baton_pregled.py --koe qrp-benchmark
 `--zadachi` had flagged that task at 0.66; this says **which part**. A bare task name that
 holds a logbook wins over an index target; an index path still reaches the old mode.
 
+**`sastoyanie` and `na_hod` are not claims here.** Measured by running the mode over all 19
+tasks: they came back "not supported" on 6 of 6 reviewed tasks, 0.02–0.13 and 0.07–0.35. The
+deciding row is a task with a 42,317-character logbook and 33 entries whose three real claims
+scored 0.95, 0.97 and 0.97 — and whose own logbook "does not support" `postoyanna`. A logbook
+never writes `sastoyanie: postoyanna`: it is the word that names where the work stands, not
+something the entries assert. Twelve of that run's 25 claims were these two fields and every
+one was a false positive — the majority of the output, and its most visible part. They stay in
+`--zadachi`, which reads the whole header together; judging where the work stands is that
+mode's job, and naming which claim broke is this one's.
+
+⚠️ `na_hod` sometimes carries a name rather than an enum. That case was not measured
+separately — the three thick-logbook rows all read `nie` — so it is excluded with the field,
+not on evidence of its own.
+
 **Two things this output says before the numbers, because both change how they read:**
 
 - The 0.4 / 0.7 cutoffs come from the index corpus and have **not** been measured here.
@@ -602,6 +616,17 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.10.1**
+- **`sastoyanie` and `na_hod` are not `--koe` claims.** Running the mode over all 19 tasks
+  showed them coming back "not supported" on 6 of 6, including a task with a 42K logbook whose
+  other claims scored 0.95–0.97. They are control words: a logbook never writes them, so asking
+  whether the entries support them asks for something that cannot be supported. Twelve of the
+  run's 25 claims were these two, all false. Reviewing a healthy task now flags nothing instead
+  of two rows.
+- They remain in `--zadachi`, unchanged and pinned by a test.
+- Found by running it, not by reading it. The field list was written in v2.10.0 with a comment
+  saying a short field is still an assertion the logbook can contradict. It is not.
 
 **v2.10.0**
 - **`--koe` takes a task name.** Its old corpus is gone: 0 of 45 index rows now yield three

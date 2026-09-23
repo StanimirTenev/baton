@@ -355,15 +355,59 @@ def test_a_header_field_with_several_sentences_becomes_several_claims(tmp_path):
 
 
 def test_a_short_field_falls_back_to_its_whole_value(tmp_path):
-    """`sastoyanie: aktivna` yields no sentence; the value itself is the claim."""
-    pairs = bp.zaglavni_tvardeniya({"sastoyanie": "aktivna"})
-    assert pairs == [("sastoyanie", "aktivna")]
+    """`chaka: Ledger` yields no sentence; the value itself is the claim."""
+    pairs = bp.zaglavni_tvardeniya({"chaka": "Ledger"})
+    assert pairs == [("chaka", "Ledger")]
 
 
 def test_an_empty_or_placeholder_field_is_not_a_claim(tmp_path):
     """A dash is what someone types to mean "nothing here"."""
-    assert bp.zaglavni_tvardeniya({"sledvashto": "-", "chaka": "", "na_hod": "nie"}) \
-        == [("na_hod", "nie")]
+    assert bp.zaglavni_tvardeniya({"sledvashto": "-", "chaka": "Ledger"}) \
+        == [("chaka", "Ledger")]
+
+
+# --- the control words are not claims --------------------------------------
+#
+# Measured 2026-09-23 17:05, --koe across all 19 tasks: `sastoyanie` and `na_hod`
+# came back "not supported" on 6 of 6 reviewed tasks, 0.02-0.13 and 0.07-0.35.
+# The deciding row is a task with a 42,317-character logbook and 33 entries whose
+# three real claims scored 0.95, 0.97 and 0.97 -- and whose own logbook "does not
+# support" `postoyanna`.
+#
+# That is not a finding about the tasks. A logbook never writes "sastoyanie:
+# postoyanna": it is a control word, not something entries assert. Asking whether
+# the entries support it asks for something that cannot be supported. Twelve of the
+# 25 claims in that run were these two fields, every one of them a false positive --
+# the majority of the output, and its most visible part.
+#
+# They stay in `--zadachi`, which reads the whole header together and is the mode
+# that should judge where the work stands.
+
+
+def test_the_control_words_are_not_koe_claims(tmp_path):
+    pairs = bp.zaglavni_tvardeniya({
+        "sledvashto": "the supplier answered and the second step follows now",
+        "kriterii_zavarshvane": "the bus is live on all three channels",
+        "sastoyanie": "postoyanna", "na_hod": "nie"})
+    fields = {f for f, _ in pairs}
+    assert fields == {"sledvashto", "kriterii_zavarshvane"}, pairs
+
+
+def test_zadachi_still_reads_the_control_words(tmp_path, monkeypatch, capsys):
+    """They are removed from one mode, not from Baton. --zadachi reads them in
+    context, together with the rest, which is what it is for."""
+    _zadacha(tmp_path, header=('sastoyanie: priklyuchila\n'
+                               'na_hod: nie\n'))
+    sent = {}
+
+    def capture(request, *a, **k):
+        sent["state"] = json.loads(request.data.decode())["state"]
+        return _Reply({"answers": {"stale": {"noul": 0.1}}, "usage": {"cost": 0.0001}})
+
+    monkeypatch.setattr(bp.urllib.request, "urlopen", capture)
+    bp.zadachi("k", _koe_cfg(tmp_path), set())
+    assert "sastoyanie: priklyuchila" in sent["state"]
+    assert "na_hod: nie" in sent["state"]
 
 
 def test_koe_on_a_task_holds_on_the_whole_logbook_not_the_extract(tmp_path, monkeypatch):

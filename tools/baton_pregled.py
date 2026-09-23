@@ -95,6 +95,28 @@ HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.p
 # a detail file.
 HEADER_CLAIMS = ("sledvashto", "kriterii_zavarshvane", "sastoyanie", "na_hod", "chaka")
 
+# Control words, not claims -- `--koe` skips them; `--zadachi` still reads them.
+#
+# Measured 2026-09-23 across all 19 tasks: these two came back "not supported" on
+# 6 of 6 reviewed tasks, 0.02-0.13 and 0.07-0.35. The deciding row is a task with a
+# 42,317-character logbook and 33 entries whose three real claims scored 0.95, 0.97
+# and 0.97 -- and whose own logbook "does not support" `postoyanna`.
+#
+# A logbook never writes "sastoyanie: postoyanna". It is the word that names where
+# the work stands, not something the entries assert, so asking whether they support
+# it asks for something that cannot be supported. Twelve of the 25 claims in that
+# run were these two fields and every one was a false positive: the majority of the
+# output, and its most visible part.
+#
+# ⚠️ `na_hod` sometimes carries a name rather than an enum ("Ledger (редактор
+# Burley)"). That case was NOT measured separately on a full logbook -- the three
+# thick-logbook rows all read `nie`. It is excluded with the field, not on evidence
+# of its own.
+#
+# They remain in `--zadachi`, which reads the whole header together. Judging where
+# the work stands is that mode's job; naming which claim broke is this one's.
+KONTROLNI = ("sastoyanie", "na_hod")
+
 
 def _hook():
     """The hook's own header parsing, reused rather than reimplemented.
@@ -451,12 +473,19 @@ def zaglavni_tvardeniya(fm: dict) -> list[tuple[str, str]]:
     remains is X"). `--zadachi` asks one question of the lot and answers "this
     header no longer matches"; this answers WHICH part.
 
-    A field too short to be a sentence is its own claim: `sastoyanie: aktivna` is
-    an assertion about where the work stands, and the logbook can contradict it.
-    A dash is not -- that is what someone types to mean "nothing here".
+    A field too short to be a sentence is its own claim: `chaka: Ledger` names
+    something the entries can contradict. A dash is not -- that is what someone
+    types to mean "nothing here".
+
+    ⚠️ `sastoyanie` and `na_hod` are skipped; see `KONTROLNI` for the measurement
+    that took them out. It was written here first that `sastoyanie: aktivna` is an
+    assertion the logbook can contradict. It is not, and running the mode over
+    every task is what showed it.
     """
     out = []
     for field in HEADER_CLAIMS:
+        if field in KONTROLNI:
+            continue
         value = str(fm.get(field, "")).strip()
         if len(value) < 3 or not any(ch.isalnum() for ch in value):
             continue
