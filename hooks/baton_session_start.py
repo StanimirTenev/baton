@@ -523,10 +523,25 @@ def open_plan(folder: Path) -> str | None:
     failure of record-keeping. But they are different facts, and a folder read six
     weeks later has to say which, the same way this project refuses to let
     "we read it" and "we found it" share a number.
+
+    **Every plan in the folder counts, not just `PLAN.md`.** A task that runs two
+    efforts names them apart -- `PLAN-jev.md`, `PLAN-migraciya.md` -- and matching
+    one exact filename let precisely those escape. The check was written for this
+    project and then missed this project's own second plan: the rule held for the
+    file it was named after and for nothing else.
+
+    The pattern is `PLAN.md` and `PLAN-*.md`, not `PLAN*`: a folder is free to keep
+    `PLANOVE-stari.md` as notes without being told it has an unclosed plan.
     """
-    plan = folder / "PLAN.md"
-    if not plan.is_file():
+    plans = sorted(p for p in (*folder.glob("PLAN.md"), *folder.glob("PLAN-*.md"))
+                   if p.is_file())
+    if not plans:
         return None                      # not every task needs a plan
+    problems = [note for note in (_plan_problem(p) for p in plans) if note]
+    return "; ".join(problems) if problems else None
+
+
+def _plan_problem(plan: Path) -> str | None:
     fm = parse_frontmatter(read_head(plan))
     try:
         age = (date.today() - date.fromtimestamp(plan.stat().st_mtime)).days
@@ -536,10 +551,10 @@ def open_plan(folder: Path) -> str | None:
     state = str(fm.get("sastoyanie", "")).strip().lower()
     if state not in PLAN_CLOSED:
         if not fm:
-            return f"PLAN.md няма хедър, тъй че никога не е бил затварян{old_note}"
-        return f"PLAN.md е `{state or 'без състояние'}`{old_note}"
+            return f"{plan.name} няма хедър, тъй че никога не е бил затварян{old_note}"
+        return f"{plan.name} е `{state or 'без състояние'}`{old_note}"
     if not str(fm.get("rezultat") or fm.get("result") or "").strip():
-        return ("PLAN.md се обявява за затворен, но не казва какво излезе от него "
+        return (f"{plan.name} се обявява за затворен, но не казва какво излезе от него "
                 "(`rezultat:`) — затварянето без резултат е отметка")
     return None
 

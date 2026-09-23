@@ -105,3 +105,41 @@ def test_the_older_generic_closer_is_still_accepted(tmp_path):
     """Plans closed before the distinction existed do not start failing."""
     plan = "---\nsastoyanie: zatvoren\nrezultat: \"нещо\"\n---\n"
     assert bss.open_plan(_task(tmp_path, plan)) is None
+
+
+def test_a_plan_with_a_suffix_is_a_plan(tmp_path):
+    """The gap that shipped: `PLAN-jev.md` was invisible to a check named for
+    `PLAN.md`. Baton's own second plan escaped the rule Baton enforces."""
+    folder = tmp_path / "zadacha"
+    folder.mkdir()
+    (folder / "PLAN-jev.md").write_text("---\nsastoyanie: otvoren\n---\n", encoding="utf-8")
+    note = bss.open_plan(folder)
+    assert note and "PLAN-jev.md" in note
+
+
+def test_every_plan_is_reported_not_just_the_first(tmp_path):
+    folder = tmp_path / "zadacha"
+    folder.mkdir()
+    (folder / "PLAN.md").write_text(
+        "---\nsastoyanie: izpalnen\nrezultat: \"продадено\"\n---\n", encoding="utf-8")
+    (folder / "PLAN-vtori.md").write_text("---\nsastoyanie: otvoren\n---\n", encoding="utf-8")
+    note = bss.open_plan(folder)
+    assert note and "PLAN-vtori.md" in note and "PLAN.md е" not in note
+
+
+def test_a_folder_whose_every_plan_is_closed_stays_quiet(tmp_path):
+    folder = tmp_path / "zadacha"
+    folder.mkdir()
+    for name in ("PLAN.md", "PLAN-jev.md"):
+        (folder / name).write_text(
+            "---\nsastoyanie: izostaven\nrezultat: \"не потръгна\"\n---\n", encoding="utf-8")
+    assert bss.open_plan(folder) is None
+
+
+def test_a_note_that_merely_starts_with_plan_is_not_a_plan(tmp_path):
+    """`PLAN-*` and not `PLAN*`: notes named PLANOVE-stari.md are not plans, and
+    a check that shouts about them gets ignored, which costs the real ones."""
+    folder = tmp_path / "zadacha"
+    folder.mkdir()
+    (folder / "PLANOVE-stari.md").write_text("бележки\n", encoding="utf-8")
+    assert bss.open_plan(folder) is None

@@ -326,6 +326,86 @@ It is generated, never edited. The logbooks are the record; this is a view of th
 uploaded and nothing leaves the machine, which is the reason it is a file rather than a hosted
 page: logbooks carry client matter, and a board is not worth sending it anywhere.
 
+## The review: does the index still match the files?
+
+```
+python3 tools/baton_pregled.py --dali          # has a pointer gone stale?
+python3 tools/baton_pregled.py --koe <file>    # which claim is unsupported?
+```
+
+**Optional, off by default, and it needs a key.** Without an
+[OpenRouter](https://openrouter.ai) key this does not run, and nothing else in Baton wants
+one — the hooks never call it and never touch the network.
+
+It exists for the one kind of rot Baton cannot catch by matching strings: an index line that
+asserts something the file it points at has since contradicted. A contradiction has no
+textual signature. Either someone re-reads both, or it stays. Measured on 19 such pointers
+here: six were wrong, two in ways no pattern could have found, for **$0.0013** the run.
+
+It sends the pointer and part of the file to a hosted model ([TypeSafe's
+Jev](https://typesafe.ai), which returns calibrated probabilities rather than text). That is
+the whole reason it is opt-in and separate from the hooks: logbooks carry client matter.
+
+### Configure it before it will run
+
+In `hooks/baton.local.json`:
+
+```json
+{
+  "pregled_indeks": "~/notes/INDEX.md",
+  "pregled_podbor": "~/notes/AT-RISK.md",
+  "pregled_poveritelni": ["client-name", "Client Name", "unreleased-product"]
+}
+```
+
+| | |
+|---|---|
+| `pregled_indeks` | the index whose pointers get checked — any file with `[title](path.md)` links |
+| `pregled_podbor` | optional shortlist: only the targets it names are checked, so a long index need not be paid for whole |
+| `pregled_poveritelni` | substrings that must never leave the machine |
+
+**`pregled_poveritelni` is required, and absent is not empty.** With the key missing the tool
+stops and tells you to decide; write `[]` if you really mean that nothing is held back. The
+match is on the path *and* the content, because material sits in an innocent folder and still
+recounts a client's business.
+
+⚠️ **Write every name in every alphabet you use.** Here the list held only the Latin spelling
+of a client's name while the notes about that client were written in Cyrillic. The guard was
+structurally correct, matched nothing, and a request went out. A test caught it; reading the
+line had not, three times.
+
+A held row stops *itself*, not the run — otherwise the only way to get a review is to remove
+the barrier. Every run appends to `$BATON_HOME/.pregled-dnevnik.tsv`: what was sent, when,
+what it cost.
+
+### Two questions, opposite amounts of evidence
+
+Measured, and the easiest thing here to get backwards:
+
+| question | evidence | what the other way does |
+|---|---|---|
+| has the pointer gone stale? | an **extract** (~2600 chars) | the whole file drops real cases 0.73 → 0.43 |
+| which claim is unsupported? | the **whole file** | an extract gives false ones: 0.02 against 0.97 |
+
+One reason both ways: a summary judgement is diluted by a long text, while a single claim has
+its evidence *somewhere* in it — and a cut above that evidence fails the claim innocently.
+
+`--koe` caps at 28000 characters and **says so** when it cuts, because below the cut nothing
+can support anything and a low score there means "don't know", not "no".
+
+The same cut is why `--dali` keeps flagging a pointer whose correction is recorded deep in the
+file: the fix is real, the extract cannot see it. Read what it flags; do not trust it.
+
+### What the number is not
+
+`PRAG = 0.46` was measured by hand — 14 of 19 pointers checked personally, everything ≥0.47
+real and everything ≤0.45 false. ⚠️ That is **one corpus of 19 rows, one person's writing, one
+language.** It is a starting point. Run it on yours, check what it flags, move the number.
+
+And in TypeSafe's own words: *calibration is measured across groups of predictions; it does
+not guarantee that an individual answer is correct.* This ranks and says "look here". A person
+opens the file and decides. Nothing is rewritten because a number was high.
+
 ## Retiring a constraint
 
 Research adds. Almost nothing retires, and a rule nobody retires goes on steering the plan from a
@@ -412,6 +492,25 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.7.0**
+- **Every plan in the folder counts, not just `PLAN.md`.** A task running two efforts names them
+  apart — `PLAN-jev.md` — and matching one exact filename let precisely those escape. The check
+  written for this project then missed this project's own second plan: it held for the file it was
+  named after and for nothing else. The pattern is `PLAN.md` and `PLAN-*.md`, so notes named
+  `PLANOVE-stari.md` are still not plans.
+- **New, optional, off by default: `tools/baton_pregled.py`** — review an index against the files
+  it points at. It catches the one kind of rot no string match can: a pointer that asserts
+  something its file has since contradicted. On 19 pointers here it found six wrong, two of them
+  unreachable by any pattern, for $0.0013.
+  - Needs an OpenRouter key. Without one it does not run, and **nothing else in Baton wants one** —
+    the hooks still never touch the network.
+  - `pregled_poveritelni` is **required before it will run**: absent is not empty. Write every name
+    in every alphabet you use — here a list holding only the Latin spelling of a client's name let
+    a Cyrillic mention through, and a request went out. A test caught it; reading the line had not.
+  - The threshold (0.46) is measured on **one** corpus of 19 rows in one language. Starting point,
+    not a constant.
+- 130 tests.
 
 **v2.6.0**
 - **A plan that was never closed leaves the task unfinished, and it is reported every session.**
@@ -552,6 +651,7 @@ having been done.
 | `BATON_HOME` | where task folders live (default `~/tasks`) |
 | `CLAUDE_CONFIG_DIR` | config directory to install into (default `~/.claude`) |
 | `BATON_LOGBOOK` | name of the logbook file (default `LOGBOOK.md`) — set it to a word in your own language if you prefer |
+| `OPENROUTER_API_KEY` | only for `tools/baton_pregled.py`; nothing else reads it and nothing else needs it |
 
 `BATON_HOME=~/work ./install.sh` bakes that path into the installed hooks.
 
