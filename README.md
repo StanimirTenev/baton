@@ -650,6 +650,28 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.12.0**
+- **`tools/baton_kade.py` — where else does this live, and is that place still claiming it.**
+  `grep` says where a string occurs; this says which of those places still *claim* it. A
+  logbook header, a plan and a memory file are live. An entry, a file whose name carries a
+  date, and a row in a claims register are not — they repeat old values legitimately, and the
+  first version counted them, which took one query from four live places to seven.
+- **`--duplicates` finds them unprompted:** numbers living in live places across two or more
+  task folders. On the corpus it was built against it reported a price decided in one task on
+  the 19th and reaching another task's header on the 26th — seven days, and nothing would have
+  said so.
+- **Calibrated, and the calibration moved once.** Over 20 task folders plus a memory tree,
+  every hit labelled by hand: money 6/6 relevant, decimal percentages 3/3, round percentages
+  0/16, versions 0/11, thresholds `0.xx` **1/41**. The default keeps money and decimals — 9
+  hits, no false positives. `--all` restores the rest.
+- ⚠️ **The threshold row exists because the first measurement was wrong about its own scope.**
+  That run silently skipped folders; honouring `.batonignore` instead — the file the Stop hook
+  already reads — took the same tree from 100 duplicates to 50, and then dropping thresholds
+  to 9. A rate measured on a scope nobody declared is not a rate.
+- ⚠️ **It does not find contradictions. It finds duplicated state.** Whether the duplicates
+  disagree is the reader's call — otherwise someone pronounces a tree consistent while the
+  same wrong number sits in six places.
+
 **v2.11.0**
 - **`tools/baton_vpishi.py` — write the entry the Stop hook asks for, without breaking the
   file.** The hook demanded an entry and nothing helped produce one; by hand it broke three
