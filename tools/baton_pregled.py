@@ -141,14 +141,16 @@ def config() -> dict:
     Same file the hooks read, so there is one place to configure Baton rather than
     two that can disagree.
     """
-    cfg = {}
-    for candidate in (Path(__file__).resolve().parent.parent / "hooks",
-                      Path.home() / ".claude/baton/hooks"):
-        try:
-            cfg = json.loads((candidate / "baton.local.json").read_text("utf-8-sig"))
-            break
-        except Exception:
-            continue
+    # One reader of the file, in `baton_korpus` -- this used to try the repository copy
+    # first while `baton_kade` tried the installed one first. Two orders over one file.
+    spec = importlib.util.spec_from_file_location(
+        "baton_korpus", Path(__file__).resolve().parent / "baton_korpus.py")
+    _k = sys.modules.get("baton_korpus")
+    if _k is None:
+        _k = importlib.util.module_from_spec(spec)
+        sys.modules["baton_korpus"] = _k
+        spec.loader.exec_module(_k)
+    cfg = _k.config()["raw"]
 
     poveritelni = os.environ.get("BATON_PREGLED_POVERITELNI")
     out = {

@@ -29,6 +29,18 @@ from pathlib import Path
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
 
 
+def _korpus():
+    """One owner for where the tasks are -- see `baton_korpus.config`."""
+    if "baton_korpus" in sys.modules:
+        return sys.modules["baton_korpus"]
+    spec = importlib.util.spec_from_file_location(
+        "baton_korpus", Path(__file__).resolve().parent / "baton_korpus.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["baton_korpus"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _hook():
     """The hook's own parsing, reused rather than reimplemented.
 
@@ -200,7 +212,11 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
 
     hook = _hook()
-    root, logbook = hook.config()
+    # ⚠️ NOT hook.config(): the hook reads the file next to its own __file__, and this
+    # loads the hook out of the repository, where `baton.local.json` deliberately is not
+    # -- it holds client folder names and stays outside git. The board therefore printed
+    # "no tasks under ~/tasks" on every machine configured anywhere else.
+    root, logbook = _korpus().config()["home"], _korpus().config()["logbook"]
     rows, today = collect(root, logbook)
     if not rows:
         print(f"baton: no tasks under {root}", file=sys.stderr)

@@ -693,6 +693,31 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.13.1** — three defects in v2.13.0, all found by looking at real output rather than at a green suite
+
+- 🔴 **Every chunk of a file with YAML front matter came back `HEADER`.** `chunks()` asked
+  `kind()` once per file at position 0, and front matter starts with `---`. On a real tree
+  that was **478 of 1821 chunks**, where about twenty logbooks exist; after the fix, **85**.
+  `kind()` is now asked at each chunk's real offset, which is also what makes this and
+  `--duplicates` unable to disagree.
+- 🔴 **A chunk starting exactly at `## 2026-…` was `LIVE`, not `RECORD`.** `kind()` compared
+  `m.start() < position`, so an entry's own heading had no entry before it. A search for a
+  number inside a line never reaches that offset, so nothing failed until chunks did. An
+  entry's heading is part of that entry: `<=`.
+- 🔴 **`baton_tablo.py` printed "no tasks under ~/tasks" on any machine configured
+  elsewhere** — it loads the SessionStart hook out of the repository, and `config()` reads
+  the file beside its own `__file__`, while `baton.local.json` deliberately lives outside git
+  because it names client folders. There were **three readers of that one file in three
+  different orders**; `baton_korpus.config()` is now the only one, installed copy first,
+  environment over both.
+- Front matter is a chunk whatever its length. A memory file's `description:` is a live claim
+  and is routinely under the stub floor, so a length test dropped exactly the claims most
+  worth finding.
+- ⚠️ Two of the new tests passed for the wrong reason and were caught by mutation, not by
+  review: the config-precedence test created only one of the two files, so reverting the order
+  still passed; and nothing covered the board's call site, so reverting it broke the board
+  silently. Both now fail when the fix is reverted.
+
 **v2.13.0**
 - **`tools/baton_korpus.py` — one owner for the corpus walk and the five kinds.** The
   LIVE/HEADER/RECORD/SNAPSHOT/CLAIM distinction was declared twice, here and in a corpus

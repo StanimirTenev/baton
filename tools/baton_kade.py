@@ -131,19 +131,11 @@ LIVE = ("LIVE", "HEADER")
 
 
 def settings() -> tuple[Path, str, Path | None]:
-    """The same chain the hooks read -- not a second one that can disagree."""
-    cfg = {}
-    for candidate in (Path.home() / ".claude/baton/hooks",
-                      Path(__file__).resolve().parent.parent / "hooks"):
-        try:
-            cfg = json.loads((candidate / "baton.local.json").read_text("utf-8-sig"))
-            break
-        except Exception:
-            continue
-    home = Path(cfg.get("home", Path.home() / "tasks")).expanduser()
-    logbook = cfg.get("logbook", "LOGBOOK.md")
-    index = cfg.get("pregled_indeks")
-    return home, logbook, (Path(index).expanduser().parent if index else None)
+    """From `baton_korpus.config()` -- one reader, not a second one that can disagree."""
+    cfg = korpus.config()
+    index = cfg["raw"].get("pregled_indeks")
+    return (cfg["home"], cfg["logbook"],
+            Path(index).expanduser().parent if index else None)
 
 
 def search(pattern: re.Pattern, home: Path, logbook: str, memory: Path | None,

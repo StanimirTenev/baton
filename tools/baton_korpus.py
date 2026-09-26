@@ -57,6 +57,8 @@ substitute for declaring `outside`.
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
@@ -74,6 +76,38 @@ SUFFIXES = (".md", ".txt")
 HEADER_CHARS, ENTRY_CHARS, SECTION_CHARS, MIN_SECTION = 2000, 3000, 3000, 120
 
 
+CONFIG = "baton.local.json"
+
+
+def config() -> dict:
+    """The one reader of `baton.local.json` -- where the tasks are and what the logbook
+    is called.
+
+    ⚠️ There were three, in three different orders. `baton_pregled` read the repository
+    copy first, `baton_kade` the installed one first, and the SessionStart hook only the
+    file next to its own `__file__`. The third is why `baton_tablo` printed "no tasks
+    under ~/tasks" on a machine whose tasks are elsewhere: the board loads the hook out
+    of the repository, and the config does not live there -- it is deliberately outside
+    git, because it holds client folder names.
+
+    Installed first, because that is the file the hooks actually run with. The
+    repository copy is a working-copy fallback. Environment wins over both.
+    """
+    cfg, source = {}, None
+    for candidate in (Path.home() / ".claude/baton/hooks",
+                      Path(__file__).resolve().parent.parent / "hooks"):
+        try:
+            cfg = json.loads((candidate / CONFIG).read_text("utf-8-sig"))
+            source = candidate / CONFIG
+            break
+        except Exception:
+            continue
+    home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")
+    logbook = os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"
+    return {"home": Path(home).expanduser(), "logbook": logbook,
+            "raw": cfg, "source": source}
+
+
 def kind(file: Path, position: int, text: str, logbook: str) -> tuple[str, str]:
     """LIVE · HEADER · RECORD · SNAPSHOT · CLAIM, and a word on which."""
     if file.name in REGISTERS:
@@ -85,7 +119,10 @@ def kind(file: Path, position: int, text: str, logbook: str) -> tuple[str, str]:
         if second != -1 and position < second:
             return "HEADER", "claims it now"
     if file.name == logbook:
-        before = [(m.start(), m.group(1)) for m in ENTRY.finditer(text) if m.start() < position]
+        # `<=`, not `<`: an entry's own `## 2026-…` heading IS part of that entry. With
+        # the strict form a chunk starting exactly at the heading came back LIVE — the
+        # boundary a whole-file scan never hits, because it matches inside a line.
+        before = [(m.start(), m.group(1)) for m in ENTRY.finditer(text) if m.start() <= position]
         if before:
             return "RECORD", f"entry of {before[-1][1]}"
         return "LIVE", "above the first entry"
@@ -177,13 +214,40 @@ def walk(roots, scope: Scope, suffixes=SUFFIXES):
                 yield root, file
 
 
+def _pieces(text: str, file: Path, logbook: str):
+    """(offset, text) along the file's own boundaries, offsets kept.
+
+    ⚠️ The offset is the whole point. The first version asked `kind()` once per file
+    at position 0, and every file carrying YAML front matter starts with `---`, so
+    **every chunk of it came back HEADER** -- 478 of 1821 on a real tree, where only
+    about twenty logbooks exist. A memory file's body is LIVE; only its front matter
+    claims anything as a header. Asking at the real offset is also what makes this and
+    `baton_kade.py` unable to disagree, which is why this module exists.
+    """
+    if file.name == logbook:
+        offset = 0
+        for piece in re.split(r'(?=^## \d{4}-)', text, flags=re.M):
+            yield offset, piece
+            offset += len(piece)
+    elif file.name in REGISTERS:
+        offset = 0
+        for row in text.split("\n"):
+            yield offset, row
+            offset += len(row) + 1
+    else:
+        offset = 0
+        for piece in re.split(r'\n(?=#{1,3} )', text):
+            yield offset, piece
+            offset += len(piece) + 1
+
+
 def chunks(roots, scope: Scope, logbook: str, suffixes=SUFFIXES):
     """(text, source, kind) over the corpus, split on its own natural boundaries.
 
-    A logbook becomes its header plus one chunk per entry; a claims register becomes
-    one chunk per row; anything else is split on its headings. The kind comes from
-    `kind()`, so this and a duplicate-state query cannot disagree about what a place
-    is -- which is the reason this module exists.
+    A logbook becomes its header plus one chunk per entry; a claims register one chunk
+    per row; anything else is split on its headings. Every kind comes from `kind()` at
+    the chunk's real offset, so this and a duplicate-state query cannot disagree about
+    what a place is.
     """
     for root, file in walk(roots, scope, suffixes):
         try:
@@ -191,22 +255,25 @@ def chunks(roots, scope: Scope, logbook: str, suffixes=SUFFIXES):
         except OSError:
             continue
         where = f"{file.parent.name}/{file.name}"
-        if file.name == logbook:
-            head, *entries = re.split(r'(?=^## \d{4}-)', text, flags=re.M)
-            yield head[:HEADER_CHARS], f"{where} [header]", "HEADER"
-            for entry in entries:
-                stamp = re.match(r'## (\S+)', entry)
-                yield (entry[:ENTRY_CHARS],
-                       f"{where} [{stamp.group(1) if stamp else '?'}]", "RECORD")
-        elif file.name in REGISTERS:
-            for row in text.splitlines():
-                if row.startswith("|") and len(row) > 80:
-                    yield row, where, "CLAIM"
-        else:
-            what, _ = kind(file, 0, text, logbook)
-            for block in re.split(r'\n(?=#{1,3} )', text):
-                if len(block.strip()) > MIN_SECTION:
-                    yield block[:SECTION_CHARS], where, what
+        is_logbook, is_register = file.name == logbook, file.name in REGISTERS
+        for offset, piece in _pieces(text, file, logbook):
+            what, _ = kind(file, offset, text, logbook)
+            if is_logbook:
+                if offset == 0:
+                    yield piece[:HEADER_CHARS], f"{where} [header]", what
+                else:
+                    stamp = re.match(r'## (\S+)', piece)
+                    yield (piece[:ENTRY_CHARS],
+                           f"{where} [{stamp.group(1) if stamp else '?'}]", what)
+            elif is_register:
+                if piece.startswith("|") and len(piece) > 80:
+                    yield piece, where, what
+            elif what == "HEADER" or len(piece.strip()) > MIN_SECTION:
+                # Front matter is a chunk whatever its length. A memory file's
+                # `description:` is a live claim -- it is the line the index rule is
+                # about -- and it is routinely under the stub floor, so a length test
+                # dropped exactly the claims most worth finding.
+                yield piece[:SECTION_CHARS], where, what
 
 
 if __name__ == "__main__":
