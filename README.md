@@ -196,8 +196,12 @@ prioritet: visok             # visok | sreden | nisak  (high | medium | low)
 umeniya: [db-migration]      # optional: the skills this task needs (see below)
 vyarno_kum: 2026-03-14       # optional: when this header was last true
 pregled_sled: 30d            # optional: how long that is expected to hold (30d, 6m)
+srok: 2026-04-01             # optional: a deadline on its own line, if you prefer it there
 ---
 ```
+
+`srok:` and `vremevi_kriterii: srok:YYYY-MM-DD` are the same deadline written two ways — the
+hook reads either, so a folder can keep the date where it reads best.
 
 | `sastoyanie` | meaning | also accepted |
 |---|---|---|
@@ -241,6 +245,42 @@ Two things are reported, and the second is the dangerous one:
   of date unnoticed. Reported when the skill was last written more than **14 days** before the
   task's last entry: a skill does not go out of date because the logbook moved yesterday, and a
   detector that cries on a normal Tuesday gets switched off, taking the real signal with it.
+
+## A plan that was never closed leaves the task unfinished
+
+A task holding a `PLAN.md` that does not say it is closed is reported **every session**, with no
+grace period. Unlike a stale skill this is not a guess about whether something went out of date:
+the plan either says it is finished or it does not.
+
+```markdown
+---
+sastoyanie: izpalnen         # izpalnen (carried out) | izostaven (given up on)
+rezultat: "the field went into the schema; the second proposal was dropped"
+---
+```
+
+**Both endings close it.** `izpalnen` and `izostaven` are different facts, and neither is a
+failure of record-keeping — a folder read six weeks later has to say which.
+
+| ending | meaning | also accepted |
+|---|---|---|
+| `izpalnen` | carried out | `done`, `carried_out` |
+| `izostaven` | given up on | `abandoned`, `otkazan` |
+| `zatvoren` | closed, without saying which | `closed`, `priklyuchen` — kept for plans closed before the distinction existed |
+
+**Closing requires saying what came of it.** A state with no `rezultat:` is not closed, it is a
+tick — and a tick is how a check gets satisfied without the thing behind it being true.
+`result:` is accepted too.
+
+**Every plan in the folder counts, not only `PLAN.md`.** The pattern is `PLAN.md` and
+`PLAN-*.md`, so a task running two efforts names them apart. ⚠️ Matching one exact filename is
+what the check did first, and it missed **this project's own second plan** — the rule held for
+the file it was named after and for nothing else. It is not `PLAN*`, so a folder may keep
+`PLANOVE-stari.md` as notes without being told it has an unclosed plan.
+
+> This exists because over six weeks one project ran reconnaissance, analysis and planning
+> repeatedly and closed a plan **exactly never**. Nothing said so: the task looked active
+> because it *was* active, and whether the plan had been carried out never came back.
 
 ## Shelf life
 
@@ -633,6 +673,61 @@ build/*
 
 The Stop hook also names the newest unrecorded file, so you can see at a glance what tripped it.
 
+## Where else does this live — and is that place still claiming it?
+
+```
+python3 tools/baton_kade.py "2500"           # where else does this number appear
+python3 tools/baton_kade.py "0\.4[0-9]" --regex
+python3 tools/baton_kade.py --duplicates     # find them without being asked
+```
+
+`grep -r` answers *where a string occurs*. The question that actually comes up is a different
+one: **which of those places still claim something, and which are only a record of what was
+once true.** A price decided in one task and copied into another task's header is a defect. The
+same number in an old logbook entry is history.
+
+Baton already draws that line for a person to read; this reads it. A logbook header, a plan and
+a memory file are **live**. An entry, a file whose name carries a date, and a row in a claims
+register are not — they repeat old values legitimately, and the first version counted them,
+which took one query from four live places to seven. The kinds come from
+[`baton_korpus`](#the-corpus-and-saying-what-is-in-it), so the two tools cannot drift apart
+about what a place is.
+
+### ⚠️ It does not find contradictions. It finds duplicated state.
+
+Whether the duplicates disagree is the reader's call. Put it the other way round and someone
+will pronounce a tree "consistent" while the same wrong number sits in six places.
+
+### `--duplicates`, and what it is calibrated against
+
+Numbers living in live places in two or more task folders. Measured over 20 task folders plus a
+memory tree — 149 distinct numbers, every hit labelled by hand:
+
+| kind | duplicates | relevant | noise |
+|---|---|---|---|
+| **money (€)** | 6 | **6** | 0 |
+| **percentages with a decimal** (84.8%) | 3 | **3** | 0 |
+| thresholds (`0.92`, `0.46`) | 41 | 1 | **40** |
+| round percentages (100%, 30%) | 16 | 0 | **16** |
+| version numbers (v1.0.0) | 11 | 0 | **11** |
+
+⇒ **A number with a decimal point or a currency sign is a decision. A round number or a version
+is shared vocabulary** — it turns up everywhere because it is a word, not a state. `100%`
+appeared in nine folders. So the default is money and decimals only, which gave **9 hits and no
+false positives**; `--all` restores the rest, which was noise 27 times out of 27.
+
+⚠️ The threshold row exists because the first measurement missed it: that run excluded some
+folders and never saw them. **A rate measured on a scope that is not declared is not a rate** —
+which is why `Scope` exists at all.
+
+⚠️ One corpus, labelled by its author, on one day. Run it on your own tree, label what it
+prints, and move the filter to where it separates yours.
+
+On the corpus it was built against it reported `€2500` in one task's decisions file marked
+*decided, 19.09* — and in another task's header dated **26.09**. Seven days between two live
+places, and nothing would have said so. It reports the spread in when those places were last
+touched, which is the part that says how long they have disagreed.
+
 ## The corpus, and saying what is in it
 
 Two questions come up in every tool that reads a whole tree of task folders: **which files
@@ -692,6 +787,24 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.13.2** — a changelog is not documentation, and now a test says so
+
+- **Three features existed only under `## Versions`.** `tools/baton_kade.py` (v2.12.0), the
+  header fields `srok` and `rezultat`, and the whole **unclosed-plan check** (v2.6.0) — a thing
+  SessionStart prints a dedicated section about — had no body section at all. Each now has one,
+  including the accepted spellings of a closed plan (`carried_out`, `otkazan`, `zatvoren`),
+  which were read by the hook and named nowhere a reader would look.
+- **`tests/test_documented.py` checks it structurally.** Every `tools/baton_*.py` must be shown
+  being used inside a fenced code block in the body; every header field the hooks read, and
+  every plan state they accept, must be named there. Fields and states are extracted from the
+  hooks, so a new one cannot be added unnoticed.
+- ⚠️ That test's first version passed a mutation that deleted an entire section, because the
+  file name is mentioned in passing elsewhere. **A name in a sentence is not documentation.**
+  The bar is a code block.
+- All 21 tags now have a GitHub release. Thirteen versions had been tagged and pushed while the
+  releases page still offered **v2.1.1 from 17.09** as the latest — `feedback_publikuvane_ne_e_stigane`
+  in its plainest form: a release in git is not a release in anybody's hands.
 
 **v2.13.1** — three defects in v2.13.0, all found by looking at real output rather than at a green suite
 
