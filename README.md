@@ -311,6 +311,39 @@ optional: an install from a release configures no source and nothing is reported
 A hook cannot verify that it was installed. It can ask the same question somewhere it can be
 answered.
 
+## Writing the entry
+
+```
+python3 tools/baton_vpishi.py <logbook> <entry-file> [--sledvashto NEW --staro OLD]
+```
+
+The Stop hook demands an entry at the top of the logbook, and until now nothing here helped
+write one. So it was done by hand, and doing it by hand went wrong four times in three days.
+
+`"\n".join(lines[:cut]) + entry` does not end in a newline when the file is `---\n## 2026-…`
+with no blank line between. The result is `---## 2026-…`: the closing fence disappears, the
+front matter stops parsing, and the task drops into the header-less fallback — no state, no
+priority, no next move. Three logbooks in one afternoon. It was not spotted by reading them;
+they look fine unless you are looking at that one fence. It was spotted by running the
+session-start hook afterwards and seeing three tasks appear bare.
+
+A later sweep found four more headings glued to the end of the previous line, in two folders —
+invisible to any heading-based read, including the author's own `grep "^## "`.
+
+So the tool inserts before the first dated heading and then checks its own output: the front
+matter still parses, no heading is glued anywhere in the file, and the pointer replacement
+either happened or failed loudly. `--sledvashto` requires `--staro`, the old line verbatim: a
+pointer that has already moved is a loud failure rather than a silent duplicate.
+
+⚠️ It **warns** rather than refuses when the entry's own heading runs ahead of the system
+clock — entries were written hours ahead because the hour was typed from memory. A few hours
+can be a timezone, and a helper that refuses a write on a guess gets worked around instead of
+fixed.
+
+⚠️ A quotation is not a gluing. A logbook describing this very defect contains the broken
+string verbatim, so inline code is stripped before the check. Getting that wrong is how the
+first version falsely rejected a real file while nine unit tests passed — see *Versions*.
+
 ## The board
 
 ```
@@ -616,6 +649,26 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.11.0**
+- **`tools/baton_vpishi.py` — write the entry the Stop hook asks for, without breaking the
+  file.** The hook demanded an entry and nothing helped produce one; by hand it broke three
+  front matters in an afternoon and glued four headings that no heading-based read could see.
+  The tool inserts before the first dated heading and then verifies its own output.
+- **Half a pointer replacement now fails.** Passing a new `sledvashto` without the old line was
+  skipped in silence: the entry landed, the pointer kept its old text, and nothing said so.
+  Both or neither.
+- **An hour ahead of the clock warns, and still writes.** A few hours can be a timezone.
+- ⚠️ **Found by positive control, not by review.** The first fix stripped double-backtick spans
+  with ``` ``[^`]*`` ```, which does not pass through the single backticks such a span exists to
+  contain. Nine unit tests passed while the tool rejected a real logbook that was quoting this
+  defect correctly. The fixture in the test is that line.
+- ⚠️ **And one test passed for the wrong reason.** The clock-warning test asserted `"ahead"`
+  against captured output — and pytest's `tmp_path` is named after the test, so the word was in
+  the printed path. It passed with the warning disabled. Mutation testing caught it; the unit
+  test did not. It now asserts the warning's own wording.
+- A redundant `^---##` assert survived every mutation, which meant no test pinned it. The
+  general check covers the same input, so it was removed rather than kept as decoration.
 
 **v2.10.1**
 - **`sastoyanie` and `na_hod` are not `--koe` claims.** Running the mode over all 19 tasks
