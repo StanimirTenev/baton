@@ -728,6 +728,58 @@ On the corpus it was built against it reported `€2500` in one task's decisions
 places, and nothing would have said so. It reports the spread in when those places were last
 touched, which is the part that says how long they have disagreed.
 
+## Reading order for a long list
+
+```
+baton_otsey.py --vapros "Does this repository ship a CBOM generator?" < candidates.tsv
+baton_otsey.py --vapros "..." --prag 0.5 --izhod scores.tsv < candidates.tsv
+```
+
+A research pass reads hundreds of candidates and judges each one expensively. Measured here
+on 2026-09-26: one run paged 300 code-search hits and de-duplicated them by hand, another
+filtered 935 + 576 arXiv entries with a title regex. `tools/baton_otsey.py` scores the same
+list once with the calibrated classifier `baton_pregled` already talks to, and puts the
+worthwhile ones first. Input is TSV on stdin — an id in column one, everything else is what
+gets judged.
+
+Measured on a real triage: 40 GitHub repositories, hand-labelled **before** the scores were
+seen, question "does this ship a tool that produces a cryptographic inventory".
+
+| | |
+|---|---|
+| cost | **$0.00069** for 40 |
+| false positives among the 11 hand-labelled *no* | **0 at every threshold** — the highest *no* scored 0.49 |
+| medians | yes **0.84** · no **0.19** · undecidable-from-the-input 0.36 |
+| ⭐ the actual win | sorted by score, **all 21 yeses were in the top 25 of 40** |
+
+⚠️ Of the three disagreements, **two were the labeller's fault**: one repository's only CBOM
+file was a frontend graph component, another had none at all. The third was a real limit of
+the input — a repository whose description does not say what it does — and no scorer fixes
+that.
+
+### ⛔ Reading order, not a right of exclusion
+
+Nothing is dropped, ever. `--prag` splits the list into **read first** and **read after**,
+and prints both with counts. The threshold travels in the output for the same reason a
+coverage figure travels with its denominator, and the report says in as many words that a
+candidate below the line is one nobody has read yet.
+
+This is not fastidiousness. The failure it prevents was made four times in one day here: a
+search reported as "found X" where the truth was "did not look at the rest". A scorer used
+as a filter makes the unread invisible, and **an absence written without the check that
+would find it** is the defect this project exists to refuse.
+
+### ⚠️ It scores a question; it does not tell you the question is wrong
+
+Every mistake made here that day was in the framing — a regex too narrow to match
+`DHE_RSA`, an evidence window that hid 59% of the text, a category asserted from an
+unvalidated pattern, a baseline two dozen versions stale. A classifier would have answered
+each of those confidently and uselessly. Use it to order reading and to cross-check a claim
+against a document; not to decide what the claim should be.
+
+⚠️ Measured on one kind of candidate, n=40. A threshold does not transfer — measure it again
+on arXiv rows or code hits, the same way `baton-pregled` says.
+
 ## The corpus, and saying what is in it
 
 Two questions come up in every tool that reads a whole tree of task folders: **which files
@@ -787,6 +839,26 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.14.0** — reading order for a long list
+
+- **`tools/baton_otsey.py`** scores a candidate list once with the calibrated classifier
+  `baton_pregled` already talks to, and puts the worthwhile ones first. Measured on 40
+  hand-labelled GitHub repositories: **$0.00069**, **0 false positives** among the eleven
+  labelled *no* at every threshold, and **all 21 yeses inside the top 25** once sorted.
+- ⛔ **Nothing is dropped.** `--prag` splits into *read first* and *read after* and prints
+  both, with counts; the threshold travels in the output and the report states that a low
+  score means unread, not absent. The failure that motivates it was made four times in one
+  day here — a search reported as "found X" where the truth was "did not look at the rest".
+- The confidentiality barrier holds: a confidential candidate is never sent, is marked, and
+  still appears in the list.
+- ⚠️ Two of the three disagreements in that run were the **labeller's** fault, not the
+  model's. The third was a description that does not say what the repository does, which no
+  scorer fixes.
+- ⚠️ It scores a well-posed question and does not tell you the question is wrong. Every
+  mistake made here that day was in the framing.
+- `test_documented.py`, shipped in v2.13.2, caught this tool's missing README section on the
+  first full run. That is the whole reason it exists.
 
 **v2.13.2** — a changelog is not documentation, and now a test says so
 
