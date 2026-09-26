@@ -93,7 +93,11 @@ HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.p
 # What a task header asserts about where the work stands. These are the pointers;
 # the logbook under them is the source of truth, exactly as an index line points at
 # a detail file.
-HEADER_CLAIMS = ("sledvashto", "kriterii_zavarshvane", "sastoyanie", "na_hod", "chaka")
+# `chaka` was here until 2026-09-26 and was read on every run. Measured across
+# every task on the machine: not one used it. A field nobody fills is not a field,
+# it is a line that makes the header look richer than it is. (`chakashta`, a value
+# of `sastoyanie`, is a different thing and is in active use.)
+HEADER_CLAIMS = ("sledvashto", "kriterii_zavarshvane", "sastoyanie", "na_hod")
 
 # Control words, not claims -- `--koe` skips them; `--zadachi` still reads them.
 #
@@ -473,9 +477,9 @@ def zaglavni_tvardeniya(fm: dict) -> list[tuple[str, str]]:
     remains is X"). `--zadachi` asks one question of the lot and answers "this
     header no longer matches"; this answers WHICH part.
 
-    A field too short to be a sentence is its own claim: `chaka: Ledger` names
-    something the entries can contradict. A dash is not -- that is what someone
-    types to mean "nothing here".
+    A field too short to be a sentence is its own claim: a one-line
+    `kriterii_zavarshvane` names something the entries can contradict. A dash is
+    not -- that is what someone types to mean "nothing here".
 
     ⚠️ `sastoyanie` and `na_hod` are skipped; see `KONTROLNI` for the measurement
     that took them out. It was written here first that `sastoyanie: aktivna` is an

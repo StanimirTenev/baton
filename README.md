@@ -650,6 +650,17 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.12.1**
+- **`chaka` removed from the header fields the review reads.** It sat in `HEADER_CLAIMS` and
+  was read on every `--koe` and `--zadachi` run. Measured across every task on one machine:
+  **not one used it.** A field nobody fills is not a field, it is a line that makes the header
+  look richer than it is.
+- It was found by the opposite of a feature: an edge type was proposed, measured before being
+  built, and the measurement killed it — three task-to-task edges of which one pointed at a
+  skill rather than a task, and no external party holding more than one task. The dead field
+  turned up on the way.
+- ⚠️ **`chakashta` is a different thing** — a value of `sastoyanie`, in active use, untouched.
+
 **v2.12.0**
 - **`tools/baton_kade.py` — where else does this live, and is that place still claiming it.**
   `grep` says where a string occurs; this says which of those places still *claim* it. A

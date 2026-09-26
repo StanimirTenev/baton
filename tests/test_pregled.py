@@ -355,15 +355,15 @@ def test_a_header_field_with_several_sentences_becomes_several_claims(tmp_path):
 
 
 def test_a_short_field_falls_back_to_its_whole_value(tmp_path):
-    """`chaka: Ledger` yields no sentence; the value itself is the claim."""
-    pairs = bp.zaglavni_tvardeniya({"chaka": "Ledger"})
-    assert pairs == [("chaka", "Ledger")]
+    """A one-line criterion yields no sentence; the value itself is the claim."""
+    pairs = bp.zaglavni_tvardeniya({"kriterii_zavarshvane": "the bus is live"})
+    assert pairs == [("kriterii_zavarshvane", "the bus is live")]
 
 
 def test_an_empty_or_placeholder_field_is_not_a_claim(tmp_path):
     """A dash is what someone types to mean "nothing here"."""
-    assert bp.zaglavni_tvardeniya({"sledvashto": "-", "chaka": "Ledger"}) \
-        == [("chaka", "Ledger")]
+    assert bp.zaglavni_tvardeniya({"sledvashto": "-", "kriterii_zavarshvane": "live"}) \
+        == [("kriterii_zavarshvane", "live")]
 
 
 # --- the control words are not claims --------------------------------------
@@ -484,3 +484,18 @@ def test_a_full_logbook_is_not_called_thin(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo(0.1))
     bp.koe("k", _koe_cfg(tmp_path), "zadacha")
     assert "не пише" not in capsys.readouterr().out
+
+
+def test_chaka_is_not_a_claim_field(tmp_path):
+    """Removed 2026-09-26: a header field that existed in code and nowhere else.
+
+    `chaka` sat in HEADER_CLAIMS and was read on every `--koe`/`--zadachi` run.
+    Measured across every task on the machine: **not one used it**. A field nobody
+    fills is not a field; it is a line of code that makes the header look richer
+    than it is.
+
+    ⚠️ `chakashta` is a different thing entirely — a value of `sastoyanie`, in
+    active use — and is untouched.
+    """
+    assert "chaka" not in bp.HEADER_CLAIMS
+    assert bp.zaglavni_tvardeniya({"chaka": "Ledger"}) == []
