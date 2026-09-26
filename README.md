@@ -633,6 +633,49 @@ build/*
 
 The Stop hook also names the newest unrecorded file, so you can see at a glance what tripped it.
 
+## The corpus, and saying what is in it
+
+Two questions come up in every tool that reads a whole tree of task folders: **which files
+are part of the corpus**, and **what kind of place is this passage** — something that claims
+a thing now, or a record of what was once true. `tools/baton_korpus.py` is the one owner of
+both.
+
+```python
+from baton_korpus import Scope, chunks, kind, walk
+
+scope = Scope(["docs", "sdks", "*/vendor/*"])      # what is OUTSIDE the corpus
+for text, source, what in chunks([home], scope, "LOGBOOK.md"):
+    ...                                            # what ∈ LIVE HEADER RECORD SNAPSHOT CLAIM
+```
+
+A logbook arrives as its header plus one chunk per entry; a claims register as one chunk per
+row; anything else split on its headings, with a dated filename marking the whole file a
+snapshot. `--duplicates` in `tools/baton_kade.py` uses the same `kind()`, so the two cannot
+drift apart about what a place is.
+
+### `Scope(None)` raises, and that is the feature
+
+An empty scope is allowed — `Scope([])` — but it has to be written down. The reason is
+measured, twice in one day:
+
+| | what an undeclared scope did |
+|---|---|
+| a duplicate-state prototype silently skipped one subtree | the same corpus went from **9 hits to 100** once it was scoped properly, and the false-positive rate with it |
+| a corpus built for detection declared nothing | **805 of 1167 live passages (69%)** turned out to be imported comparison fixtures and vendored SDKs. Two of three detectors sat near 50% false positives, and the corpus was the reason |
+
+**A rate measured on a scope nobody declared is not a rate.** `Scope.describe()` returns that
+scope as one line, so a number can be quoted together with what it was measured over.
+
+### ⚠️ `.batonignore` answers a different question
+
+`.batonignore` means *"do not demand a logbook entry for this"*. It does not mean *"this is
+not my writing"*. They overlap — raw agent output is both — and they diverge: a task that
+ignores its live transcripts for the Stop hook has those transcripts as its actual work.
+
+It is honoured by `Scope` because the duplicate-state calibration was measured with it
+honoured, and dropping it would invalidate that measurement. It is not a substitute for
+declaring what is outside.
+
 ## Logbook is not memory
 
 They are different jobs and must not merge:
@@ -649,6 +692,29 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.13.0**
+- **`tools/baton_korpus.py` — one owner for the corpus walk and the five kinds.** The
+  LIVE/HEADER/RECORD/SNAPSHOT/CLAIM distinction was declared twice, here and in a corpus
+  builder outside the repository, with two sets of regular expressions. Nothing had broken —
+  which is how a duplicate rots: one copy gets fixed, both keep returning something
+  plausible. `test_kind_has_exactly_one_owner` asserts the same function *object*, not that
+  the two agree.
+- ⚠️ Found while writing that test: `baton_kade.py` loaded its own fresh copy of the module,
+  so two owners sat in memory and the assert failed. That is Baton's oldest lesson in
+  miniature — **the hooks run from copies**, and v2.2.0 was tested and tagged while a
+  two-day-old copy did the work. A single owner loaded twice is two owners.
+- **`Scope` refuses to be constructed from `None`.** Measured: an undeclared exclusion took
+  one corpus from 9 duplicate hits to 100; an undeclared *inclusion* put **805 of 1167 live
+  passages (69%)** of imported fixtures and vendored SDKs into a detection corpus, and two of
+  three detectors sat near 50% false positives because of it. `Scope([])` is allowed and means
+  everything — a decision, made out loud. `Scope.describe()` prints it so a number can be
+  quoted with its scope.
+- `.batonignore` is honoured, and the README now says plainly that it answers a **different
+  question** — "do not demand a logbook entry", not "this is not my writing".
+- All four new guards were mutation-checked: each one reverted individually makes a test fail.
+- ⚠️ Not documented in the body: `tools/baton_kade.py` shipped in v2.12.0 with its description
+  only in this changelog. A changelog is not documentation.
 
 **v2.12.1**
 - **`chaka` removed from the header fields the review reads.** It sat in `HEADER_CLAIMS` and

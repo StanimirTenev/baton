@@ -87,10 +87,33 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-ENTRY = re.compile(r'^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)', re.M)
-SKIP = {".git", "__pycache__", "node_modules", ".pytest_cache"}
-REGISTERS = {"FAKTI.md", "FACTS.md", "TVARDENIYA.md", "CLAIMS.md"}
-DATED_NAME = re.compile(r'\d{4}-\d{2}-\d{2}|[_-]\d{2}[_-]\d{2}(?:\D|$)')
+def _load_korpus():
+    """One module object, not one per importer.
+
+    ⚠️ The first version of this exec_module'd a fresh copy every time, so two
+    `baton_korpus` objects sat in memory and `kade.kind is korpus.kind` was false.
+    That is Baton's own oldest lesson in miniature -- the hooks run from copies, and
+    v2.2.0 was written, tested and tagged while a two-day-old copy did the work.
+    A single owner that is loaded twice is two owners.
+    """
+    if "baton_korpus" in sys.modules:
+        return sys.modules["baton_korpus"]
+    spec = importlib.util.spec_from_file_location(
+        "baton_korpus", Path(__file__).resolve().parent / "baton_korpus.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["baton_korpus"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+korpus = _load_korpus()
+
+# The five kinds and the corpus scope have ONE owner -- `baton_korpus`. They used to
+# be declared here as well, with a second set of regular expressions, and nothing had
+# broken yet only because both copies still agreed.
+ENTRY, SKIP, REGISTERS, DATED_NAME = (
+    korpus.ENTRY, korpus.SKIP, korpus.REGISTERS, korpus.DATED_NAME)
+kind = korpus.kind
 
 # Money, a percentage, a threshold, a version. Dates are facts, not decisions.
 NUMBERS = re.compile(
@@ -123,70 +146,34 @@ def settings() -> tuple[Path, str, Path | None]:
     return home, logbook, (Path(index).expanduser().parent if index else None)
 
 
-def kind(file: Path, position: int, text: str, logbook: str) -> tuple[str, str]:
-    """LIVE · HEADER · RECORD · SNAPSHOT · CLAIM, and a word on which."""
-    if file.name in REGISTERS:
-        return "CLAIM", "dated, carries a status"
-    if DATED_NAME.search(file.stem) or file.stem.endswith(("_istoria", "_history")):
-        return "SNAPSHOT", f"{file.stem} — dated in its own name"
-    if text.startswith("---"):
-        second = text.find("\n---", 3)
-        if second != -1 and position < second:
-            return "HEADER", "claims it now"
-    if file.name == logbook:
-        before = [(m.start(), m.group(1)) for m in ENTRY.finditer(text) if m.start() < position]
-        if before:
-            return "RECORD", f"entry of {before[-1][1]}"
-        return "LIVE", "above the first entry"
-    return "LIVE", file.name
+def search(pattern: re.Pattern, home: Path, logbook: str, memory: Path | None,
+           scope=None):
+    """Matches with the kind of place each one sits in.
 
+    The walk and the scope come from `baton_korpus`. `Scope([])` is this tool's
+    declared corpus -- everything under the roots except `SKIP` and whatever
+    `.batonignore` excludes, which is exactly what `--duplicates` was calibrated
+    on. It is passed explicitly rather than defaulted inside the walker, because
+    an exclusion nobody stated is the defect that took the same corpus from 9
+    duplicates to 100.
 
-def _hook():
-    """The Stop hook's own `.batonignore` reading, reused rather than rewritten.
-
-    ⚠️ The calibration below was measured on a tree where raw imported research
-    folders were excluded. Leaving that out silently took the same corpus from 9
-    duplicates to 100 — the measurement does not transfer to a different scope,
-    and a scope that is not declared is not a scope. So the exclusion is the one
-    Baton already has: a `.batonignore` in the task folder, the same file the Stop
-    hook reads for files that legitimately change without a logbook entry.
+    ⚠️ A `for folder in …: pass` loop stood here -- a full second traversal of the
+    tree that did nothing. It is gone with the walk it was part of; it produced no
+    output and nothing referenced it.
     """
-    spec = importlib.util.spec_from_file_location(
-        "baton_stop", Path(__file__).resolve().parent.parent / "hooks" / "baton_stop.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["baton_stop"] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def search(pattern: re.Pattern, home: Path, logbook: str, memory: Path | None):
-    try:
-        hook = _hook()
-    except Exception:
-        hook = None
-    for root in [p for p in (home, memory) if p and p.is_dir()]:
-        for folder in sorted({f.parent for f in root.rglob("*.md")} | {root}):
-            pass
-        for file in sorted(root.rglob("*.md")):
-            if any(part in SKIP for part in file.parts):
-                continue
-            if hook is not None:
-                task = file.relative_to(root).parts[0] if file.parent != root else None
-                if task:
-                    base = root / task
-                    pats = hook.ignore_patterns(base)
-                    if pats and hook.is_ignored(str(file.relative_to(base)), file.name, pats):
-                        continue
-            try:
-                text = file.read_text(encoding="utf-8")
-            except Exception:
-                continue
-            for match in pattern.finditer(text):
-                line_no = text.count("\n", 0, match.start()) + 1
-                start = text.rfind("\n", 0, match.start()) + 1
-                end = text.find("\n", match.start())
-                yield (file, line_no, text[start:end if end != -1 else len(text)].strip(),
-                       *kind(file, match.start(), text, logbook))
+    scope = scope if scope is not None else korpus.Scope([])
+    for _root, file in korpus.walk([p for p in (home, memory) if p], scope,
+                                   suffixes=(".md",)):
+        try:
+            text = file.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for match in pattern.finditer(text):
+            line_no = text.count("\n", 0, match.start()) + 1
+            start = text.rfind("\n", 0, match.start()) + 1
+            end = text.find("\n", match.start())
+            yield (file, line_no, text[start:end if end != -1 else len(text)].strip(),
+                   *kind(file, match.start(), text, logbook))
 
 
 def normalise(value: str) -> str:
