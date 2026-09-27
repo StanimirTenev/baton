@@ -16,6 +16,7 @@ Prints nothing when there are no task folders, so a fresh machine stays quiet.
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -372,6 +373,66 @@ def pointer_drift(fm: dict) -> int | None:
 NAMED_FILE = re.compile(r"`?\b([A-Za-z0-9][A-Za-z0-9_.\-]*\.md)\b`?")
 
 
+def kod_drift(fm: dict) -> str | None:
+    """`kod: <path>@<ref>` -- the code this task's record rests on, and whether it moved.
+
+    The file-mtime checks catch a folder whose files are newer than its logbook. This
+    catches the other thing, which is quieter and reaches a person harder: the logbook
+    is fine, well written, quoted at the top of every session -- and the code it
+    describes has moved on underneath it.
+
+    Twice on 2026-09-26 a memory file in this project claimed v2.8.0 and 132 tests while
+    the tree stood at v2.13.1 and 194. Nothing about the record looked wrong. It was
+    five releases stale and perfectly readable, which is the whole problem.
+
+    ⚠️ Anything it cannot resolve is REPORTED, never skipped. A missing repository, an
+    unknown ref and a malformed field are three different facts and all three are said
+    out loud -- a check that quietly passes on what it could not read is worse than no
+    check, because it is then trusted.
+
+    Returns a line for the report, or None when the field is absent or the code has not
+    moved. Absent means no opinion: not every task describes code.
+    """
+    raw = str(fm.get("kod", "")).strip()
+    if not raw:
+        return None
+    if "@" not in raw:
+        return (f"`kod: {raw[:60]}` няма `@` — пише се `kod: <път до хранилище>@<комит "
+                f"или таг>`, иначе няма какво да се сравни")
+    where, _, ref = raw.rpartition("@")
+    repo = Path(where.strip()).expanduser()
+    ref = ref.strip()
+    if not (repo / ".git").exists():
+        return f"`kod:` сочи {repo}, което не е хранилище — записът не стъпва на нищо проверимо"
+
+    def git(*args) -> str | None:
+        try:
+            done = subprocess.run(["git", "-C", str(repo), *args],
+                                  capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return done.stdout.strip() if done.returncode == 0 else None
+
+    pinned = git("rev-parse", "--verify", f"{ref}^{{commit}}")
+    if not pinned:
+        return (f"`kod:` сочи `{ref}` в {repo.name}, което **не се намира** там — изтрит "
+                f"клон, непренесен комит или сгрешен таг. Не се чете като „съвпада\"")
+    head = git("rev-parse", "HEAD")
+    if not head:
+        return f"`kod:` не можах да прочета HEAD на {repo.name} — казвам го, вместо да го подмина"
+    if head == pinned:
+        return None
+    behind = git("rev-list", "--count", f"{pinned}..{head}")
+    if behind is None:
+        return (f"`kod:` {repo.name} е на друг комит от `{ref}` ({pinned[:7]}), а не можах "
+                f"да преброя разликата")
+    if behind == "0":
+        return (f"`kod:` {repo.name} е на комит, който НЕ е потомък на `{ref}` ({pinned[:7]}) "
+                f"— разклонение или пренаписана история")
+    return (f"`kod:` {repo.name} е **{behind}** комита след `{ref}` ({pinned[:7]}) — записът "
+            f"описва код, който се е мръднал под него")
+
+
 def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
     """A pointer sending you to a file that has not moved since the work did.
 
@@ -641,6 +702,9 @@ def main() -> int:
             count, age = debt
             stale.append(f"- {f.name} — {count} непроверени твърдения (статус И/А), "
                          f"най-старото на {age} дни")
+        moved = kod_drift(fm)
+        if moved:
+            stale.append(f"- {f.name} — {moved}")
         drift = pointer_drift(fm)
         if drift:
             stale.append(f"- {f.name} — `sledvashto` е {drift} знака: показалец, който вече "

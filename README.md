@@ -197,6 +197,7 @@ umeniya: [db-migration]      # optional: the skills this task needs (see below)
 vyarno_kum: 2026-03-14       # optional: when this header was last true
 pregled_sled: 30d            # optional: how long that is expected to hold (30d, 6m)
 srok: 2026-04-01             # optional: a deadline on its own line, if you prefer it there
+kod: ~/dev/thing@v1.2.0      # optional: the code this record rests on (path@commit-or-tag)
 ---
 ```
 
@@ -281,6 +282,36 @@ the file it was named after and for nothing else. It is not `PLAN*`, so a folder
 > This exists because over six weeks one project ran reconnaissance, analysis and planning
 > repeatedly and closed a plan **exactly never**. Nothing said so: the task looked active
 > because it *was* active, and whether the plan had been carried out never came back.
+
+## The record rests on code, and the code moves
+
+```
+kod: ~/dev/qrp-mcp@v0.18.1
+kod: /home/me/work/service@8a451d5
+```
+
+The Stop hook catches a folder whose **files** are newer than its logbook. `kod:` catches
+the other thing, which is quieter and lands harder: the logbook is fine — well written,
+quoted at the top of every session — and the **code it describes** has moved on underneath
+it.
+
+Twice on one day in this project a memory file claimed v2.8.0 and 132 tests while the tree
+stood at v2.13.1 and 194. Nothing about the record looked wrong. It was five releases stale
+and perfectly readable, which is the whole problem.
+
+SessionStart resolves the ref and says how far the repository has moved since:
+
+> `- qrp-mcp — `kod:` qrp-mcp е **9** комита след `v0.18.1` (a1b2c3d) — записът описва код,
+> който се е мръднал под него`
+
+A tag, a full sha and a short sha all work. The field is optional and silence means no
+opinion: not every task describes code.
+
+⚠️ **Anything it cannot resolve is reported, never skipped.** A path that is not a
+repository, a ref that does not exist there, a field with no `@`, a HEAD it could not read,
+a commit that is not an ancestor — five different facts, five different lines. A check that
+quietly passes on what it could not read is worse than no check, because it is then
+trusted.
 
 ## Shelf life
 
@@ -839,6 +870,27 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v2.15.0** — the record rests on code, and the code moves
+
+- **`kod: <path>@<commit-or-tag>`** in a task header. SessionStart resolves the ref and says
+  how far the repository has moved since — a tag, a full sha and a short sha all work, and
+  silence means no opinion, because not every task describes code.
+- The Stop hook catches a folder whose **files** are newer than its logbook. This catches the
+  other thing: the logbook is fine, well written, quoted at the top of every session, and the
+  **code it describes** has moved underneath it. Twice on 2026-09-26 a memory file here
+  claimed v2.8.0 and 132 tests while the tree stood at v2.13.1 and 194 — five releases stale
+  and perfectly readable.
+- ⚠️ **Five things it cannot resolve are five different lines**: a path that is not a
+  repository, a ref that does not exist there, a field with no `@`, a HEAD it could not read,
+  and a commit that is not an ancestor. A check that quietly passes on what it could not read
+  is worse than no check, because it is then trusted.
+- ⚠️ One of the five tests passed a mutation that deleted the repository check, because it
+  asserted only that *something* came back — and the git call then produced the "ref not
+  found" line instead. Two different facts a reader acts on differently. The test now asserts
+  the reason.
+- From a product note asking for records "linked to the actual files and results". Everything
+  else that note proposed already existed here; this was the one new thing in it.
 
 **v2.14.1** — six findings from an external review, four of them reproduced first
 
