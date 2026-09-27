@@ -18,6 +18,10 @@ from pathlib import Path
 
 import pytest
 
+# ⚠️ These expect ValueError, not AssertionError, since v2.14.1: `assert` is stripped by
+# `python -O`, so every barrier in `vpishi` disappeared under a flag nobody would think
+# to mention. An external review of v2.14.0 named it; the tests moved with the code.
+
 TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_vpishi.py"
 spec = importlib.util.spec_from_file_location("bv", TOOL)
 bv = importlib.util.module_from_spec(spec)
@@ -39,13 +43,13 @@ def _logbook(tmp_path: Path, body: str = OLD_ENTRY) -> Path:
 def test_a_new_pointer_without_the_old_one_fails(tmp_path):
     """The worst outcome is the entry landing while the pointer keeps its old text."""
     path = _logbook(tmp_path)
-    with pytest.raises(AssertionError, match="BOTH"):
+    with pytest.raises(ValueError, match="BOTH"):
         bv.vpishi(str(path), "## 2026-09-26 11:00 — new", sledvashto='sledvashto: "new"')
 
 
 def test_the_old_pointer_without_a_new_one_also_fails(tmp_path):
     path = _logbook(tmp_path)
-    with pytest.raises(AssertionError, match="BOTH"):
+    with pytest.raises(ValueError, match="BOTH"):
         bv.vpishi(str(path), "## 2026-09-26 11:00 — new", staro='sledvashto: "the old one"')
 
 
@@ -63,7 +67,7 @@ def test_both_together_replace_the_pointer(tmp_path):
 def test_a_heading_glued_to_the_previous_line_is_caught(tmp_path):
     """Invisible to any heading-based read, including the author's own grep."""
     path = _logbook(tmp_path, OLD_ENTRY + "last line## 2026-09-19 09:00 — older still\n")
-    with pytest.raises(AssertionError, match="glued mid-file"):
+    with pytest.raises(ValueError, match="glued mid-file"):
         bv.vpishi(str(path), "## 2026-09-26 11:00 — new")
 
 
@@ -122,3 +126,67 @@ def test_the_closing_fence_never_ends_up_glued(tmp_path):
     text = path.read_text(encoding="utf-8")
     assert "---##" not in text
     assert text.count("---") >= 2
+
+
+HEADER_V2 = ('---\nsastoyanie: aktivna\nsledvashto: "decide the price"\n---\n\n'
+             '## 2026-09-20 10:00 — an old entry\n\nsledvashto: "decide the price"\n'
+             'was the pointer back then.\n')
+
+
+def test_a_failed_validation_leaves_the_file_byte_identical(tmp_path):
+    """🔴 External review of v2.14.0: the file was written BEFORE the structure checks.
+
+    So a logbook that would fail validation was already on disk when the failure was
+    reported — the one outcome the checks exist to prevent.
+    """
+    log = tmp_path / "L.md"
+    log.write_text(HEADER_V2, encoding="utf-8")
+    before = log.read_bytes()
+    # An entry with no dated heading of its own glues onto the next one.
+    bad = "not a heading at all, and no date"
+    with pytest.raises((AssertionError, ValueError)):
+        bv.vpishi(str(log), bad + "## 2026-09-21 09:00 — glued")
+    assert log.read_bytes() == before, "a rejected entry must leave nothing behind"
+
+
+def test_the_old_pointer_must_be_in_the_header_not_in_history(tmp_path):
+    """`staro` was searched for in the whole file and replaced at the first hit.
+
+    A pointer that lives only in an old entry would be rewritten — editing the record,
+    which is never edited — while the header it was meant to update stayed as it was.
+    """
+    log = tmp_path / "L.md"
+    only_in_history = (
+        '---\nsastoyanie: aktivna\nsledvashto: "the pointer moved on already"\n---\n\n'
+        '## 2026-09-20 10:00 — an old entry\n\nsledvashto: "decide the price"\n')
+    log.write_text(only_in_history, encoding="utf-8")
+    before = log.read_bytes()
+    entry = "## 2026-09-21 09:00 — new\n\ntext\n"
+    with pytest.raises((AssertionError, ValueError)):
+        bv.vpishi(str(log), entry, sledvashto="something new",
+                  staro='sledvashto: "decide the price"')
+    assert log.read_bytes() == before, "history is a record and is never edited"
+
+
+def test_the_checks_survive_python_dash_O(tmp_path):
+    """`assert` is stripped by -O. A barrier that vanishes under a flag is not one."""
+    import subprocess, sys, textwrap
+    log = tmp_path / "L.md"
+    log.write_text(HEADER_V2, encoding="utf-8")
+    script = textwrap.dedent(f"""
+        import importlib.util, sys
+        spec = importlib.util.spec_from_file_location("bv", {str(TOOL)!r})
+        bv = importlib.util.module_from_spec(spec); sys.modules["bv"] = bv
+        spec.loader.exec_module(bv)
+        try:
+            bv.vpishi({str(log)!r}, "## 2026-09-21 09:00 — x\\n\\ntext\\n",
+                      sledvashto="new", staro="a line that is not in the file")
+        except BaseException as exc:
+            print("REFUSED", type(exc).__name__)
+        else:
+            print("ACCEPTED")
+    """)
+    out = subprocess.run([sys.executable, "-O", "-c", script],
+                         capture_output=True, text=True)
+    assert "REFUSED" in out.stdout, (
+        f"under -O the barrier disappeared: {out.stdout!r} {out.stderr[-200:]!r}")

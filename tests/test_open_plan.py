@@ -143,3 +143,37 @@ def test_a_note_that_merely_starts_with_plan_is_not_a_plan(tmp_path):
     folder.mkdir()
     (folder / "PLANOVE-stari.md").write_text("бележки\n", encoding="utf-8")
     assert bss.open_plan(folder) is None
+
+
+def test_a_finished_task_still_reports_an_open_plan(tmp_path, monkeypatch):
+    """🔴 External review of v2.14.0: a finished header hid an open plan entirely.
+
+    `sastoyanie: priklyuchila` hits `continue` seventeen lines before `open_plan` is
+    ever called, so the logbook and the plan could say opposite things about whether
+    the work is done and only one of them was ever shown.
+
+    A plan that was never closed is the very signal this check exists for. Finishing
+    the task in the header does not close the plan; saying it does is the tick that
+    satisfies a check without the thing behind it being true.
+    """
+    import json
+    import subprocess
+    import sys
+    task = tmp_path / "otvoren-plan"
+    task.mkdir()
+    (task / "LOGBOOK.md").write_text(
+        "---\nsastoyanie: priklyuchila\nna_hod: nie\n---\n\n"
+        "## 2026-09-01 10:00 — done\n\ntext\n", encoding="utf-8")
+    (task / "PLAN.md").write_text(
+        "---\nsastoyanie: otvoren\nrezultat: \"\"\n---\n\n# The plan\n", encoding="utf-8")
+    monkeypatch.setenv("BATON_HOME", str(tmp_path))
+    monkeypatch.setenv("BATON_LOGBOOK", "LOGBOOK.md")
+    hook = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
+    out = subprocess.run([sys.executable, str(hook)], input="{}",
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    message = json.loads(out.stdout).get("systemMessage", "")
+    assert "otvoren-plan" in message
+    assert "PLAN.md" in message, (
+        "a finished task with an open plan must show BOTH facts, not only the header: "
+        f"{message[-400:]!r}")

@@ -92,6 +92,14 @@ def otsey(items, vapros: str, bp=None):
                          "number nobody can check.")
     bp = bp or _pregled()
     key, words = bp.klyuch(), bp.config()["poveritelni"]
+    # The question is asked of every candidate, so it is checked once, here, before a
+    # single call is made. `pitay` now reads the whole serialised body and would stop
+    # this too -- on candidate one, after the run has started. Refusing up front says
+    # what is wrong instead of failing mid-list.
+    held_question = bp.poveritelno(vapros, "--vapros", words)
+    if held_question:
+        raise ValueError(f"the question itself carries „{held_question}“ and is asked of "
+                         f"every candidate. It does not leave the machine.")
     question = {"otsey": {"type": "noul", "instructions": vapros.strip(),
                           "criteria": {"true": "yes", "false": "no"}}}
     out, spent, held = [], 0.0, 0

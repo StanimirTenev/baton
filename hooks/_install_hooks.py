@@ -22,24 +22,32 @@ def main() -> int:
     dry = dry_s == "1"
 
     # 1. local config the hooks read at runtime (so the command needs no env prefix)
+    #
+    # 🔴 This used to write the file from scratch with `home` and `logbook` only, so a
+    # second install took `pregled_poveritelni`, `pregled_indeks` and `source` with it.
+    # That list is what keeps client material off a hosted API, and `baton_pregled`
+    # stops when it is missing rather than reading it as empty -- so a silent reinstall
+    # turned the review tool off. Found by an external review of v2.14.0.
+    #
+    # It also wrote before validating `settings.json`, so a broken settings file
+    # returned 1 with the config already gone. Read and validate everything first;
+    # write nothing until both files are known good.
     local = os.path.join(hookdir, "baton.local.json")
-    if dry:
-        print(f"  would write {local}")
-    else:
-        with open(local, "w", encoding="utf-8") as fh:
-            json.dump({"home": home, "logbook": logbook}, fh, ensure_ascii=False, indent=2)
-            fh.write("\n")
-        print("  local config written")
+    existing = {}
+    if os.path.exists(local):
+        try:
+            with open(local, encoding="utf-8-sig") as fh:
+                existing = json.load(fh)
+        except Exception as exc:
+            print(f"  {local} is not valid JSON ({exc}) - fix it first, nothing written",
+                  file=sys.stderr)
+            return 1
+        if not isinstance(existing, dict):
+            print(f"  {local} is not a JSON object - fix it first, nothing written",
+                  file=sys.stderr)
+            return 1
 
-    wanted = {
-        "SessionStart": os.path.join(hookdir, "baton_session_start.py"),
-        "Stop": os.path.join(hookdir, "baton_stop.py"),
-    }
-
-    def is_baton(h):
-        blob = str(h.get("command", "")) + " ".join(h.get("args", []) or [])
-        return "baton_" in blob
-
+    # Validate settings.json BEFORE anything is written, not after.
     data = {}
     if os.path.exists(settings_path):
         try:
@@ -49,6 +57,30 @@ def main() -> int:
             print(f"  settings.json is not valid JSON ({exc}) - fix it first, nothing written",
                   file=sys.stderr)
             return 1
+
+    if dry:
+        print(f"  would write {local}")
+    else:
+        # Only the two fields this installer owns; everything else is the user's.
+        merged = dict(existing)
+        merged["home"], merged["logbook"] = home, logbook
+        kept = sorted(set(existing) - {"home", "logbook"})
+        tmp = local + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(merged, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        os.replace(tmp, local)          # atomic: no half-written config, ever
+        print("  local config written"
+              + (f" (kept: {', '.join(kept)})" if kept else ""))
+
+    wanted = {
+        "SessionStart": os.path.join(hookdir, "baton_session_start.py"),
+        "Stop": os.path.join(hookdir, "baton_stop.py"),
+    }
+
+    def is_baton(h):
+        blob = str(h.get("command", "")) + " ".join(h.get("args", []) or [])
+        return "baton_" in blob
 
     hooks = data.setdefault("hooks", {})
     changed = False

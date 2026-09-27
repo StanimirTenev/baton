@@ -15,10 +15,19 @@ import fnmatch
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache"}
-GRACE_SECONDS = 90  # a file saved moments ago is still being worked on
+# A file saved moments ago is still being worked on. This is a grace against NOW —
+# not against the logbook's own timestamp, which is what it used to be compared with.
+#
+# 🔴 Found by an external review of v2.14.0: `work > logged + GRACE_SECONDS` meant a
+# file written thirty seconds after its logbook could never be reported, however long
+# it then sat there, while an old file two minutes newer kept stopping unrelated
+# sessions forever. Both are the opposite of the promise. The code had drifted from
+# the sentence directly above it.
+GRACE_SECONDS = 90
 
 
 def ignore_patterns(folder: Path) -> list[str]:
@@ -79,7 +88,8 @@ def unrecorded(root: Path, name: str) -> list[str]:
         if work == 0.0:
             continue
         logged = logbook.stat().st_mtime if logbook.is_file() else 0.0
-        if work > logged + GRACE_SECONDS:
+        # Newer than the logbook at all -- but leave alone what is being written now.
+        if work > logged and (time.time() - work) > GRACE_SECONDS:
             if logbook.is_file():
                 out.append(f"{folder.name} (newest: {newest_name})")
             else:

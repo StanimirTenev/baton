@@ -494,6 +494,10 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
 # and "given up on" both finish a task and leave completely different histories
 # behind -- and a folder read six weeks later has to say which. `zatvoren` stays
 # accepted for plans closed before the distinction existed.
+# The states that mean the task itself is finished. Named once, because the plan check
+# now reads them too and two spellings of the same list is how one of them rots.
+FINISHED = ("priklyuchila", "priklyuchena", "приключила", "приключена", "done")
+
 PLAN_DONE = {"izpalnen", "изпълнен", "done", "carried_out"}
 PLAN_ABANDONED = {"izostaven", "изоставен", "abandoned", "otkazan", "отказан"}
 PLAN_CLOSED = PLAN_DONE | PLAN_ABANDONED | {"zatvoren", "затворен", "closed",
@@ -605,7 +609,19 @@ def main() -> int:
             plain.append(f)
             continue
         sast = str(fm.get("sastoyanie", "")).strip().lower()
-        if sast in ("priklyuchila", "priklyuchena", "приключила", "приключена", "done"):
+        # 🔴 An open plan is checked BEFORE the status branch, not after it. A finished
+        # header used to `continue` seventeen lines before `open_plan` was called, so a
+        # logbook and a plan could say opposite things about whether the work was done
+        # and only one of them was ever shown. Found by an external review of v2.14.0.
+        #
+        # Finishing the task in the header does not close the plan. Saying it does is
+        # the tick that satisfies a check without the thing behind it being true --
+        # which is the same reason `rezultat:` is required to close one.
+        plan_now = open_plan(f)
+        if plan_now:
+            unfinished.append(f"- {f.name} — {plan_now}"
+                              + (" ⚠️ а хедърът е `priklyuchila`" if sast in FINISHED else ""))
+        if sast in FINISHED:
             finished.append(f.name)
             continue
         if sast in ("zamrazena", "замразена", "frozen", "paused"):
@@ -629,9 +645,6 @@ def main() -> int:
         if drift:
             stale.append(f"- {f.name} — `sledvashto` е {drift} знака: показалец, който вече "
                          f"носи състояние. Състоянието живее в дневника, тук стои следващият ход")
-        plan = open_plan(f)
-        if plan:
-            unfinished.append(f"- {f.name} — {plan}")
         bad_skills = skill_trouble(skills_for(fm), f, name)
         if bad_skills:
             stale.append(f"- {f.name} — умения, които хедърът иска: "

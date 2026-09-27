@@ -91,26 +91,53 @@ def vpishi(path, entry: str, sledvashto: str | None = None,
     file = Path(path)
     text = file.read_text(encoding="utf-8")
 
+    # 🔴 Three defects from an external review of v2.14.0, all here:
+    #   * the file was written BEFORE these checks ran, so a rejected entry was
+    #     already on disk when the rejection was printed;
+    #   * `staro` was looked for in the whole file and replaced at the first hit, so a
+    #     pointer surviving only in an old entry got rewritten -- editing the record,
+    #     which is never edited -- while the header stayed as it was;
+    #   * `assert` is stripped by `python -O`, so every barrier here vanished under a
+    #     flag nobody would think to mention.
+    # Build in memory, validate, then replace atomically; and raise, do not assert.
+
     # Half a replacement is worse than none: it keeps the old pointer and says nothing.
-    assert bool(sledvashto) == bool(staro), (
-        "pass BOTH `sledvashto` and `staro`, or neither. "
-        f"Got sledvashto={'yes' if sledvashto else 'no'}, staro={'yes' if staro else 'no'}")
+    if bool(sledvashto) != bool(staro):
+        raise ValueError(
+            "pass BOTH `sledvashto` and `staro`, or neither. "
+            f"Got sledvashto={'yes' if sledvashto else 'no'}, "
+            f"staro={'yes' if staro else 'no'}")
     if sledvashto:
-        assert staro in text, "the old pointer line was not found verbatim"
-        text = text.replace(staro, sledvashto, 1)
+        head_end = text.find("\n---", 3) + 4 if text.startswith("---") else 0
+        header = text[:head_end]
+        hits = header.count(staro)
+        if hits != 1:
+            where = "nowhere in the front matter" if hits == 0 else f"{hits} times there"
+            raise ValueError(
+                f"the old pointer line must appear exactly once in the front matter; "
+                f"found it {where}. A logbook entry is a record and is never edited, so "
+                f"a match further down the file is refused rather than rewritten.")
+        text = header.replace(staro, sledvashto, 1) + text[head_end:]
 
     first = re.search(r'^## \d{4}-', text, re.M)
-    assert first, "no dated entry to insert in front of"
+    if not first:
+        raise ValueError("no dated entry to insert in front of")
     text = text[:first.start()] + entry.strip() + "\n\n" + text[first.start():]
-    file.write_text(text, encoding="utf-8")
 
     lines = text.split("\n")
-    assert lines[0] == "---" and "---" in lines[1:12], "the front matter broke"
+    if not (lines[0] == "---" and "---" in lines[1:12]):
+        raise ValueError("the front matter broke")
     # The `^---##` case is covered by the general check below -- `\S` matches the
     # dash. A separate assert for it survived every mutation, which means no test
     # pinned it, so it is gone rather than kept as decoration.
     glued = re.findall(r'\S(## \d{4}-\d{2}-\d{2}[^\n]{0,40})', _without_code(text))
-    assert not glued, f"heading glued mid-file, invisible to a heading read: {glued[:3]}"
+    if glued:
+        raise ValueError(
+            f"heading glued mid-file, invisible to a heading read: {glued[:3]}")
+
+    tmp = file.with_suffix(file.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(file)               # atomic: never a half-written logbook
 
     print(f"written: {path}")
     if (note := _hours_ahead(entry)):

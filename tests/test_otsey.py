@@ -38,7 +38,16 @@ class _Fake:
         return {"poveritelni": ["darmi", "дарми"]}
 
     def poveritelno(self, text, ident, words):
-        return ident in self.confidential
+        """Same shape as the real one: it reads the TEXT for a word, and the id too.
+
+        ⚠️ The first version of this fake looked only at `ident`, so a test about a
+        confidential word in the question passed against the fake and would have
+        failed against the real barrier. A stand-in that is laxer than the thing it
+        stands for turns a test into a formality.
+        """
+        if ident in self.confidential:
+            return ident
+        return next((w for w in words if w in (text or "")), None)
 
     def pitay(self, key, state, questions, label, words):
         self.asked.append((label, questions["otsey"]["instructions"]))
@@ -124,3 +133,17 @@ def test_every_column_reaches_the_text_so_nothing_judged_is_unseen():
     assert ident == "repo"
     for part in ("description here", "Go", "12"):
         assert part in text, f"{part!r} was dropped from what gets judged"
+
+
+def test_a_confidential_question_is_refused_before_any_candidate_is_scored():
+    """The question is asked of every candidate, so it is checked once, up front.
+
+    Found while reproducing an external review of v2.14.0: `pitay` read only `state`
+    and the label, so a confidential term living only in `questions` reached the wire.
+    That is fixed at the sending function. This is the second half — refusing here says
+    what is wrong, instead of dying on candidate one after the run has begun.
+    """
+    fake = _Fake({"a": 0.5, "b": 0.5})
+    with pytest.raises(ValueError, match="does not leave the machine"):
+        bo.otsey([("a", "t"), ("b", "t")], "Does this mention the darmi outage?", bp=fake)
+    assert not fake.asked, "not a single candidate may be scored"

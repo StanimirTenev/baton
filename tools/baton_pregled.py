@@ -261,13 +261,23 @@ def pitay(api_key: str, state: str, questions: dict, etiket: str, dumi: list[str
     a missing envelope, a malformed answer. Read as "no problem found", such a
     reply makes the review lie precisely when it is least able to be caught.
     """
+    body = {"model": MODEL, "state": state, "questions": questions}
     # Last barrier inside the only function that touches the network: callers check
     # too, but a future caller may forget, and this is the one that sends.
-    zadarzhano = poveritelno(state, etiket, dumi)
+    #
+    # 🔴 It used to check `state` and the label and nothing else, while the body it
+    # builds also carries `questions` -- so a confidential word appearing only in a
+    # question reached the wire. Reproduced 2026-09-27 from an external review of
+    # v2.14.0: a term present solely in `instructions` arrived in the outgoing JSON.
+    # `baton_otsey`, shipped the night before, puts the caller's own `--vapros`
+    # straight into that field, which is how a barrier that reads only half of what
+    # it sends becomes a barrier that does not hold.
+    #
+    # So the check reads what is actually sent: the serialised body, whole.
+    zadarzhano = poveritelno(json.dumps(body, ensure_ascii=False), etiket, dumi)
     if zadarzhano:
         sys.exit(f"⛔ отказано: „{zadarzhano}“ се среща в {etiket}. "
                  f"Не напуска машината.")
-    body = {"model": MODEL, "state": state, "questions": questions}
     request = urllib.request.Request(
         ENDPOINT, data=json.dumps(body).encode(),
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})

@@ -38,11 +38,17 @@ if (-not $PyLauncher -and (Test-Path -LiteralPath $Bundled)) {
     # No Python on the machine — use the bundled one, copied into the profile so it
     # outlives the flash drive.
     $BundledDst = Join-Path $Install "python-win"
-    if (-not $DryRun) {
+    if ($DryRun) {
+        # A dry run copies nothing, so it must point at the source. It used to name
+        # the destination it had just decided not to create, and every later step
+        # then ran against a path that does not exist -- reported by an external
+        # review of v2.14.0 from a static read.
+        $PyLauncher = $Bundled
+    } else {
         New-Item -ItemType Directory -Force -Path $Install | Out-Null
         Copy-Item (Join-Path $Repo "python-win") $BundledDst -Recurse -Force
+        $PyLauncher = Join-Path $BundledDst "python.exe"
     }
-    $PyLauncher = Join-Path $BundledDst "python.exe"
     Say "no Python on the machine - using the bundled interpreter"
 }
 

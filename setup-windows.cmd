@@ -54,6 +54,19 @@ echo [2/2] Installing Baton from %BATON_DIR% ...
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%BATON_DIR%\install.ps1"
 
+rem An installer that failed must not be followed by the word "Done". This printed
+rem success whatever the exit code -- reported by an external review of v2.14.0.
+if errorlevel 1 (
+    echo.
+    echo ============================================================
+    echo   Baton did NOT install. The installer above reported an error.
+    echo   Nothing further was done. Read the message, fix it, run this again.
+    echo ============================================================
+    echo.
+    pause
+    exit /b 1
+)
+
 echo.
 echo ============================================================
 echo   Done.

@@ -840,6 +840,43 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.14.1** — six findings from an external review, four of them reproduced first
+
+- 🔴 **The confidentiality barrier read half of what it sent.** `pitay` checked `state` and
+  the label; the body it builds also carries `questions`, and never looked there. Reproduced
+  with a replaced `urlopen`: a term present only in a question arrived in 272 bytes of
+  outgoing JSON. It bit through `baton_otsey`, shipped the night before, which puts the
+  caller's `--vapros` straight into that field. The check now reads the serialised body,
+  whole, and `otsey` refuses a confidential question once, up front.
+- 🔴 **A reinstall took the confidentiality list with it.** The installer wrote
+  `baton.local.json` from scratch with `home` and `logbook`, so `pregled_poveritelni`,
+  `pregled_indeks` and `source` disappeared on a second run — and it did that *before*
+  validating `settings.json`, so a broken settings file returned 1 with the config already
+  gone. `baton_pregled` stops when that list is missing, so a silent reinstall turned the
+  review tool off. Now: read and validate everything first, merge only the two owned fields,
+  replace atomically.
+- 🔴 **`vpishi` wrote before it validated**, so a rejected entry was already on disk; it
+  searched `staro` in the whole file, so a pointer surviving only in an old entry was
+  rewritten — editing the record, which is never edited; and every barrier was an `assert`,
+  stripped by `python -O`. Now: header-only and exactly once, built in memory, `ValueError`
+  rather than `assert`, atomic replace.
+- 🔴 **The Stop hook's grace was measured against the wrong thing.** `work > logged + 90`
+  meant a file saved thirty seconds after its logbook could **never** be reported, however
+  long it sat, while an old file two minutes newer stopped unrelated sessions forever. The
+  hook's own comment says "a file saved moments ago is still being worked on" — a grace
+  against *now*. The code had drifted from the sentence above it. **`tests/test_stop.py` is
+  new**: the hook had no test file of its own.
+- **A finished task hid an open plan.** `sastoyanie: priklyuchila` hit `continue` seventeen
+  lines before `open_plan` was called. The plan check now runs before the status branch and
+  says both facts, because finishing the task in the header does not close the plan.
+- **Windows**: `-DryRun` pointed at a copy it had just decided not to make, and
+  `setup-windows.cmd` printed `Done.` whatever the installer returned. ⚠️ Fixed from a static
+  read; **not executed** — no PowerShell on this machine, and the review found them the same
+  way.
+- ⚠️ One defect of my own on the way: a test double whose `poveritelno` read the identifier
+  and not the text, so a test about a confidential question passed against the fake and would
+  have failed against the real barrier.
+
 **v2.14.0** — reading order for a long list
 
 - **`tools/baton_otsey.py`** scores a candidate list once with the calibrated classifier

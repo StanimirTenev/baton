@@ -499,3 +499,41 @@ def test_chaka_is_not_a_claim_field(tmp_path):
     """
     assert "chaka" not in bp.HEADER_CLAIMS
     assert bp.zaglavni_tvardeniya({"chaka": "Ledger"}) == []
+
+
+def test_the_barrier_reads_everything_that_is_sent_not_only_the_state(monkeypatch):
+    """🔴 External review of v2.14.0, reproduced here before it was touched.
+
+    `pitay` checked `state` and the label and nothing else, while the body it builds
+    also carries `questions`. A confidential term appearing only in a question reached
+    the outgoing JSON — 272 bytes of it, verified by replacing `urlopen`.
+
+    It bit because of `baton_otsey`, shipped the night before, which puts the caller's
+    own `--vapros` straight into `questions`. A barrier that reads half of what it
+    sends is not a barrier, and this is the one function that touches the network.
+    """
+    sent = {}
+
+    def never(request, timeout=None):
+        sent["body"] = request.data.decode()
+        raise AssertionError("the network must not be reached")
+
+    monkeypatch.setattr(bp.urllib.request, "urlopen", never)
+    words = ["darmi", "дарми"]
+    question = {"q": {"type": "noul",
+                      "instructions": "Does this mention the дарми server outage?",
+                      "criteria": {"true": "yes", "false": "no"}}}
+    with pytest.raises(SystemExit) as stop:
+        bp.pitay("k", "an entirely innocuous passage", question, "label", words)
+    assert "дарми" in str(stop.value) and "Не напуска машината" in str(stop.value)
+    assert not sent, "nothing may be serialised onto the wire"
+
+
+def test_a_confidential_word_in_the_criteria_is_caught_too(monkeypatch):
+    """Not just `instructions` — the whole body. `criteria` travels as well."""
+    monkeypatch.setattr(bp.urllib.request, "urlopen",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
+    question = {"q": {"type": "noul", "instructions": "harmless",
+                      "criteria": {"true": "it names дарми", "false": "it does not"}}}
+    with pytest.raises(SystemExit, match="Не напуска машината"):
+        bp.pitay("k", "innocuous", question, "label", ["дарми"])
