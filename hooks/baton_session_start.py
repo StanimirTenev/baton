@@ -429,8 +429,10 @@ def kod_drift(fm: dict) -> str | None:
     if behind == "0":
         return (f"`kod:` {repo.name} е на комит, който НЕ е потомък на `{ref}` ({pinned[:7]}) "
                 f"— разклонение или пренаписана история")
-    return (f"`kod:` {repo.name} е **{behind}** комита след `{ref}` ({pinned[:7]}) — записът "
-            f"описва код, който се е мръднал под него")
+    # When the ref IS the sha, naming both reads as a stutter: "след `7374660` (7374660)".
+    kade = f"`{ref}`" if not pinned.startswith(ref.lower()) else f"`{pinned[:7]}`"
+    return (f"`kod:` {repo.name} е **{behind}** комита след {kade} — записът описва код, "
+            f"който се е мръднал под него")
 
 
 def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:

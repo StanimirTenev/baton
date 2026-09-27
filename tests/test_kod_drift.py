@@ -122,3 +122,20 @@ def test_the_drift_reaches_the_report_not_only_the_function(tmp_path, monkeypatc
     assert out.returncode == 0, out.stderr
     message = json.loads(out.stdout).get("systemMessage", "")
     assert "zadacha" in message and "2" in message and "kod:" in message, message[-400:]
+
+
+def test_a_sha_ref_is_not_printed_twice(tmp_path):
+    """"след `7374660` (7374660)" -- naming the ref and the commit it resolves to reads
+    as a stutter when they are the same thing. A tag still gets both."""
+    repo = tmp_path / "repo"
+    old = _repo(repo, 1)
+    (repo / "x.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "x"], cwd=repo, check=True, capture_output=True)
+
+    by_sha = bss.kod_drift({"kod": f"{repo}@{old[:7]}"})
+    assert by_sha.count(old[:7]) == 1, by_sha
+
+    subprocess.run(["git", "tag", "v9", old], cwd=repo, check=True, capture_output=True)
+    by_tag = bss.kod_drift({"kod": f"{repo}@v9"})
+    assert "v9" in by_tag, by_tag

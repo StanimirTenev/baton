@@ -892,6 +892,14 @@ per project, a short state file under 150 lines, chronology in a separate histor
 - From a product note asking for records "linked to the actual files and results". Everything
   else that note proposed already existed here; this was the one new thing in it.
 
+**v2.15.1** — a sha ref printed twice
+
+- `след \`7374660\` (7374660)` read as a stutter when the ref and the commit it resolves to
+  are the same string. A tag still gets both, because there the second half says something.
+- Applied to four real tasks on this machine. Three are silent; one reports three commits of
+  drift, correctly — that task's last entry is from 23 September and two releases have shipped
+  since.
+
 **v2.14.1** — six findings from an external review, four of them reproduced first
 
 - 🔴 **The confidentiality barrier read half of what it sent.** `pitay` checked `state` and
