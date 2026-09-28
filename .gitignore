@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 hooks/baton.local.json
 python-win/
+hooks/baton.bodies.json

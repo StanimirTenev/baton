@@ -12,11 +12,14 @@ folder. `stop_hook_active` is honoured, so this can block at most once per turn 
 never trap a session in a loop.
 """
 import fnmatch
+import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache"}
@@ -81,20 +84,67 @@ def newest_work(folder: Path, logbook: str) -> tuple[float, str]:
     return newest, newest_name
 
 
+def _bodies_path() -> Path:
+    return Path(os.environ.get("BATON_BODY_STATE")
+                or Path(__file__).with_name("baton.bodies.json"))
+
+
+def _body(text: str) -> str:
+    """The logbook below its header -- the part a header edit does not touch."""
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) == 3:
+            return parts[2]
+    return text
+
+
+def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
+    """When the logbook BODY last changed -- not when the file was last written.
+
+    2026-09-28: aliases were added to every task header; the rewrite moved each
+    DNEVNIK.md's mtime past unrecorded work, and this hook called the work recorded, in
+    Baton's own folder, the evening the feature shipped. A header edit is not an entry.
+    The body is remembered by hash; while it is unchanged, the time it was first seen with
+    that hash stands. With nothing remembered yet, the file time -- the old rule, so a first
+    run raises no false alarm. Clock-independent on purpose: entry headings are typed by
+    hand and were wrong by hours the same day.
+    """
+    mtime = logbook.stat().st_mtime
+    try:
+        digest = hashlib.sha1(_body(logbook.read_text("utf-8-sig")).encode("utf-8")).hexdigest()
+    except OSError:
+        return mtime
+    key = str(folder)
+    seen = bodies.get(key)
+    if seen and seen[0] == digest:
+        return min(mtime, seen[1])
+    bodies[key] = [digest, mtime]
+    return mtime
+
+
 def unrecorded(root: Path, name: str) -> list[str]:
     out = []
+    path = _bodies_path()
+    try:
+        bodies = json.loads(path.read_text("utf-8"))
+    except Exception:
+        bodies = {}
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
         logbook = folder / name
         work, newest_name = newest_work(folder, name)
         if work == 0.0:
             continue
-        logged = logbook.stat().st_mtime if logbook.is_file() else 0.0
+        logged = recorded_time(folder, logbook, bodies) if logbook.is_file() else 0.0
         # Newer than the logbook at all -- but leave alone what is being written now.
         if work > logged and (time.time() - work) > GRACE_SECONDS:
             if logbook.is_file():
                 out.append(f"{folder.name} (newest: {newest_name})")
             else:
                 out.append(f"{folder.name} (no {name} at all; newest: {newest_name})")
+    try:
+        path.write_text(json.dumps(bodies, ensure_ascii=False), "utf-8")
+    except Exception:
+        pass          # memory is a courtesy; without it the file time is used, as before
     return out
 
 
@@ -132,6 +182,43 @@ def undefined(root: Path, name: str) -> list[str]:
         touched = max(work, logbook.stat().st_mtime)
         if now - touched <= RECENT_SECONDS and not _criterion(logbook):
             out.append(folder.name)
+    return out
+
+
+# 2026-09-28, 20:04 by the clock: six logbooks' top entries were headed 22:30, 23:40 and
+# "2026-09-29 00:50" -- typed by the agent, not read from a clock. A few minutes of slack
+# for a heading written just before it was saved.
+FUTURE_SLACK_SECONDS = 600
+_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}):(\d{2}))?")
+
+
+def future_dated(root: Path, name: str) -> list[str]:
+    """Folders whose NEWEST entry is headed later than now. Only the top entry: an old
+    mistake below it is history; the top one is what the next session trusts."""
+    out = []
+    now = datetime.now()
+    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        book = folder / name
+        try:
+            text = book.read_text("utf-8-sig")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            m = _HEADING.match(line)
+            if not m:
+                continue
+            try:
+                day = datetime.strptime(m.group(1), "%Y-%m-%d")
+            except ValueError:
+                break
+            if m.group(2):
+                when = day.replace(hour=int(m.group(2)), minute=int(m.group(3)))
+                late = (when - now).total_seconds() > FUTURE_SLACK_SECONDS
+            else:
+                late = day.date() > now.date()
+            if late:
+                out.append(f"{folder.name} (top entry: \"{line[3:40].strip()}\")")
+            break
     return out
 
 
@@ -175,7 +262,8 @@ def main() -> int:
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     open_ended = [f for f in undefined(root, name) if f not in asked]
-    if not stale and not open_ended:
+    ahead = [f for f in future_dated(root, name) if f"future:{f}" not in asked]
+    if not stale and not open_ended and not ahead:
         return 0
 
     parts = []
@@ -198,6 +286,14 @@ def main() -> int:
             "If it is not known yet, ask the human rather than inventing one. "
             "(Asked once per session.)")
         _remember(session, asked | set(open_ended))
+    if ahead:
+        listed = "\n".join(f"  - {folder}" for folder in ahead)
+        parts.append(
+            f"Baton: these {name} files have a newest entry headed LATER than the clock "
+            f"({datetime.now():%Y-%m-%d %H:%M}):\n{listed}\n\n"
+            "Read the time from the clock (`date`) and correct the heading -- a record whose "
+            "date is wrong is wrong about the one thing a record is for. (Asked once per session.)")
+        _remember(session, _already_asked(session) | {f"future:{f}" for f in ahead})
     json.dump({"decision": "block", "reason": "\n\n".join(parts)}, sys.stdout)
     return 0
 

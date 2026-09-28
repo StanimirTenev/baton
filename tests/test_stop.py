@@ -162,3 +162,74 @@ def test_both_findings_arrive_in_one_block(tmp_path, monkeypatch):
 def test_stop_hook_active_still_wins(tmp_path, monkeypatch):
     _headed(tmp_path, "strategy", "---\nsastoyanie: aktivna\n---\n", age=60)
     assert _run(tmp_path, monkeypatch, {"session_id": "s1", "stop_hook_active": True}) == {}
+
+
+# --- a header edit is not a logbook entry ------------------------------------------
+# 2026-09-28: aliases were added to every task header. Adding them rewrote DNEVNIK.md, its
+# mtime moved past the unrecorded work, and the Stop hook called that work recorded -- in
+# Baton's own folder, the evening the feature shipped. The test is the body below the
+# header, remembered by hash: a header edit leaves it unchanged, a new entry does not.
+
+def test_a_header_edit_does_not_hide_unrecorded_work(tmp_path, monkeypatch):
+    monkeypatch.setenv("BATON_BODY_STATE", str(tmp_path / ".bodies.json"))
+    folder = _task(tmp_path, "baton", log_age=7200, work_age=9000)
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []            # recorded, body remembered
+    work = folder / "draft.md"
+    os.utime(work, (time.time() - 600, time.time() - 600))          # work after the entry
+    log = folder / "LOGBOOK.md"
+    log.write_text(log.read_text(encoding="utf-8").replace(
+        "sastoyanie: aktivna", "sastoyanie: aktivna\naliases: [x]"), encoding="utf-8")
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == ["baton (newest: draft.md)"]
+
+
+def test_a_new_entry_does_record_the_work(tmp_path, monkeypatch):
+    monkeypatch.setenv("BATON_BODY_STATE", str(tmp_path / ".bodies.json"))
+    folder = _task(tmp_path, "baton", log_age=7200, work_age=9000)
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []
+    os.utime(folder / "draft.md", (time.time() - 600, time.time() - 600))
+    log = folder / "LOGBOOK.md"
+    text = log.read_text(encoding="utf-8")
+    log.write_text(text.replace("## 2026-01-01", "## 2026-09-28 20:05 — new\n\ndone\n\n## 2026-01-01"),
+                   encoding="utf-8")
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []
+
+
+def test_no_remembered_body_falls_back_to_the_file_time(tmp_path, monkeypatch):
+    """First run on a machine: nothing remembered, so the old rule -- no false alarms."""
+    monkeypatch.setenv("BATON_BODY_STATE", str(tmp_path / ".bodies.json"))
+    _task(tmp_path, "gama", log_age=10, work_age=3600)
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []
+
+
+# --- an entry dated in the future ----------------------------------------------------
+# 2026-09-28, 20:04 by the clock: the top entries of six logbooks were headed 22:30,
+# 23:40, and "2026-09-29 00:50". The agent typed the times instead of reading them. A
+# record whose date is wrong by hours is wrong about the one thing a record is for.
+
+def _heading(root: Path, name: str, heading: str):
+    folder = root / name
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "LOGBOOK.md").write_text(
+        "---\nkriterii_zavarshvane: \"x\"\n---\n\n" + heading + "\n\nbody\n", encoding="utf-8")
+    return folder
+
+
+def test_an_entry_headed_later_than_the_clock_is_named(tmp_path):
+    from datetime import datetime, timedelta
+    later = (datetime.now() + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M")
+    _heading(tmp_path, "alpha", f"## {later} — typed, not read")
+    out = bs.future_dated(tmp_path, "LOGBOOK.md")
+    assert out and out[0].startswith("alpha") and later in out[0]
+
+
+def test_an_entry_headed_now_or_earlier_is_fine(tmp_path):
+    from datetime import datetime, timedelta
+    _heading(tmp_path, "beta", f"## {datetime.now().strftime('%Y-%m-%d %H:%M')} — now")
+    _heading(tmp_path, "gama", f"## {(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')} — date only")
+    assert bs.future_dated(tmp_path, "LOGBOOK.md") == []
+
+
+def test_a_date_only_heading_for_tomorrow_is_named(tmp_path):
+    from datetime import date, timedelta
+    _heading(tmp_path, "delta", f"## {(date.today() + timedelta(days=1)).isoformat()} — tomorrow")
+    assert bs.future_dated(tmp_path, "LOGBOOK.md")[0].startswith("delta")

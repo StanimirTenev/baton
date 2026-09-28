@@ -408,6 +408,19 @@ answered.
 
 ## Writing the entry
 
+**The time in the heading is read from the clock (`date`), never typed.** On 2026-09-28 the agent
+headed six logbooks' newest entries 22:30, 23:40 and "2026-09-29 00:50" at 20:04 by the clock.
+Two Stop checks came from that evening, both mechanical:
+- **An entry headed later than the clock** (ten minutes' slack) hands the turn back once per
+  session: correct the heading. Only the newest entry is checked — it is the one the next
+  session trusts.
+- **A header edit is not an entry.** Stop used to compare work against the logbook's file time,
+  so adding `aliases` to every header made every folder look recorded — Baton's own included,
+  the evening the prompt hook shipped. It now remembers the body below the header by hash
+  (`baton.bodies.json` next to the hooks); while the body is unchanged, its first-seen time
+  stands. Nothing remembered yet means the file time, as before, so a first run raises nothing.
+
+
 ```
 python3 tools/baton_vpishi.py <logbook> <entry-file> [--sledvashto NEW --staro OLD]
 ```
