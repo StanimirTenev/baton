@@ -75,3 +75,16 @@ def test_a_dry_run_writes_nothing(tmp_path):
     _result, local = _run(tmp_path, dry="1")
     after = json.loads(local.read_text(encoding="utf-8"))
     assert after == EXISTING, "a dry run may not touch the file"
+
+
+def test_all_three_hooks_are_registered_and_each_points_at_its_own_file(tmp_path):
+    """2026-09-28: the third hook. A hook the installer does not register never runs,
+    whatever the tests of the hook itself say."""
+    result, _ = _run(tmp_path)
+    assert result.returncode == 0, result.stderr
+    hooks = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))["hooks"]
+    want = {"SessionStart": "baton_session_start.py", "Stop": "baton_stop.py",
+            "UserPromptSubmit": "baton_prompt.py"}
+    for event, script in want.items():
+        args = [a for g in hooks.get(event, []) for h in g["hooks"] for a in h.get("args", [])]
+        assert any(a.endswith(script) for a in args), f"{event} does not run {script}: {args}"

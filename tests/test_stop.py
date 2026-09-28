@@ -89,3 +89,76 @@ def test_the_hook_blocks_through_its_real_entry_point(tmp_path, monkeypatch):
     payload = json.loads(out.stdout)
     assert payload.get("decision") == "block"
     assert "zeta" in payload.get("reason", "")
+
+
+# --- a task with no criterion of done -----------------------------------------
+# 2026-09-28: a conversation that was "only thinking aloud" ended in a decision on
+# priorities and was never recognised as a task. The mechanical half of that: a folder
+# worked in now whose header does not say when it is finished. Asked once per session,
+# never on legacy folders nobody touched.
+
+def _headed(root: Path, name: str, header: str, age: float, logbook="LOGBOOK.md"):
+    folder = root / name
+    folder.mkdir(parents=True, exist_ok=True)
+    log = folder / logbook
+    log.write_text(header + "\n## 2026-09-28 20:00 — x\n\ny\n", encoding="utf-8")
+    now = time.time()
+    os.utime(log, (now - age, now - age))
+    return folder
+
+
+def test_a_touched_task_without_a_criterion_is_named(tmp_path):
+    _headed(tmp_path, "strategy", "---\nsastoyanie: aktivna\n---\n", age=60)
+    assert bs.undefined(tmp_path, "LOGBOOK.md") == ["strategy"]
+
+
+def test_a_touched_task_with_no_header_at_all_is_named(tmp_path):
+    _headed(tmp_path, "fresh", "# just notes", age=60)
+    assert bs.undefined(tmp_path, "LOGBOOK.md") == ["fresh"]
+
+
+def test_a_task_with_a_criterion_is_left_alone(tmp_path):
+    _headed(tmp_path, "done-able", "---\nkriterii_zavarshvane: \"the page is live\"\n---\n", age=60)
+    assert bs.undefined(tmp_path, "LOGBOOK.md") == []
+
+
+def test_an_empty_criterion_is_no_criterion(tmp_path):
+    _headed(tmp_path, "blank", "---\nkriterii_zavarshvane: \"\"\n---\n", age=60)
+    assert bs.undefined(tmp_path, "LOGBOOK.md") == ["blank"]
+
+
+def test_an_untouched_legacy_folder_is_left_alone(tmp_path):
+    """Not this session's work: asking about it would nag on day one."""
+    _headed(tmp_path, "old", "---\nsastoyanie: aktivna\n---\n", age=3 * 3600)
+    assert bs.undefined(tmp_path, "LOGBOOK.md") == []
+
+
+def _run(tmp_path, monkeypatch, payload):
+    monkeypatch.setenv("BATON_HOME", str(tmp_path))
+    monkeypatch.setenv("BATON_LOGBOOK", "LOGBOOK.md")
+    monkeypatch.setenv("BATON_STATE_DIR", str(tmp_path / ".state"))
+    out = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout) if out.stdout.strip() else {}
+
+
+def test_no_criterion_blocks_once_per_session_through_the_entry_point(tmp_path, monkeypatch):
+    _headed(tmp_path, "strategy", "---\nsastoyanie: aktivna\n---\n", age=60)
+    first = _run(tmp_path, monkeypatch, {"session_id": "s1"})
+    assert first.get("decision") == "block"
+    assert "strategy" in first["reason"] and "kriterii_zavarshvane" in first["reason"]
+    assert _run(tmp_path, monkeypatch, {"session_id": "s1"}) == {}, "asked twice in one session"
+    assert _run(tmp_path, monkeypatch, {"session_id": "s2"}).get("decision") == "block"
+
+
+def test_both_findings_arrive_in_one_block(tmp_path, monkeypatch):
+    _task(tmp_path, "zeta", log_age=3600, work_age=600)
+    _headed(tmp_path, "strategy", "---\nsastoyanie: aktivna\n---\n", age=60)
+    out = _run(tmp_path, monkeypatch, {"session_id": "s1"})
+    assert "zeta" in out["reason"] and "strategy" in out["reason"]
+
+
+def test_stop_hook_active_still_wins(tmp_path, monkeypatch):
+    _headed(tmp_path, "strategy", "---\nsastoyanie: aktivna\n---\n", age=60)
+    assert _run(tmp_path, monkeypatch, {"session_id": "s1", "stop_hook_active": True}) == {}

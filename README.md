@@ -64,8 +64,8 @@ per-process scope PowerShell provides for exactly this.
 ### What it does, on every OS
 
 Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
-skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`), appends to
-`~/.claude/CLAUDE.md`, merges two entries into `~/.claude/settings.json`, and creates
+skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`), appends to
+`~/.claude/CLAUDE.md`, merges three entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
 or a USB stick — can be removed afterwards. Run it twice and the second run reports that
 everything is already in place. Add `--dry-run` (or `-DryRun` on Windows) to see the
@@ -107,6 +107,29 @@ tokens and half an hour; four agents ≈ 660 thousand. Worth it when there is so
 letter — where a swarm returns opinions, and opinions do not improve by being seven.
 
 The test: *what would the round check its answer against?* No answer, no round.
+
+### Before any of it: `/baton-task`
+
+Research answers a question; if the question was never stated, it answers the one the agent
+assumed. `/baton-task` is the step before: **recognise** that a conversation has become a task
+or a decision, **read back** what was already done and decided — the entries on the topic, not
+the top one — **formulate** the goal and a criterion someone could check, and only then go
+outward (large → `/baton-plan`).
+
+Two hooks hold the checkable half of it, so it does not depend on the agent remembering:
+- **UserPromptSubmit** (`baton_prompt.py`): a message that names a task — its folder, or one of
+  the `aliases` in its header, in any alphabet, meeting endings halfway (`скенер` finds
+  `скенера`) — gets that task's last entry and next step put in front of the agent, with
+  "read the logbook first". Once per task per session; silent when nothing is named; never
+  blocks a message.
+- **Stop**: a task worked on now whose header has no `kriterii_zavarshvane` hands the turn back
+  once per session: say when it is done, or ask the human — never invent one.
+
+Measured on the day that made it (2026-09-28), against its three misses: a proposal to redo a
+review finished two days earlier (the prompt hook names the task, given an alias); a
+conversation that became a decision on priorities without anyone saying so (the Stop hook
+asks, once the folder exists; recognising it before that is the skill's job, not a hook's);
+and a comment drafted from half a post (a reading rule, out of scope here).
 
 ### A big new goal: `/baton-plan`
 
@@ -194,6 +217,7 @@ vremevi_kriterii: po_izbor   # po_izbor (any time) | postoyanno (recurring) | YY
 sledvashto: "decide tax_region before the run"             # the next concrete action
 prioritet: visok             # visok | sreden | nisak  (high | medium | low)
 umeniya: [db-migration]      # optional: the skills this task needs (see below)
+aliases: [migration, миграция]  # optional: words people use for it, any alphabet (prompt hook)
 vyarno_kum: 2026-03-14       # optional: when this header was last true
 pregled_sled: 30d            # optional: how long that is expected to hold (30d, 6m)
 srok: 2026-04-01             # optional: a deadline on its own line, if you prefer it there

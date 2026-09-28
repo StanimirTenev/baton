@@ -76,6 +76,7 @@ def main() -> int:
     wanted = {
         "SessionStart": os.path.join(hookdir, "baton_session_start.py"),
         "Stop": os.path.join(hookdir, "baton_stop.py"),
+        "UserPromptSubmit": os.path.join(hookdir, "baton_prompt.py"),
     }
 
     def is_baton(h):

@@ -15,6 +15,7 @@ import fnmatch
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -97,6 +98,65 @@ def unrecorded(root: Path, name: str) -> list[str]:
     return out
 
 
+# A task worked in now whose header does not say when it is finished (2026-09-28: a
+# conversation became a decision on priorities and was never recognised as a task).
+# "Now" is a window, not the turn: a Stop hook sees files, not turns. Legacy folders
+# nobody touched are outside it, so this cannot nag on day one.
+RECENT_SECONDS = 1800
+
+
+def _criterion(logbook: Path) -> bool:
+    """Does the header carry a non-empty `kriterii_zavarshvane`? No header is no."""
+    try:
+        text = logbook.read_text("utf-8-sig")
+    except OSError:
+        return False
+    if not text.startswith("---"):
+        return False
+    head = text.split("---", 2)[1] if text.count("---") >= 2 else ""
+    for line in head.splitlines():
+        key, _, value = line.partition(":")
+        if key.strip() == "kriterii_zavarshvane":
+            return value.strip().strip("\"'").strip() != ""
+    return False
+
+
+def undefined(root: Path, name: str) -> list[str]:
+    out = []
+    now = time.time()
+    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        logbook = folder / name
+        if not logbook.is_file():
+            continue          # no logbook at all is `unrecorded`'s finding, not this one
+        work, _ = newest_work(folder, name)
+        touched = max(work, logbook.stat().st_mtime)
+        if now - touched <= RECENT_SECONDS and not _criterion(logbook):
+            out.append(folder.name)
+    return out
+
+
+def _state(session: str) -> Path:
+    base = Path(os.environ.get("BATON_STATE_DIR") or tempfile.gettempdir())
+    safe = "".join(ch for ch in session if ch.isalnum() or ch in "-_")[:80] or "nosession"
+    return base / f"baton-stop-{safe}.json"
+
+
+def _already_asked(session: str) -> set:
+    try:
+        return set(json.loads(_state(session).read_text("utf-8")))
+    except Exception:
+        return set()
+
+
+def _remember(session: str, asked: set) -> None:
+    try:
+        path = _state(session)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sorted(asked)), "utf-8")
+    except Exception:
+        pass          # state is a courtesy; never a reason to fail the session
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -112,25 +172,33 @@ def main() -> int:
         return 0
 
     stale = unrecorded(root, name)
-    if not stale:
+    session = str(payload.get("session_id") or "")
+    asked = _already_asked(session)
+    open_ended = [f for f in undefined(root, name) if f not in asked]
+    if not stale and not open_ended:
         return 0
 
-    listed = "\n".join(f"  - {folder}" for folder in stale)
-    json.dump(
-        {
-            "decision": "block",
-            "reason": (
-                f"Baton: these task folders hold work newer than their {name}:\n"
-                f"{listed}\n\n"
-                f"Prepend an entry to each one's {name} before finishing — what was "
-                "asked, what was done, the result, and what is still open. Write it for "
-                "the next session, which will have none of this conversation.\n\n"
-                "If the change was incidental and genuinely needs no entry, say so in one "
-                "line and finish."
-            ),
-        },
-        sys.stdout,
-    )
+    parts = []
+    if stale:
+        listed = "\n".join(f"  - {folder}" for folder in stale)
+        parts.append(
+            f"Baton: these task folders hold work newer than their {name}:\n"
+            f"{listed}\n\n"
+            f"Prepend an entry to each one's {name} before finishing — what was "
+            "asked, what was done, the result, and what is still open. Write it for "
+            "the next session, which will have none of this conversation.\n\n"
+            "If the change was incidental and genuinely needs no entry, say so in one "
+            "line and finish.")
+    if open_ended:
+        listed = "\n".join(f"  - {folder}" for folder in open_ended)
+        parts.append(
+            f"Baton: these tasks were worked on now, and their {name} header does not say "
+            f"when they are finished:\n{listed}\n\n"
+            "Add `kriterii_zavarshvane:` to the header — one sentence a person could check. "
+            "If it is not known yet, ask the human rather than inventing one. "
+            "(Asked once per session.)")
+        _remember(session, asked | set(open_ended))
+    json.dump({"decision": "block", "reason": "\n\n".join(parts)}, sys.stdout)
     return 0
 
 

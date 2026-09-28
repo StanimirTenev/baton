@@ -73,12 +73,15 @@ New state replaces old state in the memory file. The logbook only ever grows.
 
 ## Enforcement
 
-Two hooks ship with Baton and do not depend on the agent remembering any of the above:
+Three hooks ship with Baton and do not depend on the agent remembering any of the above:
 
 - **SessionStart** lists the task folders grouped by who holds the next move and sorted by
   priority (from each logbook's header), or by last entry when a logbook has no header.
 - **Stop** checks whether a task folder has files newer than its `LOGBOOK.md`, and if so
   returns the turn to the agent with a note saying which one is unrecorded.
+  It also asks, once per session, for a `kriterii_zavarshvane` when a task worked on has none.
+- **UserPromptSubmit** names a task a message touches — by folder or `aliases` — with its last
+  entry and next step, so its record is read before anything is proposed.
 
 Work that predates Baton is mapped once with `/baton-inventory`. The skill searches the
 machine, you confirm each task's state, and only then does it create folders with

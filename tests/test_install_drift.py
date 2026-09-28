@@ -80,3 +80,17 @@ def test_a_missing_source_directory_is_not_an_error(tmp_path, monkeypatch):
     monkeypatch.delenv("BATON_SOURCE", raising=False)
     mod = _load(_install(tmp_path, source=tmp_path / "does-not-exist"))
     assert mod.install_drift() == []
+
+
+def test_a_hook_in_the_source_that_was_never_installed_is_reported(tmp_path, monkeypatch):
+    """2026-09-28: a third hook (`baton_prompt.py`). Both-files-exist was the only case
+    compared, so a hook that was never copied at all passed in silence -- the 19.09 failure
+    again, one level down: the check is there, and the file it would check is not."""
+    monkeypatch.delenv("BATON_SOURCE", raising=False)
+    src = tmp_path / "src"
+    src.mkdir()
+    shutil.copy(HOOK, src / "baton_session_start.py")
+    (src / "baton_stop.py").write_text("# stop\n", encoding="utf-8")
+    (src / "baton_prompt.py").write_text("# prompt\n", encoding="utf-8")
+    mod = _load(_install(tmp_path, source=src))
+    assert mod.install_drift() == ["baton_prompt.py (not installed)"]

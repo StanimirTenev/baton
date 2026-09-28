@@ -116,10 +116,13 @@ def install_drift() -> list[str]:
     if src is None or not src.is_dir():
         return []
     out = []
-    for name in ("baton_session_start.py", "baton_stop.py"):
+    for name in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py"):
         here, there = Path(__file__).with_name(name), src / name
         try:
-            if here.is_file() and there.is_file() and here.read_bytes() != there.read_bytes():
+            if there.is_file() and not here.is_file():
+                # In the source and not running: the silent case, and the worst one.
+                out.append(f"{name} (not installed)")
+            elif here.is_file() and there.is_file() and here.read_bytes() != there.read_bytes():
                 out.append(name)
         except OSError:
             continue
