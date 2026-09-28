@@ -28,7 +28,7 @@ Measured 2026-09-23, not assumed, and the easiest thing here to get backwards:
 
 | question | evidence | what the other way does |
 |---|---|---|
-| "has the pointer gone stale?" | an EXTRACT (~2600 chars) | the whole file drops real cases 0.73 → 0.43 |
+| "has the pointer gone stale?" | an EXTRACT (~2600 chars), see `izvadka` | the whole file drops real cases 0.73 → 0.43 |
 | "which claim is unsupported?" | the WHOLE file | an extract gives false ones: 0.02 against 0.97 |
 
 One reason both ways: a summary judgement is DILUTED by a long text, while a single
@@ -69,6 +69,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 import re
 import sys
@@ -352,6 +353,62 @@ def detail(root: Path, target: str, limit: int) -> tuple[str, str]:
     return text[:limit], text
 
 
+GLAVA = 1000   # for --dali: the head always goes; retrieval fills the rest of OTRYAZAK
+_DUMA = re.compile(r"\d+(?:[.:]\d+)+|\w+")
+
+
+def _dumi(text: str) -> set[str]:
+    """Words as crude stems: lower case, first five letters, four or more letters.
+
+    Lexical, not semantic -- Baton is stdlib only. Five letters is enough to meet
+    Bulgarian endings halfway (профилите / профила); dates stay whole (14.09).
+    """
+    return {w[:5] if w.isalpha() else w
+            for w in _DUMA.findall(text.lower()) if len(w) >= 4}
+
+
+def izvadka(text: str, pointer: str, limit: int = OTRYAZAK) -> str:
+    """The head of the file, plus the paragraphs the pointer is about, within `limit`.
+
+    Measured 2026-09-23: `project_linkedin_strategiya.md` kept scoring 0.77 AFTER its
+    pointer was corrected, because the evidence for the correction sat below the
+    2600-character cut. The model answered the question it was shown; it was not shown
+    the part of the file the pointer was about.
+
+    The head stays because it is why the extract beat the whole file (0.73 against
+    0.43): these files put what is true now at the top. The size stays because the
+    whole file dilutes. What changes is which paragraphs fill the rest -- the ones
+    sharing the most (rare) words with the pointer, in file order, each gap marked
+    `[…]` so stitched pieces do not read as one statement. No paragraph shares a
+    word: the old extract, unchanged.
+    """
+    head = text[:GLAVA]
+    words = _dumi(re.sub(r"\]\([^)]*\)", "]", pointer))
+    chunks, pos = [], 0
+    for para in re.split(r"\n\s*\n", text):
+        start = text.find(para, pos)
+        pos = start + len(para)
+        if start >= GLAVA and para.strip():
+            chunks.append((start, para.strip()[:800]))
+    df: dict[str, int] = {}
+    for _, para in chunks:
+        for w in _dumi(para) & words:
+            df[w] = df.get(w, 0) + 1
+    scored = []
+    for start, para in chunks:
+        score = sum(math.log((len(chunks) + 1) / (df[w] + 0.5)) for w in _dumi(para) & words)
+        if score > 0:
+            scored.append((score, start, para))
+    chosen, room = [], limit - len(head)
+    for _, start, para in sorted(scored, key=lambda s: (-s[0], s[1])):
+        if len(para) + 5 <= room:
+            chosen.append((start, para))
+            room -= len(para) + 5
+    if not chosen:
+        return text[:limit]
+    return head + "".join(f"\n[…]\n{para}" for _, para in sorted(chosen))
+
+
 def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     indeks = Path(cfg["indeks"]).expanduser()
     podbor = Path(cfg["podbor"]).expanduser() if cfg.get("podbor") else None
@@ -365,6 +422,7 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
             if not body:
                 print(f"  ⚠️ няма файл — {target}")
                 continue
+            body = izvadka(tsyalo, pointer)
             state = (f"INDEX LINE (a pointer in an index):\n{pointer}\n\n"
                      f"DETAIL FILE ({target}), the source of truth:\n{body}")
             # A confidential row stops ITSELF, not the review: otherwise the only

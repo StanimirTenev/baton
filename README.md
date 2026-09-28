@@ -513,7 +513,7 @@ Measured, and the easiest thing here to get backwards:
 
 | question | evidence | what the other way does |
 |---|---|---|
-| has the pointer gone stale? | an **extract** (~2600 chars) | the whole file drops real cases 0.73 → 0.43 |
+| has the pointer gone stale? | an **extract** (~2600 chars): the head, plus the paragraphs the pointer is about | the whole file drops real cases 0.73 → 0.43 |
 | which claim is unsupported? | the **whole file** | an extract gives false ones: 0.02 against 0.97 |
 
 One reason both ways: a summary judgement is diluted by a long text, while a single claim has
@@ -522,8 +522,23 @@ its evidence *somewhere* in it — and a cut above that evidence fails the claim
 `--koe` caps at 28000 characters and **says so** when it cuts, because below the cut nothing
 can support anything and a low score there means "don't know", not "no".
 
-The same cut is why `--dali` keeps flagging a pointer whose correction is recorded deep in the
-file: the fix is real, the extract cannot see it. Read what it flags; do not trust it.
+Until v2.16.0 the extract was the first 2600 characters, and that cut is why `--dali` kept
+flagging a pointer whose correction was recorded deep in the file: the fix was real, the
+extract could not see it. Now the first 1000 characters always go -- these files put what is
+true now at the top -- and the rest is filled with the paragraphs sharing the most words with
+the pointer, in file order, each gap marked `[…]`. The size stays, because the whole file
+dilutes. No paragraph shares a word: the old extract, unchanged.
+
+Retrieval is **by words, not by meaning** -- Baton is stdlib only. Words are cut to five
+letters to meet Bulgarian endings halfway, and rare words weigh more than common ones.
+
+Measured on a control of 14 pointers into six real memory files, 12 of them with their
+evidence below character 2600, half deliberately made false: **7/14 right before, 13/14
+after**; false pointers rose by 0.32 on average, true ones fell by 0.23, and the two whose
+evidence is in the head did not move. One false pointer stayed below the threshold in both
+versions with the right paragraph in the extract -- that miss is the model's, not the
+retrieval's. On the live index the three rows sent moved by at most 0.04. Fourteen rows is a
+control, not a calibration: the threshold is still an ordering.
 
 ### `--koe` takes a task name
 
@@ -891,6 +906,16 @@ per project, a short state file under 150 lines, chronology in a separate histor
   the reason.
 - From a product note asking for records "linked to the actual files and results". Everything
   else that note proposed already existed here; this was the one new thing in it.
+
+**v2.16.0** — `--dali` shows the model the part of the file the pointer is about
+
+- The extract was the first 2600 characters. A pointer corrected deep in its file kept
+  lighting (0.77 after the fix, 2026-09-23), because the evidence was never sent. Now: the
+  head, plus the paragraphs sharing the most words with the pointer, within the same 2600.
+- Control, 14 pointers, 12 with evidence below the old cut: 7/14 → 13/14. A true pointer the
+  old cut flagged at 0.76 now reads 0.19. Live index: at most 0.04 movement.
+- Lexical, stdlib only. The confidentiality barrier still reads the whole file, not the
+  extract. `--koe` and `--zadachi` are unchanged: their cuts keep the newest entries.
 
 **v2.15.1** — a sha ref printed twice
 

@@ -537,3 +537,66 @@ def test_a_confidential_word_in_the_criteria_is_caught_too(monkeypatch):
                       "criteria": {"true": "it names дарми", "false": "it does not"}}}
     with pytest.raises(SystemExit, match="Не напуска машината"):
         bp.pitay("k", "innocuous", question, "label", ["дарми"])
+
+
+# --- `--dali` fetches the part of the file the pointer is about ---------------
+
+_FILLER = "".join(f"Параграф {i}: рутинна бележка за сесията без значение тук.\n\n"
+                  for i in range(120))
+
+
+def test_dali_extract_reaches_evidence_below_the_cut():
+    """The linkedin case, 2026-09-23: the pointer was corrected, the evidence for the
+    correction sat below character 2600, and the row kept scoring 0.77 -- the model
+    was never shown the part of the file the pointer was about."""
+    head = "Състояние: стратегията е в сила.\n\n"
+    deep = "Постът за профилите излезе на 14.09 и вторият на 15.09.\n\n"
+    text = head + _FILLER + deep + _FILLER
+    assert text.index(deep) > bp.OTRYAZAK * 2
+    pointer = "[LinkedIn стратегия](x.md) — постовете за профилите излязоха на 14.09 и 15.09"
+    out = bp.izvadka(text, pointer)
+    assert "14.09" in out and "15.09" in out
+    assert len(out) <= bp.OTRYAZAK
+    assert out.startswith(head.strip())
+
+
+def test_dali_extract_keeps_the_head_where_current_state_lives():
+    """Head-only beat the whole file 0.73 against 0.43: these files put what is true
+    now at the top. Retrieval adds to the head; it never replaces it."""
+    text = "ГЛАВА С ТЕКУЩОТО СЪСТОЯНИЕ.\n\n" + _FILLER + "дълбоко нещо за ключа\n\n" + _FILLER
+    out = bp.izvadka(text, "[x](x.md) — ключа")
+    assert out.startswith("ГЛАВА С ТЕКУЩОТО СЪСТОЯНИЕ.")
+
+
+def test_dali_extract_without_a_match_is_the_old_extract():
+    text = "Начало.\n\n" + _FILLER + _FILLER
+    assert bp.izvadka(text, "[x](x.md) — нищо общо тук zzzqqq") == text[:bp.OTRYAZAK]
+
+
+def test_dali_extract_marks_the_gaps():
+    """Stitched pieces must not read as one continuous file: a state line from the
+    head followed directly by an old paragraph would look like one statement."""
+    text = "Начало.\n\n" + _FILLER + "Ключът е сменен на 20.09.\n\n" + _FILLER
+    out = bp.izvadka(text, "[x](x.md) — ключът е сменен на 20.09")
+    assert "[…]" in out
+
+
+def test_dali_sends_the_retrieved_extract(tmp_path, monkeypatch):
+    """Wiring, not only the function: what reaches the wire must carry the paragraph
+    the pointer is about, even when it sits far below the old cut."""
+    (tmp_path / "INDEX.md").write_text(
+        "- [Row](detail.md) — ключът е сменен на 20.09\n", encoding="utf-8")
+    (tmp_path / "detail.md").write_text(
+        "Начало.\n\n" + _FILLER + "Ключът е сменен на 20.09 от Петров.\n\n" + _FILLER,
+        encoding="utf-8")
+    sent = []
+
+    def capture(request, *a, **k):
+        sent.append(json.loads(request.data)["state"])
+        return _Reply({"answers": {"stale": {"noul": 0.1}}, "usage": {"cost": 0.0001}})
+
+    monkeypatch.setattr(bp.urllib.request, "urlopen", capture)
+    bp.dali("k", _cfg(tmp_path), set())
+    # A word only the deep paragraph has: the pointer itself travels in the state too,
+    # so a phrase from the pointer would pass without any retrieval at all.
+    assert sent and "Петров" in sent[0]
