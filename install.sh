@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Baton installer (Linux / macOS). Idempotent — running it twice changes nothing.
+# Baton installer (Linux / macOS). Idempotent — running it twice changes nothing, and a
+# second run keeps the task root and logbook name the first one was given.
 #
 #   ./install.sh                    install into ~/.claude, tasks in ~/tasks
 #   BATON_HOME=~/work ./install.sh  put task folders somewhere else
@@ -26,6 +27,21 @@ if [ -z "$PY" ]; then
 fi
 # absolute interpreter path — baked into the hook so it never depends on PATH at run time
 PYEXE="$("$PY" -c 'import sys; print(sys.executable)')"
+
+# A reinstall keeps the task root and logbook it was given the first time, unless new ones
+# are passed. 2026-09-28: a plain `./install.sh` wrote ~/tasks and LOGBOOK.md over
+# ~/zadachi and DNEVNIK.md, and every hook went quiet looking at an empty folder.
+PREV="$HOOKDIR/baton.local.json"
+if [ -f "$PREV" ]; then
+  if [ -z "${BATON_HOME:-}" ]; then
+    v="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8-sig")).get("home", ""))' "$PREV" 2>/dev/null || true)"
+    [ -n "$v" ] && TASKS="$v"
+  fi
+  if [ -z "${BATON_LOGBOOK:-}" ]; then
+    v="$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8-sig")).get("logbook", ""))' "$PREV" 2>/dev/null || true)"
+    [ -n "$v" ] && LOGBOOK="$v"
+  fi
+fi
 
 say() { printf '  %s\n' "$*"; }
 

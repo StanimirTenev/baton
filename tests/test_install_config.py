@@ -13,6 +13,7 @@ right refusal, and also means a silent reinstall turns the review tool off.
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -88,3 +89,22 @@ def test_all_three_hooks_are_registered_and_each_points_at_its_own_file(tmp_path
     for event, script in want.items():
         args = [a for g in hooks.get(event, []) for h in g["hooks"] for a in h.get("args", [])]
         assert any(a.endswith(script) for a in args), f"{event} does not run {script}: {args}"
+
+
+def test_a_second_install_without_env_keeps_the_task_root_and_logbook(tmp_path):
+    """2026-09-28, on this machine: `./install.sh` run again without BATON_HOME /
+    BATON_LOGBOOK wrote the defaults (~/tasks, LOGBOOK.md) over DNEVNIK.md in ~/zadachi.
+    Every hook then looked at an empty folder and said nothing -- the quiet failure. The
+    header of install.sh promised "running it twice changes nothing"."""
+    install = Path(__file__).resolve().parent.parent / "install.sh"
+    home, claude, zad = tmp_path / "home", tmp_path / "claude", tmp_path / "zad"
+    home.mkdir()
+    env = {"HOME": str(home), "CLAUDE_CONFIG_DIR": str(claude), "PATH": os.environ["PATH"]}
+    first = subprocess.run(["bash", str(install)], capture_output=True, text=True,
+                           env={**env, "BATON_HOME": str(zad), "BATON_LOGBOOK": "DNEVNIK.md"})
+    assert first.returncode == 0, first.stderr
+    second = subprocess.run(["bash", str(install)], capture_output=True, text=True, env=env)
+    assert second.returncode == 0, second.stderr
+    cfg = json.loads((claude / "baton" / "hooks" / "baton.local.json").read_text(encoding="utf-8"))
+    assert cfg["home"] == str(zad) and cfg["logbook"] == "DNEVNIK.md", cfg
+    assert not (home / "tasks").exists(), "a second install created the default folder"

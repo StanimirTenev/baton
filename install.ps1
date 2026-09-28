@@ -19,6 +19,17 @@ $HookDir   = Join-Path $Install "hooks"       # (or clone, or download) can go a
 $Tasks     = if ($env:BATON_HOME) { $env:BATON_HOME } else { Join-Path $HOME "tasks" }
 $Logbook   = if ($env:BATON_LOGBOOK) { $env:BATON_LOGBOOK } else { "LOGBOOK.md" }
 
+# A reinstall keeps the task root and logbook it was given the first time (2026-09-28: a
+# plain rerun wrote the defaults over them and every hook went quiet).
+$Prev = Join-Path $HookDir "baton.local.json"
+if (Test-Path $Prev) {
+    try {
+        $cfg = Get-Content $Prev -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $env:BATON_HOME -and $cfg.home) { $Tasks = $cfg.home }
+        if (-not $env:BATON_LOGBOOK -and $cfg.logbook) { $Logbook = $cfg.logbook }
+    } catch { }
+}
+
 function Say($m) { Write-Host "  $m" }
 
 # A Python interpreter. The hooks are Python; one implementation for every OS.
