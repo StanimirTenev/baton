@@ -118,8 +118,11 @@ def _state(session: str) -> Path:
 
 
 def main() -> int:
+    # Bytes, decoded as UTF-8 -- not `sys.stdin.read()`. On Windows a redirected stdin is
+    # decoded in the locale code page (cp1251), so "за скенера" arrived as mojibake and
+    # matched nothing: 0 bytes out on the Windows machine, 2026-09-28.
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace") or "{}")
     except Exception:
         return 0
     prompt = str(payload.get("prompt") or "")
@@ -140,7 +143,8 @@ def main() -> int:
              "entries on this topic, not only the top one -- before proposing or acting:"]
     for name, entry, nxt in new:
         lines.append(f"  - {name}: last entry \"{entry}\"" + (f"; next: {nxt}" if nxt else ""))
-    print("\n".join(lines))
+    sys.stdout.buffer.write(("\n".join(lines) + "\n").encode("utf-8"))   # same reason, outbound
+    sys.stdout.flush()
     try:
         path = _state(session)
         path.parent.mkdir(parents=True, exist_ok=True)

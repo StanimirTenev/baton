@@ -90,3 +90,20 @@ def test_matching_is_a_pure_function(tmp_path):
     _task(tmp_path, "fleetpost", aliases="шина")
     names = [t for t, _, _ in bp.touched(tmp_path, "LOGBOOK.md", "пусни пак шината")]
     assert names == ["fleetpost"]
+
+
+def test_a_windows_code_page_does_not_silence_it(tmp_path):
+    """2026-09-28, on the Windows machine: 0 bytes out. Python there reads a redirected
+    stdin and writes stdout in the locale code page (cp1251), so a UTF-8 "за скенера"
+    arrived as mojibake, matched nothing, and the hook said nothing -- the quiet failure.
+    Reproduced here by forcing the code page. The hook reads and writes UTF-8 bytes."""
+    _task(tmp_path, "qrp-kachestvo", aliases="скенер", nxt="следващ ход")
+    env = {"BATON_HOME": str(tmp_path), "BATON_LOGBOOK": "LOGBOOK.md",
+           "BATON_STATE_DIR": str(tmp_path / ".state"), "PATH": "/usr/bin:/bin",
+           "PYTHONIOENCODING": "cp1251"}
+    data = json.dumps({"prompt": "за скенера ми обясни", "session_id": "w"}, ensure_ascii=False)
+    out = subprocess.run([sys.executable, str(HOOK)], input=data.encode("utf-8"),
+                         capture_output=True, env=env)
+    assert out.returncode == 0, out.stderr
+    text = out.stdout.decode("utf-8")          # must be UTF-8, whatever the code page
+    assert "qrp-kachestvo" in text and "следващ ход" in text, text
