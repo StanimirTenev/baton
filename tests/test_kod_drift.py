@@ -74,7 +74,7 @@ def test_a_reference_that_cannot_be_resolved_is_named_not_ignored(tmp_path):
     repo = tmp_path / "repo"
     _repo(repo, 1)
     note = bss.kod_drift({"kod": f"{repo}@deadbeef"})
-    assert note and ("deadbeef" in note or "не се намира" in note), note
+    assert note and ("deadbeef" in note or "not found" in note), note
 
     missing = bss.kod_drift({"kod": f"{tmp_path / 'nowhere'}@abc1234"})
     assert missing, "a path that is not a repository must be said, not skipped"
@@ -82,7 +82,7 @@ def test_a_reference_that_cannot_be_resolved_is_named_not_ignored(tmp_path):
     # repository check be deleted, because the git call then failed and produced the
     # "ref not found" line instead. Two different facts -- no repository here, and no
     # such ref in this repository -- and a reader acts differently on each.
-    assert "не е хранилище" in missing, (
+    assert "not a repository" in missing, (
         f"a missing repository must say so, not be reported as a missing ref: {missing}")
 
 

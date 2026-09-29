@@ -113,7 +113,7 @@ HEADER_CLAIMS = ("sledvashto", "kriterii_zavarshvane", "sastoyanie", "na_hod")
 # run were these two fields and every one was a false positive: the majority of the
 # output, and its most visible part.
 #
-# ⚠️ `na_hod` sometimes carries a name rather than an enum ("Ledger (редактор
+# ⚠️ `na_hod` sometimes carries a name rather than an enum ("Ledger (editor
 # Burley)"). That case was NOT measured separately on a full logbook -- the three
 # thick-logbook rows all read `nie`. It is excluded with the field, not on evidence
 # of its own.
@@ -163,19 +163,19 @@ def config() -> dict:
                         if poveritelni is not None else cfg.get("pregled_poveritelni")),
     }
     if not out["indeks"]:
-        sys.exit("НЯМА индекс. Сложи `pregled_indeks` в baton.local.json — файлът с\n"
-                 "показалците, които да се сверят (напр. индексът на паметта ти).")
+        sys.exit("NO index. Put `pregled_indeks` in baton.local.json — the file with\n"
+                 "the pointers to check (for example, your memory index).")
     if out["poveritelni"] is None:
         # Fail closed on a decision nobody has made. An absent list is not an empty
         # one: it means the question was never asked, and the answer matters more
         # here than anywhere else in Baton, because this is the one thing that sends.
         sys.exit(
-            "НЯМА списък с поверителни думи. Това НЕ е по подразбиране празно —\n"
-            "решението кое не напуска машината се взема веднъж, съзнателно.\n\n"
-            "В baton.local.json:\n"
-            '  "pregled_poveritelni": ["име-на-клиент", "Име На Клиент", "неиздаден-продукт"]\n\n'
-            "Ако наистина нищо не се задържа, напиши изрично празен списък: []\n"
-            "⚠️ Пиши всяко име на ВСЯКА азбука, която ползваш — съвпадението е по низ.")
+            "NO list of confidential words. It is NOT empty by default —\n"
+            "what stays on this machine is decided once, on purpose.\n\n"
+            "In baton.local.json:\n"
+            '  "pregled_poveritelni": ["client-name", "Client Name", "unreleased-product"]\n\n'
+            "If truly nothing is held back, write an explicitly empty list: []\n"
+            "⚠️ Write every name in EVERY alphabet you use — matching is by string.")
     return out
 
 
@@ -188,10 +188,10 @@ def klyuch() -> str:
                 if line.startswith("OPENROUTER_API_KEY="):
                     value = line.split("=", 1)[1].strip()
     if not value:
-        sys.exit("НЯМА ключ. Този преглед иска ключ от OpenRouter:\n"
+        sys.exit("NO key. This review needs an OpenRouter key:\n"
                  "  export OPENROUTER_API_KEY=...\n"
-                 "или ред `OPENROUTER_API_KEY=...` в ~/.config/typesafe/env (права 600).\n\n"
-                 "Без ключ прегледът не работи. Останалата част от Батон не го иска.")
+                 "or a line `OPENROUTER_API_KEY=...` in ~/.config/typesafe/env (mode 600).\n\n"
+                 "Without a key the review does not run. The rest of Baton does not need one.")
     return value
 
 
@@ -277,8 +277,8 @@ def pitay(api_key: str, state: str, questions: dict, etiket: str, dumi: list[str
     # So the check reads what is actually sent: the serialised body, whole.
     zadarzhano = poveritelno(json.dumps(body, ensure_ascii=False), etiket, dumi)
     if zadarzhano:
-        sys.exit(f"⛔ отказано: „{zadarzhano}“ се среща в {etiket}. "
-                 f"Не напуска машината.")
+        sys.exit(f"⛔ refused: \"{zadarzhano}\" appears in {etiket}. "
+                 f"It does not leave the machine.")
     request = urllib.request.Request(
         ENDPOINT, data=json.dumps(body).encode(),
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
@@ -287,15 +287,15 @@ def pitay(api_key: str, state: str, questions: dict, etiket: str, dumi: list[str
             out = json.loads(response.read())
     except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError) as err:
         detail = err.read().decode()[:200] if hasattr(err, "read") else str(err)
-        sys.exit(f"⛔ извикването падна ({etiket}): {detail}")
+        sys.exit(f"⛔ the call failed ({etiket}): {detail}")
 
     answers = out.get("answers")
     if not isinstance(answers, dict) or set(answers) != set(questions):
-        sys.exit(f"⛔ непълен отговор за {etiket}: върнати {sorted(answers or [])}, "
-                 f"поискани {sorted(questions)}. Не се чете като „чисто“.")
+        sys.exit(f"⛔ incomplete answer for {etiket}: returned {sorted(answers or [])}, "
+                 f"asked {sorted(questions)}. Not read as \"clean\".")
     for name, value in answers.items():
         if not isinstance(value.get("noul"), (int, float)):
-            sys.exit(f"⛔ повреден отговор за {etiket}/{name}: {value}")
+            sys.exit(f"⛔ malformed answer for {etiket}/{name}: {value}")
     return out
 
 
@@ -307,7 +307,7 @@ def zapishi(home: str, rezhim: str, koe: str, broy: int, tsena: float) -> None:
     nov = not path.exists()
     with path.open("a", encoding="utf-8") as handle:
         if nov:
-            handle.write("кога\tрежим\tкакво\tвъпроси\tцена_usd\n")
+            handle.write("when\tmode\twhat\tquestions\tcost_usd\n")
         handle.write(f"{datetime.now():%Y-%m-%d %H:%M}\t{rezhim}\t{koe}\t{broy}\t{tsena:.6f}\n")
 
 
@@ -361,7 +361,7 @@ def _dumi(text: str) -> set[str]:
     """Words as crude stems: lower case, first five letters, four or more letters.
 
     Lexical, not semantic -- Baton is stdlib only. Five letters is enough to meet
-    Bulgarian endings halfway (профилите / профила); dates stay whole (14.09).
+    Bulgarian endings halfway (e.g. a plural and a singular); dates stay whole (14.09).
     """
     return {w[:5] if w.isalpha() else w
             for w in _DUMA.findall(text.lower()) if len(w) >= 4}
@@ -420,7 +420,7 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
                 continue
             body, tsyalo = detail(root, target, OTRYAZAK)
             if not body:
-                print(f"  ⚠️ няма файл — {target}")
+                print(f"  ⚠️ no file — {target}")
                 continue
             body = izvadka(tsyalo, pointer)
             state = (f"INDEX LINE (a pointer in an index):\n{pointer}\n\n"
@@ -431,7 +431,7 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
             zadarzhano = poveritelno(f"{pointer}\n{tsyalo}", target, dumi)
             if zadarzhano:
                 zadarzhani.append((target, zadarzhano))
-                print(f"  ⛔ задържан ({zadarzhano}) — {target}")
+                print(f"  ⛔ held ({zadarzhano}) — {target}")
                 continue
             izpratani += 1   # counted BEFORE the send: the ledger records what left
             value, draws, cost = stoynost(api_key, state, {"stale": {
@@ -456,16 +456,16 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
         zapishi(cfg["home"], "dali", indeks.name, izpratani, spent)
 
     if zadarzhani:
-        print(f"\nЗАДЪРЖАНИ ({len(zadarzhani)}) — не са изпращани:")
+        print(f"\nHELD ({len(zadarzhani)}) — not sent:")
         for target, duma in zadarzhani:
             print(f"  ⛔ {target} ({duma})")
-    print(f"\nНАД ПРАГА ({PRAG}) — погледни ги, не им вярвай:")
+    print(f"\nABOVE THE THRESHOLD ({PRAG}) — look at them, do not trust them:")
     flagged = [r for r in sorted(results, reverse=True) if r[0] >= PRAG]
     for value, target in flagged:
         print(f"  🔴 {value:.2f}  {target}")
     if not flagged:
-        print("  (нищо)")
-    print(f"\nцена: ${spent:.6f}")
+        print("  (none)")
+    print(f"\ncost: ${spent:.6f}")
 
 
 def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
@@ -490,14 +490,14 @@ def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
             fm = hook.parse_frontmatter(whole)
             claims = {k: v for k, v in fm.items() if k in HEADER_CLAIMS and str(v).strip()}
             if not claims:
-                print(f"  ⚠️ без хедър — {folder.name}")
+                print(f"  ⚠️ no header — {folder.name}")
                 continue
             body = whole.split("---", 2)[2].strip() if whole.startswith("---") else whole
             pointer = "\n".join(f"{k}: {v}" for k, v in claims.items())
             zadarzhano = poveritelno(f"{pointer}\n{whole}", folder.name, dumi)
             if zadarzhano:
                 zadarzhani.append((folder.name, zadarzhano))
-                print(f"  ⛔ задържана ({zadarzhano}) — {folder.name}")
+                print(f"  ⛔ held ({zadarzhano}) — {folder.name}")
                 continue
             state = (f"TASK HEADER (what it claims about where the work stands):\n{pointer}\n\n"
                      f"LOGBOOK ({logbook_name}), newest entries first, the source of truth:\n"
@@ -522,13 +522,13 @@ def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
         zapishi(cfg["home"], "zadachi", root.name, izpratani, spent)
 
     if zadarzhani:
-        print(f"\nЗАДЪРЖАНИ ({len(zadarzhani)}) — не са изпращани:")
+        print(f"\nHELD ({len(zadarzhani)}) — not sent:")
         for name, duma in zadarzhani:
             print(f"  ⛔ {name} ({duma})")
-    print(f"\nПОДРЕДЕНИ ПО ПОДОЗРЕНИЕ — ⚠️ прагът НЕ е мерен на този корпус:")
+    print(f"\nORDERED BY SUSPICION — ⚠️ the threshold was NOT measured on this corpus:")
     for value, name in sorted(results, reverse=True):
         print(f"  {'🔴' if value >= PRAG else '  '} {value:.2f}  {name}")
-    print(f"\nцена: ${spent:.6f}")
+    print(f"\ncost: ${spent:.6f}")
 
 
 def tvardeniya(line: str) -> list[str]:
@@ -591,14 +591,14 @@ def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
     whole = kniga.read_text(encoding="utf-8", errors="replace")
     pairs = zaglavni_tvardeniya(hook.parse_frontmatter(whole))
     if not pairs:
-        sys.exit(f"хедърът на {name} не носи твърдения, които да се проверяват")
+        sys.exit(f"the header of {name} carries no claims to check")
     body = whole.split("---", 2)[2].strip() if whole.startswith("---") else whole
     pointer = "\n".join(f"{field}: {claim}" for field, claim in pairs)
     # The WHOLE logbook, not the part that fits: a client named on page four is
     # still named. Same rule as everywhere else here, and the reason is 13:20.
     zadarzhano = poveritelno(f"{pointer}\n{whole}", name, dumi)
     if zadarzhano:
-        sys.exit(f"⛔ отказано: „{zadarzhano}“ се среща в {name}. Не напуска машината.")
+        sys.exit(f"⛔ refused: \"{zadarzhano}\" appears in {name}. It does not leave the machine.")
 
     questions = {f"c{i}": {
         "type": "noul",
@@ -615,9 +615,9 @@ def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
         zapishi(cfg["home"], "koe-zadacha", name, len(pairs), spent)
 
     zapisi = body.count("\n## ") + body.startswith("## ")
-    print(f"### {name} — хедърът срещу дневника си\n")
+    print(f"### {name} — the header against its own logbook\n")
     # Said before the numbers, all three, because each changes how they read.
-    print("⚠️ Границите 0.4 / 0.7 НЕ са мерени на този корпус. Подредба, не присъда.")
+    print("⚠️ The 0.4 / 0.7 boundaries were NOT measured on this corpus. An ordering, not a verdict.")
     # Found by the positive control, 2026-09-23: a task whose header spoke of a
     # review, a board and a submission came back "unsupported" on all four claims
     # -- correctly, because its logbook is 562 characters and one entry, and
@@ -625,20 +625,20 @@ def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
     # contradicted, or reported differently", so NEVER WRITTEN DOWN and WRITTEN AND
     # THEN CONTRADICTED arrive as the same low number. They are not the same
     # finding: one says the header is wrong, the other says the logbook is thin.
-    print("⚠️ „Не се подкрепя\" значи И „опровергано\", И „изобщо не се споменава\". "
-          "Двете не са едно и също.")
-    print(f"   Дневникът тук е {len(body)} знака, {zapisi} записа — "
-          f"{'тънък, тъй че ниското значи по-скоро „не пише", отколкото „не е вярно"' if len(body) < 2000 else 'достатъчен, за да носи опровержение'}.\n")
+    print("⚠️ \"Not supported\" means BOTH \"contradicted\" AND \"never mentioned\". "
+          "The two are not the same.")
+    print(f"   The logbook here is {len(body)} characters, {zapisi} entries — "
+          f"{'thin, so a low score means \"not written\" rather than \"not true\"' if len(body) < 2000 else 'enough to carry a contradiction'}.\n")
     if len(body) > TSYAL:
-        print(f"⚠️ ДНЕВНИКЪТ Е РЯЗАН на {TSYAL} от {len(body)} знака. Дневникът е "
-              f"най-новите първо, тъй че отрязаното са НАЙ-СТАРИТЕ записи — точно "
-              f"обратното на индекса, където срезът валеше твърдения невинно.\n")
+        print(f"⚠️ THE LOGBOOK IS CUT at {TSYAL} of {len(body)} characters. A logbook is "
+              f"newest first, so what is cut are the OLDEST entries — the opposite "
+              f"of the index, where the cut failed claims innocently.\n")
     for value, field, claim in sorted(
             (out["answers"][f"c{i}"]["noul"], f, c) for i, (f, c) in enumerate(pairs)):
-        mark = "🔴 НЕ СЕ ПОДКРЕПЯ" if value < 0.4 else (
-            "🟡 неясно      " if value < 0.7 else "   подкрепено  ")
+        mark = "🔴 NOT SUPPORTED" if value < 0.4 else (
+            "🟡 unclear      " if value < 0.7 else "   supported    ")
         print(f"{mark} {value:.2f}  {field}: {claim[:88]}")
-    print(f"\nцена: ${spent:.6f}")
+    print(f"\ncost: ${spent:.6f}")
 
 
 def koe(api_key: str, cfg: dict, target: str) -> None:
@@ -652,11 +652,11 @@ def koe(api_key: str, cfg: dict, target: str) -> None:
     dumi, root = cfg["poveritelni"], indeks.parent
     pointer = next((p for p, t in pokazalci(indeks, None) if t == target), "")
     if not pointer:
-        sys.exit(f"няма ред в {indeks.name} за {target}")
+        sys.exit(f"no line in {indeks.name} for {target}")
     body, tsyalo = detail(root, target, TSYAL)
     pieces = tvardeniya(pointer)
     if not pieces:
-        sys.exit("не се извадиха твърдения от реда")
+        sys.exit("no claims could be extracted from the line")
 
     questions = {f"c{i}": {
         "type": "noul",
@@ -668,7 +668,7 @@ def koe(api_key: str, cfg: dict, target: str) -> None:
     zadarzhano = poveritelno(f"{pointer}\n{tsyalo}", target, dumi)
     if zadarzhano:
         # Here the whole move stops: a person named this one file.
-        sys.exit(f"⛔ отказано: „{zadarzhano}“ се среща в {target}. Не напуска машината.")
+        sys.exit(f"⛔ refused: \"{zadarzhano}\" appears in {target}. It does not leave the machine.")
     spent = 0.0
     try:
         out = pitay(api_key, state, questions, target, dumi)
@@ -680,28 +680,28 @@ def koe(api_key: str, cfg: dict, target: str) -> None:
     if len(tsyalo) > TSYAL:
         # Said BEFORE the numbers, because it changes how they read: below the cut
         # nothing can support anything, and a low score there means "don't know".
-        print(f"⚠️ ФАЙЛЪТ Е РЯЗАН на {TSYAL} от {len(tsyalo)} знака "
-              f"({100 - TSYAL * 100 // len(tsyalo)}% не е изпратен). "
-              f"Твърдение, чието доказателство е отдолу, пада НЕВИННО.\n")
+        print(f"⚠️ THE FILE IS CUT at {TSYAL} of {len(tsyalo)} characters "
+              f"({100 - TSYAL * 100 // len(tsyalo)}% not sent). "
+              f"A claim whose evidence is below the cut fails INNOCENTLY.\n")
     for value, claim in sorted((out["answers"][f"c{i}"]["noul"], c)
                                for i, c in enumerate(pieces)):
-        mark = "🔴 НЕ СЕ ПОДКРЕПЯ" if value < 0.4 else (
-            "🟡 неясно      " if value < 0.7 else "   подкрепено  ")
+        mark = "🔴 NOT SUPPORTED" if value < 0.4 else (
+            "🟡 unclear      " if value < 0.7 else "   supported    ")
         print(f"{mark} {value:.2f}  {claim[:110]}")
-    print(f"\nцена: ${spent:.6f}")
+    print(f"\ncost: ${spent:.6f}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--dali", nargs="*", metavar="ЧАСТ",
-                        help="остарял ли е показалецът (по желание: части от пътища)")
-    parser.add_argument("--koe", metavar="ФАЙЛ", help="кое точно не се подкрепя")
-    parser.add_argument("--zadachi", nargs="*", metavar="ЧАСТ",
-                        help="хедърът на всяка задача срещу дневника ѝ")
+    parser.add_argument("--dali", nargs="*", metavar="PART",
+                        help="has a pointer gone stale? (optionally: parts of paths)")
+    parser.add_argument("--koe", metavar="FILE", help="which claim exactly is unsupported?")
+    parser.add_argument("--zadachi", nargs="*", metavar="PART",
+                        help="each task header against its own logbook")
     args = parser.parse_args()
     if args.dali is None and args.zadachi is None and not args.koe:
-        parser.error("избери --dali, --koe или --zadachi")
+        parser.error("choose --dali, --koe or --zadachi")
     cfg = config()
     api_key = klyuch()
     if args.koe:

@@ -137,10 +137,10 @@ Mechanics:
    **primary** source. Verdicts: CONFIRMED / PARTIAL / REFUTED / NOT VERIFIED. Check local
    claims yourself: code, file contents, memory.
 2. **`FAKTI.md`.** Every fact gets a status and a source:
-   - **П**: verified by the verifier
-   - **В**: checked locally by you
-   - **А**: an agent's claim with a source, not independently checked
-   - **И**: inferred
+   - **S**: verified by the verifier against a source (Bulgarian `П`)
+   - **L**: checked locally by you (`В`)
+   - **A**: an agent's claim with a source, not independently checked (`А`)
+   - **I**: inferred (`И`)
 
    Append a section per round, and state corrections to earlier rounds explicitly.
 3. **Conflicts** with older decisions in memory are **surfaced as decisions** for the
@@ -153,14 +153,14 @@ Mechanics:
 
    Every constraint the round touched gets exactly one status:
 
-   - **остава** (stands) — say why the new evidence does not reach it. A constraint left
+   - **stands** (`остава`) — say why the new evidence does not reach it. A constraint left
      standing without that sentence has not been re-scored, only skipped.
-   - **пада** (falls) — the evidence that killed it, **and every place it is still
+   - **falls** (`пада`) — the evidence that killed it, **and every place it is still
      written**. This is the whole point: a constraint lives in files, so one corrected in
      the README and left in the other document has not fallen. One project corrected
      "only this tool reports what it did not read" in its README and left the same sentence
      in its positioning document, where the next round found it again.
-   - **чака проверка** (awaits check) — the one check that would settle it, and who does it.
+   - **awaits check** (`чака проверка`) — the one check that would settle it, and who does it.
      A constraint cannot sit here twice: if the check was not done by the next round, it
      falls to "stands" or "falls" on the evidence there is.
 
@@ -172,14 +172,14 @@ Mechanics:
    Write the register so it can be checked by machine, one row per constraint:
 
    ```markdown
-   | id | статус | файл | текст |
+   | id | status | file | text |
    |----|--------|------|-------|
-   | O1 | пада   | POZICIA.md | само ние разделяме прочетох от намерих |
-   | O2 | остава | MEMORY.md  | не слагай търговски продукт на сайта |
+   | O1 | falls  | POSITION.md | only we separate "read" from "found" |
+   | O2 | stands | MEMORY.md   | no commercial product on the site |
    ```
 
-   `текст` is a phrase short enough to search for and specific enough to find. Baton reads
-   this file at session start: a constraint marked **пада** whose text is **still in that
+   `text` is a phrase short enough to search for and specific enough to find. Baton reads
+   this file at session start: a constraint marked **falls** whose text is **still in that
    file** is reported, because it did not fall — it was only written down as having fallen.
 
 5. **`PLAN.md` vN.** Put it on top, starting with **"what changed since v(N−1) and why"**.

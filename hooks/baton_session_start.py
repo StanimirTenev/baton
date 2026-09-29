@@ -287,8 +287,8 @@ def _plain(text: str) -> str:
     """Lower-cased, with markdown emphasis and quotes removed.
 
     A sentence does not stop being the same sentence because someone bolded a
-    word inside it. Comparing the raw text made `**само ние** разделяме` and
-    `само ние разделяме` different strings, which is the wrong kind of exact.
+    word inside it. Comparing the raw text made `**only we** split` and
+    `only we split` different strings, which is the wrong kind of exact.
     """
     return re.sub(r"[*_`\"'\u201e\u201c\u201d\u00ab\u00bb]", "", str(text)).lower().strip()
 
@@ -336,15 +336,15 @@ def retired_but_present(folder: Path) -> list[str]:
             # A register naming a file that is not there is not a pass. Skipping it
             # silently is the same defect the register exists to catch: a rule that
             # looks retired because nobody could check it.
-            still.append(f"{ident}: посоченият файл {where} го няма")
+            still.append(f"{ident}: the file it names, {where}, does not exist")
             continue
         try:
             body = target.read_text(encoding="utf-8-sig", errors="replace")
         except OSError:
-            still.append(f"{ident}: {where} не се чете")
+            still.append(f"{ident}: {where} cannot be read")
             continue
         if phrase in _plain(body):
-            still.append(f"{ident} в {where}")
+            still.append(f"{ident} in {where}")
     return still
 
 
@@ -400,13 +400,13 @@ def kod_drift(fm: dict) -> str | None:
     if not raw:
         return None
     if "@" not in raw:
-        return (f"`kod: {raw[:60]}` няма `@` — пише се `kod: <път до хранилище>@<комит "
-                f"или таг>`, иначе няма какво да се сравни")
+        return (f"`kod: {raw[:60]}` has no `@` — write `kod: <path to repository>@<commit "
+                f"or tag>`, otherwise there is nothing to compare")
     where, _, ref = raw.rpartition("@")
     repo = Path(where.strip()).expanduser()
     ref = ref.strip()
     if not (repo / ".git").exists():
-        return f"`kod:` сочи {repo}, което не е хранилище — записът не стъпва на нищо проверимо"
+        return f"`kod:` points at {repo}, which is not a repository — the record rests on nothing checkable"
 
     def git(*args) -> str | None:
         try:
@@ -418,24 +418,24 @@ def kod_drift(fm: dict) -> str | None:
 
     pinned = git("rev-parse", "--verify", f"{ref}^{{commit}}")
     if not pinned:
-        return (f"`kod:` сочи `{ref}` в {repo.name}, което **не се намира** там — изтрит "
-                f"клон, непренесен комит или сгрешен таг. Не се чете като „съвпада\"")
+        return (f"`kod:` points at `{ref}` in {repo.name}, which is **not found** there — a deleted "
+                f"branch, an unpushed commit or a mistyped tag. Not read as \"matches\"")
     head = git("rev-parse", "HEAD")
     if not head:
-        return f"`kod:` не можах да прочета HEAD на {repo.name} — казвам го, вместо да го подмина"
+        return f"`kod:` could not read the HEAD of {repo.name} — saying so rather than passing over it"
     if head == pinned:
         return None
     behind = git("rev-list", "--count", f"{pinned}..{head}")
     if behind is None:
-        return (f"`kod:` {repo.name} е на друг комит от `{ref}` ({pinned[:7]}), а не можах "
-                f"да преброя разликата")
+        return (f"`kod:` {repo.name} is on a different commit from `{ref}` ({pinned[:7]}), and the "
+                f"difference could not be counted")
     if behind == "0":
-        return (f"`kod:` {repo.name} е на комит, който НЕ е потомък на `{ref}` ({pinned[:7]}) "
-                f"— разклонение или пренаписана история")
-    # When the ref IS the sha, naming both reads as a stutter: "след `7374660` (7374660)".
+        return (f"`kod:` {repo.name} is on a commit that is NOT a descendant of `{ref}` ({pinned[:7]}) "
+                f"— a fork or rewritten history")
+    # When the ref IS the sha, naming both reads as a stutter: "after `7374660` (7374660)".
     kade = f"`{ref}`" if not pinned.startswith(ref.lower()) else f"`{pinned[:7]}`"
-    return (f"`kod:` {repo.name} е **{behind}** комита след {kade} — записът описва код, "
-            f"който се е мръднал под него")
+    return (f"`kod:` {repo.name} is **{behind}** commits after {kade} — the record describes code "
+            f"that has moved underneath it")
 
 
 def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
@@ -478,7 +478,7 @@ def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
             continue
         gap = (book_day - seen).days
         if gap >= 1:
-            out.append(f"{name} (последно пипан {seen}, дневникът върви до {book_day})")
+            out.append(f"{name} (last touched {seen}, the logbook runs to {book_day})")
     return out
 
 
@@ -545,14 +545,14 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
     for name in names:
         skill = root / name / "SKILL.md"
         if not skill.is_file():
-            out.append(f"{name} — ЛИПСВА в {root}")
+            out.append(f"{name} — MISSING in {root}")
             continue
         try:
             seen = date.fromtimestamp(skill.stat().st_mtime)
         except OSError:
             continue
         if (book_day - seen).days >= grace:
-            out.append(f"{name} — писано {seen}, а дневникът върви до {book_day}")
+            out.append(f"{name} — written {seen}, while the logbook runs to {book_day}")
     return out
 
 
@@ -617,15 +617,15 @@ def _plan_problem(plan: Path) -> str | None:
         age = (date.today() - date.fromtimestamp(plan.stat().st_mtime)).days
     except OSError:
         age = 0
-    old_note = f", последно пипан преди {age} дни" if age >= 1 else ""
+    old_note = f", last touched {age} days ago" if age >= 1 else ""
     state = str(fm.get("sastoyanie", "")).strip().lower()
     if state not in PLAN_CLOSED:
         if not fm:
-            return f"{plan.name} няма хедър, тъй че никога не е бил затварян{old_note}"
-        return f"{plan.name} е `{state or 'без състояние'}`{old_note}"
+            return f"{plan.name} has no header, so it was never closed{old_note}"
+        return f"{plan.name} is `{state or 'no state'}`{old_note}"
     if not str(fm.get("rezultat") or fm.get("result") or "").strip():
-        return (f"{plan.name} се обявява за затворен, но не казва какво излезе от него "
-                "(`rezultat:`) — затварянето без резултат е отметка")
+        return (f"{plan.name} says it is closed but not what came of it "
+                "(`rezultat:`) — a close without a result is a tick box")
     return None
 
 
@@ -645,7 +645,7 @@ def line_for(name: str, fm: dict, tail: str = "") -> str:
     # Named, not loaded. The agent reads this and invokes what it needs; the hook
     # never reaches into the session to load anything on its behalf.
     umeniya = skills_for(fm)
-    skills = f"  ⟨умения: {', '.join(umeniya)}⟩" if umeniya else ""
+    skills = f"  ⟨skills: {', '.join(umeniya)}⟩" if umeniya else ""
     return f"- {name}{badge}{body}{tail}{skills}"
 
 
@@ -664,8 +664,8 @@ def main() -> int:
 
     drifted = install_drift()
     if drifted:
-        stale.append("- 🔴 РАБОТЕЩИТЕ КУКИ НЕ СА ОТ ИЗТОЧНИКА: " + ", ".join(drifted)
-                     + " — поправка, която не е инсталирана, не работи, колкото и да е тагната")
+        stale.append("- 🔴 THE RUNNING HOOKS ARE NOT FROM THE SOURCE: " + ", ".join(drifted)
+                     + " — a fix that is not installed does not work, however tagged it is")
 
     for f in folders:
         lb = f / name
@@ -686,7 +686,7 @@ def main() -> int:
         plan_now = open_plan(f)
         if plan_now:
             unfinished.append(f"- {f.name} — {plan_now}"
-                              + (" ⚠️ а хедърът е `priklyuchila`" if sast in FINISHED else ""))
+                              + (" ⚠️ and the header says finished" if sast in FINISHED else ""))
         if sast in FINISHED:
             finished.append(f.name)
             continue
@@ -700,34 +700,34 @@ def main() -> int:
         due = review_due(fm, today)
         if due:
             _, late = due
-            stale.append(f"- {f.name} — прегледът на състоянието беше за преди {late} "
-                         f"{'ден' if late == 1 else 'дни'} (`vyarno_kum` + `pregled_sled`)")
+            stale.append(f"- {f.name} — the state review was due {late} "
+                         f"{'day' if late == 1 else 'days'} ago (`vyarno_kum` + `pregled_sled`)")
         debt = unverified_debt(f, today)
         if debt:
             count, age = debt
-            stale.append(f"- {f.name} — {count} непроверени твърдения (статус И/А), "
-                         f"най-старото на {age} дни")
+            stale.append(f"- {f.name} — {count} unverified claims (status I/A), "
+                         f"the oldest {age} days old")
         moved = kod_drift(fm)
         if moved:
             stale.append(f"- {f.name} — {moved}")
         drift = pointer_drift(fm)
         if drift:
-            stale.append(f"- {f.name} — `sledvashto` е {drift} знака: показалец, който вече "
-                         f"носи състояние. Състоянието живее в дневника, тук стои следващият ход")
+            stale.append(f"- {f.name} — `sledvashto` is {drift} characters: a pointer that has started "
+                         f"carrying state. State lives in the logbook; this field holds the next move")
         bad_skills = skill_trouble(skills_for(fm), f, name)
         if bad_skills:
-            stale.append(f"- {f.name} — умения, които хедърът иска: "
+            stale.append(f"- {f.name} — skills the header asks for: "
                          + "; ".join(bad_skills)
-                         + ". Липсващо умение не се зарежда; остаряло се чете с доверие")
+                         + ". A missing skill does not load; a stale one is read with confidence")
         behind = stale_reference(f, name, fm)
         if behind:
-            stale.append(f"- {f.name} — `sledvashto` праща към {', '.join(behind)}. "
-                         f"Работено е след като този файл е четен за последно — сверѝ дали "
-                         f"част от исканото в него вече не е направено (възможно в друга папка)")
+            stale.append(f"- {f.name} — `sledvashto` points at {', '.join(behind)}. "
+                         f"Work has happened since that file was last read — check whether "
+                         f"part of what it asks for is already done (possibly in another folder)")
         alive = retired_but_present(f)
         if alive:
-            stale.append(f"- {f.name} — ограничение, отбелязано като **паднало**, но текстът му "
-                         f"е още там: {', '.join(alive)}")
+            stale.append(f"- {f.name} — a constraint marked as **retired** whose text "
+                         f"is still there: {', '.join(alive)}")
         dl = deadline(fm)
         rec = {"name": f.name, "fm": fm, "dl": dl}
         if not is_us(fm) or sast in ("chakashta", "чакаща", "waiting"):
@@ -746,21 +746,21 @@ def main() -> int:
 
     blocks = []
     if overdue:
-        blocks.append("⏰ СРОК изтича / изтекъл:\n" + "\n".join(
-            line_for(r["name"], r["fm"], f"  (срок {r['dl']})") for r in overdue))
+        blocks.append("⏰ DEADLINE due / passed:\n" + "\n".join(
+            line_for(r["name"], r["fm"], f"  (deadline {r['dl']})") for r in overdue))
     if on_us:
-        blocks.append("⏳ Чакат ТЕБ / може да продължим сега:\n" + "\n".join(
+        blocks.append("⏳ Waiting on YOU / can continue now:\n" + "\n".join(
             line_for(r["name"], r["fm"]) for r in on_us))
     if recurring:
-        blocks.append("🔁 Постоянни:\n" + "\n".join(
+        blocks.append("🔁 Ongoing:\n" + "\n".join(
             line_for(r["name"], r["fm"]) for r in recurring))
     if external:
         def ext_tail(r):
-            bits = [] if is_us(r["fm"]) else [f"чака: {r['fm'].get('na_hod')}"]
+            bits = [] if is_us(r["fm"]) else [f"waiting on: {r['fm'].get('na_hod')}"]
             if r["dl"]:
-                bits.append(f"срок {r['dl']}")
+                bits.append(f"deadline {r['dl']}")
             return f"  ({', '.join(bits)})" if bits else ""
-        blocks.append("⛔ Чакат ВЪНШЕН / блокирани (за сведение):\n" + "\n".join(
+        blocks.append("⛔ Waiting on someone OUTSIDE / blocked (for information):\n" + "\n".join(
             line_for(r["name"], r["fm"], ext_tail(r)) for r in external))
     if plain:
         plain.sort(key=lambda p: p.stat().st_mtime, reverse=True)
@@ -775,7 +775,7 @@ def main() -> int:
             title = first_entry_title(read_head(lb))
             rows.append(f"- {f.name} — last entry {when}" + (f": {title}" if title else ""))
         more = len(plain) - len(shown)
-        block = "📋 Без хедър (последно пипани):\n" + "\n".join(rows)
+        block = "📋 No header (most recently touched):\n" + "\n".join(rows)
         if more > 0:
             block += f"\n- ...and {more} more"
         blocks.append(block)
@@ -787,30 +787,30 @@ def main() -> int:
         # Its own block, above the shelf-life notes: an unclosed plan is not a
         # note about ageing, it is work that was never finished.
         blocks.append(
-            "⛔ НЕЗАТВОРЕНИ ПЛАНОВЕ — задачата се счита за неизпълнена:\n"
+            "⛔ UNCLOSED PLANS — the task counts as not done:\n"
             + "\n".join(sorted(unfinished))
-            + "\n(Затваря се с `sastoyanie: izpalnen` ИЛИ `izostaven`, И `rezultat:` в PLAN.md — "
-              "какво излезе от него. Изоставен план се затваря по същия начин.)")
+            + "\n(Close it with `sastoyanie: izpalnen` OR `izostaven`, AND `rezultat:` in PLAN.md — "
+              "what came of it. An abandoned plan is closed the same way.)")
     if stale:
         blocks.append(
-            "⏳ Изтекъл срок на годност — прочети това, преди да стъпиш на него:\n"
+            "⏳ Past its shelf life — read this before relying on it:\n"
             + "\n".join(sorted(stale))
-            + "\n(Твърдение със статус И или А не е факт — то е дълг. Или се проверява, "
-              "или пада.)")
+            + "\n(A claim with status I or A is not a fact — it is a debt. Either it gets checked, "
+              "or it is dropped.)")
     if frozen:
-        blocks.append(f"❄️ Замразени (не се предлагат): {', '.join(sorted(frozen))}")
+        blocks.append(f"❄️ Frozen (not offered): {', '.join(sorted(frozen))}")
     if finished:
-        blocks.append(f"✅ Приключени (не се пипат): {', '.join(sorted(finished))}")
+        blocks.append(f"✅ Finished (not touched): {', '.join(sorted(finished))}")
 
     summary = (
-        f"Baton — задачите в {root}, подредени по кой е на ход и приоритет:\n\n"
+        f"Baton — the tasks in {root}, ordered by whose move it is and by priority:\n\n"
         + "\n\n".join(blocks)
     )
     context = (
         summary
-        + f"\n\nПреди работа по някоя — прочети нейния {name} (той е записът от предишни сесии; "
-        f"front-matter хедърът горе носи текущото състояние). След работа — впиши нов запис най-отгоре "
-        f"и обнови хедъра, ако състоянието се е сменило."
+        + f"\n\nBefore working on one, read its {name} (the record of earlier sessions; "
+        f"the front-matter header on top carries the current state). After working, add a new entry "
+        f"at the top and update the header if the state has changed."
     )
 
     json.dump(

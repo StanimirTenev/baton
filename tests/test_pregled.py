@@ -40,7 +40,7 @@ def test_a_missing_confidential_list_stops_the_tool(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     with pytest.raises(SystemExit) as err:
         bp.config()
-    assert "поверителни" in str(err.value)
+    assert "confidential" in str(err.value)
 
 
 def test_an_explicitly_empty_list_is_accepted(tmp_path, monkeypatch):
@@ -56,7 +56,7 @@ def test_no_index_stops_the_tool(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     with pytest.raises(SystemExit) as err:
         bp.config()
-    assert "индекс" in str(err.value)
+    assert "index" in str(err.value)
 
 
 # --- what never leaves ------------------------------------------------------
@@ -123,12 +123,12 @@ class _Reply:
 
 
 @pytest.mark.parametrize("payload,want", [
-    ({"answers": None}, "непълен отговор"),
-    ({"usage": {}}, "непълен отговор"),
-    ({"answers": {"a": {"noul": 0.5}}}, "непълен отговор"),
-    ({"answers": {"a": {"noul": 0.5}, "b": {"noul": 0.5}, "c": {"noul": 0.5}}}, "непълен отговор"),
-    ({"answers": {"a": {"noul": "0.5"}, "b": {"noul": 0.5}}}, "повреден отговор"),
-    ({"answers": {"a": {}, "b": {"noul": 0.5}}}, "повреден отговор"),
+    ({"answers": None}, "incomplete answer"),
+    ({"usage": {}}, "incomplete answer"),
+    ({"answers": {"a": {"noul": 0.5}}}, "incomplete answer"),
+    ({"answers": {"a": {"noul": 0.5}, "b": {"noul": 0.5}, "c": {"noul": 0.5}}}, "incomplete answer"),
+    ({"answers": {"a": {"noul": "0.5"}, "b": {"noul": 0.5}}}, "malformed answer"),
+    ({"answers": {"a": {}, "b": {"noul": 0.5}}}, "malformed answer"),
 ])
 def test_a_broken_envelope_is_an_error_not_clean(payload, want, monkeypatch):
     monkeypatch.setattr(bp.urllib.request, "urlopen", lambda *a, **k: _Reply(payload))
@@ -426,8 +426,8 @@ def test_a_cut_logbook_says_the_cut_keeps_the_newest(tmp_path, monkeypatch, caps
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo())
     bp.koe("k", _koe_cfg(tmp_path), "zadacha")
     out = capsys.readouterr().out
-    assert "РЯЗАН" in out
-    assert "НАЙ-СТАРИТЕ" in out, \
+    assert "CUT" in out
+    assert "OLDEST" in out, \
         "срезът не казва КОЕ е отпаднало; при индекса беше обратното и това е разликата"
 
 
@@ -472,10 +472,10 @@ def test_a_thin_logbook_is_announced_before_the_numbers(tmp_path, monkeypatch, c
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo(0.1))
     bp.koe("k", _koe_cfg(tmp_path), "zadacha")
     out = capsys.readouterr().out
-    assert "изобщо не се споменава" in out, \
+    assert "never mentioned" in out, \
         'не разделя опровергано от никога-не-писано'
-    assert "не пише" in out, "тънък дневник не е отбелязан като тънък"
-    assert "1 записа" in out, "броят записи не се показва — четящият не вижда колко е тънък"
+    assert "not written" in out, "тънък дневник не е отбелязан като тънък"
+    assert "1 entries" in out, "броят записи не се показва — четящият не вижда колко е тънък"
 
 
 def test_a_full_logbook_is_not_called_thin(tmp_path, monkeypatch, capsys):
@@ -483,7 +483,7 @@ def test_a_full_logbook_is_not_called_thin(tmp_path, monkeypatch, capsys):
     _zadacha(tmp_path, body="## 2026-09-23 — an entry\n" + "детайли. " * 400)
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo(0.1))
     bp.koe("k", _koe_cfg(tmp_path), "zadacha")
-    assert "не пише" not in capsys.readouterr().out
+    assert "not written" not in capsys.readouterr().out
 
 
 def test_chaka_is_not_a_claim_field(tmp_path):
@@ -519,13 +519,13 @@ def test_the_barrier_reads_everything_that_is_sent_not_only_the_state(monkeypatc
         raise AssertionError("the network must not be reached")
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", never)
-    words = ["darmi", "дарми"]
+    words = ["acme", "акме"]
     question = {"q": {"type": "noul",
-                      "instructions": "Does this mention the дарми server outage?",
+                      "instructions": "Does this mention the акме server outage?",
                       "criteria": {"true": "yes", "false": "no"}}}
     with pytest.raises(SystemExit) as stop:
         bp.pitay("k", "an entirely innocuous passage", question, "label", words)
-    assert "дарми" in str(stop.value) and "Не напуска машината" in str(stop.value)
+    assert "акме" in str(stop.value) and "It does not leave the machine" in str(stop.value)
     assert not sent, "nothing may be serialised onto the wire"
 
 
@@ -534,9 +534,9 @@ def test_a_confidential_word_in_the_criteria_is_caught_too(monkeypatch):
     monkeypatch.setattr(bp.urllib.request, "urlopen",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
     question = {"q": {"type": "noul", "instructions": "harmless",
-                      "criteria": {"true": "it names дарми", "false": "it does not"}}}
-    with pytest.raises(SystemExit, match="Не напуска машината"):
-        bp.pitay("k", "innocuous", question, "label", ["дарми"])
+                      "criteria": {"true": "it names акме", "false": "it does not"}}}
+    with pytest.raises(SystemExit, match="It does not leave the machine"):
+        bp.pitay("k", "innocuous", question, "label", ["акме"])
 
 
 # --- `--dali` fetches the part of the file the pointer is about ---------------

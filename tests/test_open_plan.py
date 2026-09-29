@@ -65,14 +65,14 @@ def test_an_abandoned_plan_closes_the_same_way(tmp_path):
 
 def test_a_plan_with_no_header_has_never_been_closed(tmp_path):
     out = bss.open_plan(_task(tmp_path, "# План\n\nнякакъв текст\n"))
-    assert out is not None and "хедър" in out
+    assert out is not None and "header" in out
 
 
 def test_the_line_says_how_long_it_has_sat(tmp_path):
     folder = _task(tmp_path, OPEN)
     old = time.time() - 40 * 86400
     os.utime(folder / "PLAN.md", (old, old))
-    assert "40 дни" in bss.open_plan(folder)
+    assert "40 days" in bss.open_plan(folder)
 
 
 def test_english_spellings_close_it_too(tmp_path):
@@ -124,7 +124,7 @@ def test_every_plan_is_reported_not_just_the_first(tmp_path):
         "---\nsastoyanie: izpalnen\nrezultat: \"продадено\"\n---\n", encoding="utf-8")
     (folder / "PLAN-vtori.md").write_text("---\nsastoyanie: otvoren\n---\n", encoding="utf-8")
     note = bss.open_plan(folder)
-    assert note and "PLAN-vtori.md" in note and "PLAN.md е" not in note
+    assert note and "PLAN-vtori.md" in note and "PLAN.md is" not in note
 
 
 def test_a_folder_whose_every_plan_is_closed_stays_quiet(tmp_path):

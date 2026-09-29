@@ -25,7 +25,7 @@ EXISTING = {
     "logbook": "LOGBOOK.md",
     "source": "/home/x/dev/baton",
     "pregled_indeks": "/home/x/memory/MEMORY.md",
-    "pregled_poveritelni": ["darmi", "дарми", "client-alpha"],
+    "pregled_poveritelni": ["acme", "акме", "client-alpha"],
 }
 
 

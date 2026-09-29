@@ -63,7 +63,7 @@ Write, in the human's words wherever possible:
 | `sledvashto` | one sentence: the next move, not a summary |
 | `aliases` | the words people will use for it, **in every alphabet they write in** — the prompt hook matches on these |
 
-And in the first logbook entry: what is known with a source (П/В) and what is not (А/И).
+And in the first logbook entry: what is known — checked against a source or on the spot — and what is not: an agent's word, or an inference.
 If the criterion is not known, **ask**. The Stop hook asks once per session when a task
 worked on has none; an invented criterion is worse than a missing one, because it is
 then trusted.

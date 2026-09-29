@@ -173,7 +173,7 @@ def test_a_constraint_marked_fallen_whose_text_is_still_there_is_reported(tmp_pa
         tmp_path,
         "| O1 | пада | POZICIA.md | само ние разделяме прочетох от намерих |\n",
         {"POZICIA.md": "Само ние разделяме прочетох от намерих — и това е активът.\n"})
-    assert baton.retired_but_present(folder) == ["O1 в POZICIA.md"]
+    assert baton.retired_but_present(folder) == ["O1 in POZICIA.md"]
 
 
 def test_a_constraint_that_stands_is_never_checked(tmp_path):
@@ -198,7 +198,7 @@ def test_the_english_spellings_work(tmp_path):
         tmp_path,
         "| O1 | falls | NOTES.md | only this tool reports what it did not read |\n",
         {"NOTES.md": "Only this tool reports what it did not read.\n"})
-    assert baton.retired_but_present(folder) == ["O1 в NOTES.md"]
+    assert baton.retired_but_present(folder) == ["O1 in NOTES.md"]
 
 
 def test_a_line_reference_after_the_filename_is_tolerated(tmp_path):
@@ -207,7 +207,7 @@ def test_a_line_reference_after_the_filename_is_tolerated(tmp_path):
         tmp_path,
         "| O1 | пада | POZICIA.md:34 | само ние разделяме |\n",
         {"POZICIA.md": "само ние разделяме прочетох от намерих\n"})
-    assert baton.retired_but_present(folder) == ["O1 в POZICIA.md:34"]
+    assert baton.retired_but_present(folder) == ["O1 in POZICIA.md:34"]
 
 
 def test_a_phrase_too_short_to_search_for_is_skipped(tmp_path):
@@ -231,7 +231,7 @@ def test_several_rows_are_all_reported(tmp_path):
         "| O3 | пада | B.md | the second fallen sentence |\n",
         {"A.md": "the first fallen sentence, still here\nthe standing one\n",
          "B.md": "the second fallen sentence, also still here\n"})
-    assert baton.retired_but_present(folder) == ["O1 в A.md", "O3 в B.md"]
+    assert baton.retired_but_present(folder) == ["O1 in A.md", "O3 in B.md"]
 
 
 def test_emphasis_inside_the_sentence_does_not_hide_it(tmp_path):
@@ -241,11 +241,11 @@ def test_emphasis_inside_the_sentence_does_not_hide_it(tmp_path):
         tmp_path,
         "| O1 | пада | POZICIA.md | само ние разделяме прочетох от намерих |\n",
         {"POZICIA.md": "„**само ние** разделяме прочетох от намерих\" — беше активът.\n"})
-    assert baton.retired_but_present(folder) == ["O1 в POZICIA.md"]
+    assert baton.retired_but_present(folder) == ["O1 in POZICIA.md"]
 
 
 def test_a_register_naming_a_file_that_is_not_there_is_reported(tmp_path):
     """Skipping it quietly would be the very defect the register exists to catch:
     a rule that looks retired because nobody could check it."""
     folder = with_register(tmp_path, "| O1 | пада | GONE.md | a long enough phrase |\n", {})
-    assert baton.retired_but_present(folder) == ["O1: посоченият файл GONE.md го няма"]
+    assert baton.retired_but_present(folder) == ["O1: the file it names, GONE.md, does not exist"]

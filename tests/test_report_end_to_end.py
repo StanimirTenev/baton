@@ -63,7 +63,7 @@ def test_a_stale_reference_reaches_the_report(tmp_path):
     os.utime(darvo, (old, old))
     report = _run(tmp_path)["systemMessage"]
     assert "DARVO.md" in report
-    assert "срок на годност" in report
+    assert "shelf life" in report
 
 
 def test_a_bloated_pointer_reaches_the_report(tmp_path):

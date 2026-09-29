@@ -37,24 +37,24 @@ def test_a_task_on_us_and_one_waiting_are_separated(tmp_path):
     task(tmp_path, "theirs", "sastoyanie: chakashta\nna_hod: David")
     rows, _ = tablo.collect(tmp_path, "LOGBOOK.md")
     page = tablo.render(rows, tmp_path, TODAY)
-    assert "На наш ход" in page and "Чакат външен" in page
-    assert page.index("На наш ход") < page.index("Чакат външен")
-    assert "чака: David" in page
+    assert "Our move" in page and "Waiting on someone outside" in page
+    assert page.index("Our move") < page.index("Waiting on someone outside")
+    assert "waiting on: David" in page
 
 
 def test_a_frozen_task_is_listed_but_not_offered(tmp_path):
     task(tmp_path, "parked", "sastoyanie: zamrazena\nna_hod: nie")
     page = tablo.render(*tablo.collect(tmp_path, "LOGBOOK.md")[:1], tmp_path, TODAY)
-    assert "Замразени" in page
-    assert "На наш ход" not in page
+    assert "Frozen" in page
+    assert "Our move" not in page
 
 
 def test_a_shelf_life_warning_reaches_the_card(tmp_path):
     task(tmp_path, "stale",
          "sastoyanie: aktivna\nna_hod: nie\nvyarno_kum: 2026-08-01\npregled_sled: 30d")
     rows, _ = tablo.collect(tmp_path, "LOGBOOK.md")
-    assert rows[0]["warnings"] and "закъснява" in rows[0]["warnings"][0]
-    assert "срок на годност" in tablo.render(rows, tmp_path, TODAY)
+    assert rows[0]["warnings"] and "late" in rows[0]["warnings"][0]
+    assert "shelf-life" in tablo.render(rows, tmp_path, TODAY)
 
 
 def test_an_unretired_constraint_reaches_the_card(tmp_path):
@@ -63,14 +63,14 @@ def test_an_unretired_constraint_reaches_the_card(tmp_path):
                             "| O1 | пада | X.md | a sentence long enough to find |\n",
         "X.md": "a sentence long enough to find, still here\n"})
     rows, _ = tablo.collect(tmp_path, "LOGBOOK.md")
-    assert any("още стои" in w for w in rows[0]["warnings"])
+    assert any("still there" in w for w in rows[0]["warnings"])
 
 
 def test_a_passed_deadline_is_marked_hot(tmp_path):
     task(tmp_path, "late", "sastoyanie: aktivna\nna_hod: nie\nvremevi_kriterii: srok:2026-09-01")
     rows, _ = tablo.collect(tmp_path, "LOGBOOK.md")
     page = tablo.render(rows, tmp_path, TODAY)
-    assert "card hot" in page and "мина" in page
+    assert "card hot" in page and "passed" in page
 
 
 def test_a_task_without_a_header_still_appears(tmp_path):
@@ -98,5 +98,5 @@ def test_the_board_says_it_is_generated_and_local(tmp_path):
     """It must never read as the record. The logbooks are."""
     task(tmp_path, "t", "sastoyanie: aktivna\nna_hod: nie")
     page = tablo.render(*tablo.collect(tmp_path, "LOGBOOK.md")[:1], tmp_path, TODAY)
-    assert "Генерирано от дневниците" in page
-    assert "Нищо не напуска машината" in page
+    assert "Generated from the logbooks" in page
+    assert "Nothing leaves the machine" in page

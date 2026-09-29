@@ -87,7 +87,7 @@ def test_a_missing_skill_is_reported(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_SKILLS", str(tmp_path / "skills"))
     folder = _task(tmp_path)
     out = bss.skill_trouble(["komentar"], folder, LOGBOOK)
-    assert len(out) == 1 and "ЛИПСВА" in out[0]
+    assert len(out) == 1 and "MISSING" in out[0]
 
 
 def test_a_skill_older_than_the_logbook_is_reported(tmp_path, monkeypatch):
@@ -98,7 +98,7 @@ def test_a_skill_older_than_the_logbook_is_reported(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_SKILLS", str(root))
     folder = _task(tmp_path, book_days_ago=0)
     out = bss.skill_trouble(["komentar"], folder, LOGBOOK)
-    assert len(out) == 1 and "ЛИПСВА" not in out[0]
+    assert len(out) == 1 and "MISSING" not in out[0]
 
 
 def test_a_skill_written_days_ago_is_not_stale_yet(tmp_path, monkeypatch):
@@ -129,8 +129,8 @@ def test_each_named_skill_is_judged_separately(tmp_path, monkeypatch):
     folder = _task(tmp_path)
     out = bss.skill_trouble(["fresh", "old", "gone"], folder, LOGBOOK)
     assert len(out) == 2
-    assert any("old" in o and "ЛИПСВА" not in o for o in out)
-    assert any("gone" in o and "ЛИПСВА" in o for o in out)
+    assert any("old" in o and "MISSING" not in o for o in out)
+    assert any("gone" in o and "MISSING" in o for o in out)
 
 
 def test_naming_nothing_checks_nothing(tmp_path, monkeypatch):
@@ -149,4 +149,4 @@ def test_a_missing_logbook_reports_nothing(tmp_path, monkeypatch):
 def test_the_line_names_the_skills_without_loading_them(tmp_path):
     """The header names; the agent loads. The hook never reaches into the session."""
     line = bss.line_for("zadacha", {"umeniya": ["komentar"], "sledvashto": "нещо"})
-    assert "умения: komentar" in line
+    assert "skills: komentar" in line

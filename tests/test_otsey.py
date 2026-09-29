@@ -35,7 +35,7 @@ class _Fake:
         return "k"
 
     def config(self):
-        return {"poveritelni": ["darmi", "дарми"]}
+        return {"poveritelni": ["acme", "акме"]}
 
     def poveritelno(self, text, ident, words):
         """Same shape as the real one: it reads the TEXT for a word, and the id too.
@@ -145,5 +145,5 @@ def test_a_confidential_question_is_refused_before_any_candidate_is_scored():
     """
     fake = _Fake({"a": 0.5, "b": 0.5})
     with pytest.raises(ValueError, match="does not leave the machine"):
-        bo.otsey([("a", "t"), ("b", "t")], "Does this mention the darmi outage?", bp=fake)
+        bo.otsey([("a", "t"), ("b", "t")], "Does this mention the acme outage?", bp=fake)
     assert not fake.asked, "not a single candidate may be scored"

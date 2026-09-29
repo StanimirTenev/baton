@@ -55,12 +55,12 @@ def _hook():
 
 
 STATE_LABEL = {
-    "aktivna": "активна", "chakashta": "чака", "postoyanna": "постоянна",
-    "zamrazena": "замразена", "priklyuchila": "приключила", "priklyuchena": "приключила",
-    "active": "активна", "waiting": "чака", "frozen": "замразена", "paused": "замразена",
-    "done": "приключила",
+    "aktivna": "active", "chakashta": "waiting", "postoyanna": "ongoing",
+    "zamrazena": "frozen", "priklyuchila": "finished", "priklyuchena": "finished",
+    "active": "active", "waiting": "waiting", "frozen": "frozen", "paused": "frozen",
+    "done": "finished",
 }
-PRIORITY_LABEL = {"visok": "висок", "sreden": "среден", "nisak": "нисък"}
+PRIORITY_LABEL = {"visok": "high", "sreden": "medium", "nisak": "low"}
 
 CSS = """
 :root{--ink:#14171a;--dim:#5b6570;--line:#e3e6ea;--bg:#fbfcfd;--card:#fff;
@@ -108,15 +108,15 @@ def collect(root: Path, logbook: str) -> tuple[list[dict], date]:
         due = hook.review_due(fm, today) if fm else None
         if due:
             _, late = due
-            warnings.append(f"Прегледът на състоянието закъснява с {late} "
-                            f"{'ден' if late == 1 else 'дни'}.")
+            warnings.append(f"The state review is {late} "
+                            f"{'day' if late == 1 else 'days'} late.")
         debt = hook.unverified_debt(folder, today)
         if debt:
             count, age = debt
-            warnings.append(f"{count} непроверени твърдения (статус И/А); "
-                            f"най-старото на {age} дни.")
+            warnings.append(f"{count} unverified claims (status I/A); "
+                            f"the oldest {age} days old.")
         for item in hook.retired_but_present(folder):
-            warnings.append(f"Отбелязано като паднало, но още стои: {item}")
+            warnings.append(f"Marked as retired, but still there: {item}")
         state = str(fm.get("sastoyanie", "")).strip().lower()
         rows.append({
             "name": folder.name,
@@ -149,9 +149,9 @@ def card(row: dict, today: date) -> str:
         badges.append(row["state"])
     if row["deadline"]:
         left = (row["deadline"] - today).days
-        badges.append(f"срок {row['deadline']}" + (f" ({left} дни)" if left >= 0 else " ⚠ мина"))
+        badges.append(f"deadline {row['deadline']}" + (f" ({left} days)" if left >= 0 else " ⚠ passed"))
     if not row["on_us"] and row["who"]:
-        badges.append(f"чака: {html.escape(row['who'])}")
+        badges.append(f"waiting on: {html.escape(row['who'])}")
     out = [f'<div class="{klass}">',
            '<span class="badges">'
            + "".join(f'<span class="badge">{html.escape(b)}</span>' for b in badges)
@@ -160,7 +160,7 @@ def card(row: dict, today: date) -> str:
     if row["next"]:
         out.append(f'<div class="next">{html.escape(row["next"])}</div>')
     if row["headerless"]:
-        out.append('<div class="next quiet">няма хедър — не се подрежда по състояние</div>')
+        out.append('<div class="next quiet">no header — not ordered by state</div>')
     for w in row["warnings"]:
         out.append(f'<div class="warn">⏳ {html.escape(w)}</div>')
     out.append("</div>")
@@ -182,26 +182,26 @@ def render(rows: list[dict], root: Path, today: date) -> str:
     theirs = sorted([r for r in live if not r["on_us"]], key=order)
     flagged = sum(len(r["warnings"]) for r in rows)
 
-    parts = [f"<h1>Батон</h1>",
+    parts = [f"<h1>Baton</h1>",
              f'<div class="sub">{html.escape(str(root))} · {today} · '
-             f'{len(live)} живи, {len(frozen)} замразени, {len(done)} приключени'
-             + (f" · <strong>{flagged} бележки за срок на годност</strong>" if flagged else "")
+             f'{len(live)} live, {len(frozen)} frozen, {len(done)} finished'
+             + (f" · <strong>{flagged} shelf-life notes</strong>" if flagged else "")
              + "</div>"]
     if ours:
-        parts.append("<h2>На наш ход</h2>" + "\n".join(card(r, today) for r in ours))
+        parts.append("<h2>Our move</h2>" + "\n".join(card(r, today) for r in ours))
     if theirs:
-        parts.append("<h2>Чакат външен</h2>" + "\n".join(card(r, today) for r in theirs))
+        parts.append("<h2>Waiting on someone outside</h2>" + "\n".join(card(r, today) for r in theirs))
     if frozen:
-        parts.append('<h2>Замразени</h2><div class="card quiet">'
+        parts.append('<h2>Frozen</h2><div class="card quiet">'
                      + ", ".join(html.escape(r["name"]) for r in frozen) + "</div>")
     if done:
-        parts.append('<h2>Приключени</h2><div class="card quiet">'
+        parts.append('<h2>Finished</h2><div class="card quiet">'
                      + ", ".join(html.escape(r["name"]) for r in done) + "</div>")
-    parts.append("<footer>Генерирано от дневниците. Те са записът; това е изглед към тях. "
-                 "Нищо не напуска машината.</footer>")
-    return ("<!doctype html><html lang=\"bg\"><head><meta charset=\"utf-8\">"
+    parts.append("<footer>Generated from the logbooks. They are the record; this is a view of them. "
+                 "Nothing leaves the machine.</footer>")
+    return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-            "<title>Батон</title><style>" + CSS + "</style></head><body>"
+            "<title>Baton</title><style>" + CSS + "</style></head><body>"
             "<div class=\"wrap\">" + "\n".join(parts) + "</div></body></html>")
 
 

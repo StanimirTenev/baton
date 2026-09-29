@@ -175,20 +175,20 @@ Tasks with a header (see below) are grouped by who holds the next move and sorte
 priority. The human sees the same list the agent gets:
 
 ```
-Baton — задачите в /home/you/tasks, подредени по кой е на ход и приоритет:
+Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
-⏳ Чакат ТЕБ / може да продължим сега:
+⏳ Waiting on YOU / can continue now:
 - migrate-billing [visok] — decide tax_region before the run
 
-🔁 Постоянни:
+🔁 Ongoing:
 - weekly-report [nisak] — Monday export
 
-⛔ Чакат ВЪНШЕН / блокирани (за сведение):
-- broken-disk [sreden] — zpool replace  (чака: new disk (delivery))
+⛔ Waiting on someone OUTSIDE / blocked (for information):
+- broken-disk [sreden] — zpool replace  (waiting on: new disk (delivery))
 
-❄️ Замразени (не се предлагат): old-scraper
+❄️ Frozen (not offered): old-scraper
 
-✅ Приключени (не се пипат): schema-audit
+✅ Finished (not touched): schema-audit
 ```
 
 The groups mean overdue (a deadline within 3 days), on us, recurring, waiting on someone
@@ -250,7 +250,7 @@ through entries, and is re-derived by whoever reads them next at the cost of rea
 whole file, or is not derived at all and a paid-for mistake is repeated.
 
 `umeniya: [name, ...]` names what the task needs (`skills:` also works). The session-start
-line then carries `⟨умения: …⟩`, and the agent invokes what it needs on entering the task.
+line then carries `⟨skills: …⟩`, and the agent invokes what it needs on entering the task.
 
 Skills are read from `~/.claude/skills/<name>/SKILL.md`; point elsewhere with `BATON_SKILLS`
 or `"skills"` in `baton.local.json`.
@@ -325,8 +325,8 @@ and perfectly readable, which is the whole problem.
 
 SessionStart resolves the ref and says how far the repository has moved since:
 
-> `- qrp-mcp — `kod:` qrp-mcp е **9** комита след `v0.18.1` (a1b2c3d) — записът описва код,
-> който се е мръднал под него`
+> `- qrp-mcp — `kod:` qrp-mcp is **9** commits after `v0.18.1` (a1b2c3d) — the record describes
+> code that has moved underneath it`
 
 A tag, a full sha and a short sha all work. The field is optional and silence means no
 opinion: not every task describes code.
@@ -350,20 +350,20 @@ None of the three was a wrong fact. Each was a fact that had stopped being one.
 
 **Two optional header fields.** `vyarno_kum` is the date the header was last true;
 `pregled_sled` is how long that is expected to hold (`30d`, `6m`). When the period has passed,
-the task appears at session start under **Изтекъл срок на годност**, with how late it is. Neither
+the task appears at session start under **Past its shelf life**, with how late it is. Neither
 field is required, and a task without them behaves exactly as it did before.
 
 **An unverified claim is a debt.** If a task keeps a claims register — `TVARDENIYA.md`,
 `CLAIMS.md`, `FAKTI.md` or `FACTS.md` — whose rows carry a status column, Baton reads it. A row
-marked **И**/`I` (inferred) or **А**/`A` (an agent's claim, not independently checked) is reported
-once it is older than 30 days, with the count and the age of the oldest. Rows marked verified
-(**П**) or checked locally (**В**) are never reported, at any age.
+marked `I` (inferred) or `A` (an agent's claim, not independently checked) — `И` / `А` also read —
+is reported once it is older than 30 days, with the count and the age of the oldest. Rows marked
+anything else — checked against a source, or checked on the spot — are never reported, at any age.
 
 A row dates itself when it can — a date, optionally with a time, in **a cell of its own** — and
 otherwise takes the date of the heading above it (`## Round 2 — 2026-09-19`). Both, because a
 register filled a row at a time over weeks has no meaningful block date, and a table written in
 one sitting has no row dates. The date has to be its own cell: matching a date anywhere in the row
-read `| last release 0.12.0 (14.08.2026) | А |` as a claim made in August, which is a date inside
+read `| last release 0.12.0 (14.08.2026) | A |` as a claim made in August, which is a date inside
 the claim. A detector that fires on the wrong thing gets switched off, and then the real ones go
 unread too.
 
@@ -598,9 +598,9 @@ asks it per claim:
 
 ```
 $ baton_pregled.py --koe qrp-benchmark
-🔴 НЕ СЕ ПОДКРЕПЯ 0.14  sastoyanie: priklyuchila
-🔴 НЕ СЕ ПОДКРЕПЯ 0.28  na_hod: nie
-🟡 неясно        0.50  kriterii_zavarshvane: бенчмарк срещу труда — направен (14/30)
+🔴 NOT SUPPORTED 0.14  sastoyanie: priklyuchila
+🔴 NOT SUPPORTED 0.28  na_hod: nie
+🟡 unclear       0.50  kriterii_zavarshvane: benchmark against the paper — done (14/30)
 ```
 
 `--zadachi` had flagged that task at 0.66; this says **which part**. A bare task name that
@@ -635,7 +635,7 @@ a header's currency is judged against. On the index corpus the same cut fell any
 failed claims innocently. Same cut, opposite meaning; the announcement says which.
 
 ⚠️ `tvardeniya()` also extracts link text and trigger phrases as "claims"
-(`*история:* [сесии и commit-и](…)`). On the old index those were diluted by real ones; on
+(`*history:* [sessions and commits](…)`). On the old index those were diluted by real ones; on
 the new one they are most of what is left. Flagged, not fixed.
 
 ### The grey band: one draw near the threshold is partly a coin flip
@@ -696,14 +696,14 @@ So `/baton-plan` now ends a round by re-scoring every constraint it touched, int
 `OGRANICHENIYA.md` (or `CONSTRAINTS.md`), one row each:
 
 ```markdown
-| id | статус | файл | текст |
-|----|--------|------|-------|
-| O1 | пада   | POZICIA.md | only this tool separates reading from finding |
-| O2 | остава | MEMORY.md  | no commercial product on the research site |
+| id | status | file | text |
+|----|--------|------|------|
+| O1 | falls  | POSITION.md | only this tool separates reading from finding |
+| O2 | stands | MEMORY.md   | no commercial product on the research site |
 ```
 
-Three statuses and nothing else: **пада** / `falls`, **остава** / stands, **чака проверка** /
-awaits a check. The bar for retiring is the bar for asserting — a source or a measurement, never
+Three statuses and nothing else: `falls`, `stands`, `awaits check` (the Bulgarian `пада`,
+`остава`, `чака проверка` are read too). The bar for retiring is the bar for asserting — a source or a measurement, never
 "it feels outdated". An inconvenient constraint is the one most likely to be true.
 
 **Baton checks the register against the files.** A row marked fallen whose text is still in the
@@ -923,6 +923,18 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 ## Versions
 
+**v2.18.0** — Baton speaks English (stage A of four)
+
+- Every message the hooks and tools print — the session-start board, the Stop notes, the review,
+  the HTML board (`lang="en"`) — is now in English. The agent still answers in the human's
+  language; the hooks are read by the agent, not by the human.
+- The README examples and both skills match the new output. Claim statuses gain English letters
+  (`S`, `L`, `A`, `I`); `П`, `В`, `А`, `И` are still read.
+- Nothing a user has written stops working: header fields and values are unchanged in this
+  release (English names arrive in v3.0.0, with the Bulgarian ones kept as synonyms).
+- A client's name used as the example of a confidential word in three test files is replaced
+  with a neutral one. It remains in two older commits of the history.
+
 **v2.15.0** — the record rests on code, and the code moves
 
 - **`kod: <path>@<commit-or-tag>`** in a task header. SessionStart resolves the ref and says
@@ -956,7 +968,7 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 **v2.15.1** — a sha ref printed twice
 
-- `след \`7374660\` (7374660)` read as a stutter when the ref and the commit it resolves to
+- `after \`7374660\` (7374660)` read as a stutter when the ref and the commit it resolves to
   are the same string. A tag still gets both, because there the second half says something.
 - Applied to four real tasks on this machine. Three are silent; one reports three commits of
   drift, correctly — that task's last entry is from 23 September and two releases have shipped
@@ -1246,7 +1258,7 @@ per project, a short state file under 150 lines, chronology in a separate histor
 
 **v2.5.0**
 - **A task can name the skills it needs.** `umeniya: [name, ...]` in the header, and the
-  session-start line carries `⟨умения: …⟩`. A folder already holds state and history; this is
+  session-start line carries `⟨skills: …⟩`. A folder already holds state and history; this is
   how it holds the third thing — how the work is done here — instead of leaving it to be
   re-derived from the logbook by whoever reads it next, or not derived at all.
 - **Named, never loaded.** The hook says what a task needs; the agent invokes it. Baton does not
