@@ -64,3 +64,13 @@ def test_without_the_plugin_nothing_moves(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     assert _load("baton_session_start")._state_file() == HOOKS / "baton.state.json"
     assert _load("baton_stop")._bodies_path() == HOOKS / "baton.bodies.json"
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_a_missing_data_folder_is_created_not_silently_skipped(tmp_path, monkeypatch, name):
+    """Found on Windows, 2026-09-29: the docs say Claude Code creates ${CLAUDE_PLUGIN_DATA}
+    'on first reference', and these hooks only read it from the environment. Without the
+    folder every state write failed quietly -- notices repeated, Stop lost its memory."""
+    data = tmp_path / "not-yet" / "data"
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(data))
+    assert _load(name)._local_file("x.json").parent.is_dir()

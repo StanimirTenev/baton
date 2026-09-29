@@ -1,16 +1,40 @@
 {
   "hooks": {
     "SessionStart": [
-      {"hooks": [{"type": "command", "command": "python3",
-                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/baton_session_start.py"], "timeout": 20}]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "timeout": 20,
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" \"${CLAUDE_PLUGIN_ROOT}/hooks/baton_session_start.py\""
+          }
+        ]
+      }
     ],
     "Stop": [
-      {"hooks": [{"type": "command", "command": "python3",
-                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/baton_stop.py"], "timeout": 20}]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "timeout": 20,
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" \"${CLAUDE_PLUGIN_ROOT}/hooks/baton_stop.py\""
+          }
+        ]
+      }
     ],
     "UserPromptSubmit": [
-      {"hooks": [{"type": "command", "command": "python3",
-                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/baton_prompt.py"], "timeout": 20}]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "timeout": 20,
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" \"${CLAUDE_PLUGIN_ROOT}/hooks/baton_prompt.py\""
+          }
+        ]
+      }
     ]
   }
 }

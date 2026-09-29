@@ -119,7 +119,13 @@ def _local_file(name: str) -> Path:
     folder replaced on every update, so these go to ${CLAUDE_PLUGIN_DATA}, which survives
     updates. Installed by install.sh, next to the hooks, as always."""
     data = os.environ.get("CLAUDE_PLUGIN_DATA")
-    return Path(data) / name if data else Path(__file__).with_name(name)
+    if not data:
+        return Path(__file__).with_name(name)
+    try:
+        Path(data).mkdir(parents=True, exist_ok=True)   # "created on first reference" is
+    except OSError:                                     # not a promise to these hooks
+        pass
+    return Path(data) / name
 
 
 def config() -> tuple[Path, str]:
