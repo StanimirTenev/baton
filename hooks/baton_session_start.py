@@ -84,7 +84,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.5.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.6.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -796,6 +796,37 @@ def line_for(name: str, fm: dict, tail: str = "") -> str:
     return f"- {name}{badge}{body}{tail}{skills}"
 
 
+def inventory_notice(today: date) -> str | None:
+    """No task folders yet, but months of Claude Code behind them: offer /baton-inventory.
+
+    Found 2026-09-29: the installer printed one line about it, and a line printed once at
+    install is a line nobody acts on. Once a day while the root stays empty.
+    """
+    claude = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    try:
+        talks = list((claude / "projects").glob("*/*.jsonl"))
+    except OSError:
+        return None
+    if not talks:
+        return None
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+    if state.get("inventory_offered") == today.isoformat():
+        return None
+    state["inventory_offered"] = today.isoformat()
+    try:
+        _state_file().write_text(json.dumps(state), "utf-8")
+    except OSError:
+        pass
+    oldest = date.fromtimestamp(min(t.stat().st_mtime for t in talks))
+    return (f"📦 No task folders yet, but this machine has {len(talks)} earlier Claude Code "
+            f"conversations (the oldest from {oldest.isoformat()}). Offer the human /baton-inventory: "
+            "it maps that earlier work into task folders, and creates nothing until they confirm "
+            "each one. Ask once; if they decline, leave it.")
+
+
 def _notices_only(notices: list[str]) -> int:
     """A board with no tasks still carries what the agent must say to the human."""
     if notices:
@@ -808,11 +839,10 @@ def _notices_only(notices: list[str]) -> int:
 def main() -> int:
     root, name = config()
     notices = [n for n in (update_notice(date.today()),) if n]
-    if not root.is_dir():
-        return _notices_only(notices)
-    folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \
+        if root.is_dir() else []
     if not folders:
-        return _notices_only(notices)
+        return _notices_only(notices + [n for n in (inventory_notice(date.today()),) if n])
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
     stale: list[str] = []

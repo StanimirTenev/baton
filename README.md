@@ -111,6 +111,11 @@ location. A file date tells you when something was touched, not whether it is fi
 On its first run the file-only agents misjudged state three times, and memory was right
 each time.
 
+You do not have to remember it: while the task root is empty and the machine has earlier Claude
+Code conversations, the session starts with the agent offering it — once a day, until there is a
+folder. Claude Code keeps conversation transcripts for a limited time (by default about a month),
+so for older work the memory and history are what is left; the inventory reads both.
+
 ### Two paths, and the cheap one is the default
 
 **The direct path** needs no skill: read the logbook, do the work, write the entry. The hooks
@@ -987,6 +992,15 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.6.0** — a new user with months of Claude Code behind them is offered the inventory
+
+- While the task root is empty and `~/.claude/projects` holds earlier conversations, the session
+  starts with the agent offering `/baton-inventory`, with how many there are and the oldest date.
+  Once a day; nothing is created until the human confirms each task. Before, the installer
+  printed one line about it, once.
+- Not measured: how much of months of earlier work the inventory actually recovers. That is a
+  separate measurement, and nothing here claims it.
 
 **v3.5.0** — a weekly check for a newer version, if you want one
 

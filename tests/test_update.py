@@ -122,3 +122,35 @@ def test_the_switch_keeps_every_other_setting(tmp_path, monkeypatch):
                                                    "repo": str(ROOT)}
     assert bu.main(["off"]) == 0 and json.loads(cfg.read_text("utf-8"))["update_check"] is False
     assert bu.main(["maybe"]) == 2
+
+
+def _hook_with_empty_root(tmp_path, talks: int):
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    shutil.copy(HOOK, hooks)
+    (tmp_path / "tasks").mkdir()
+    (hooks / "baton.local.json").write_text(json.dumps(
+        {"home": str(tmp_path / "tasks"), "update_check": False}), "utf-8")
+    for i in range(talks):
+        f = tmp_path / f"claude/projects/-home-x/{i}.jsonl"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("{}\n", "utf-8")
+    env = dict(os.environ, CLAUDE_CONFIG_DIR=str(tmp_path / "claude"))
+    env.pop("BATON_HOME", None)
+    run = lambda: subprocess.run([sys.executable, str(hooks / HOOK.name)], input="", env=env,
+                                 capture_output=True, text=True, timeout=30)
+    return run
+
+
+def test_months_of_earlier_work_and_no_tasks_offers_the_inventory_once_a_day(tmp_path):
+    run = _hook_with_empty_root(tmp_path, talks=3)
+    out = run()
+    assert not out.stderr, out.stderr
+    context = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "/baton-inventory" in context and "3 earlier" in context
+    assert run().stdout == "", "offered twice in one day"
+
+
+def test_a_machine_with_no_earlier_conversations_hears_nothing(tmp_path):
+    out = _hook_with_empty_root(tmp_path, talks=0)()
+    assert out.returncode == 0 and out.stdout == "" and not out.stderr
