@@ -956,6 +956,21 @@ They all still work: `baton_pregled` → `baton_review`, `baton_kade` → `baton
 
 ## Versions
 
+**v3.2.0** — English is canonical inside the code too
+
+- The header parser now maps every Bulgarian spelling -- transliterated or Cyrillic -- to the
+  English field and value on reading (`FIELD_SYNONYMS`, `VALUE_SYNONYMS`), and the hooks and
+  tools test only the English words. Before, the code tested the Bulgarian words and mapped
+  English to them; the sets of accepted spellings were scattered through three files.
+- The board's own list of finished words did not know `finished`; a finished task would have
+  shown as live. Caught by hand, fixed, and pinned by a test.
+- A regression caught before release: the "waiting on" name read the old key in single quotes,
+  which a search for double-quoted keys missed; every outside task said "waiting on: None".
+  The cross-language test compared the English board with the Bulgarian one, and both said None.
+  It now also checks the name.
+- On the author's 22 Bulgarian headers the board is identical, apart from a plan's state now
+  shown as `open`.
+
 **v3.1.0** — the tools and their flags speak English; the old names still run
 
 - `baton_review` (was `baton_pregled`), `baton_where` (`baton_kade`), `baton_board`

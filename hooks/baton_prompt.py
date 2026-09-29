@@ -128,7 +128,7 @@ def touched(root: Path, logbook: str, prompt: str) -> list[tuple[str, str, str]]
             continue
         head = _parse(text)
         if any(matches(n, prompt, ps) for n in names_of(folder, head)):
-            found.append((folder.name, last_entry(text), str(head.get("sledvashto", ""))))
+            found.append((folder.name, last_entry(text), str(head.get("next", "") or head.get("sledvashto", ""))))
     return found
 
 

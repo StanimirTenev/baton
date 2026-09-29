@@ -23,8 +23,8 @@ from pathlib import Path
 
 MAX_PLAIN = 6                 # cap only on the fall-back (header-less) list
 SOON_DAYS = 3                 # a deadline within this many days counts as "near"
-US = {"nie", "us", "нас", "ние", "me", "self", ""}   # + `us` names from baton.local.json
-PRIORITY_RANK = {"visok": 0, "висок": 0, "sreden": 1, "среден": 1, "nisak": 2, "нисък": 2}
+US = {"us", "me", "self", ""}   # nie/ние/нас map to `us` on reading; + `us` names from baton.local.json
+PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 DATED_HEADING = re.compile(
     r"^\d{4}-\d\d-\d\d(?:[ T]\d\d:\d\d)?\s*[\u2014\u2013-]\s*(?P<title>.+)$"
@@ -136,38 +136,47 @@ def read_head(logbook: Path) -> str:
         return ""
 
 
-# English header names (v3.0.0) and the Bulgarian ones every existing header uses. One map, read
-# by every hook through `parse_frontmatter`: three readers that each learned English on their
-# own would disagree on the first field one of them forgot. The internal names stay Bulgarian
-# for now (renamed in a later stage); what a user writes may be either, forever.
+# The header's vocabulary. English is canonical inside the code (v3.2.0); the Bulgarian names
+# every existing header uses -- transliterated or in Cyrillic -- are mapped to it on reading,
+# forever. One map, read by every hook through `parse_frontmatter`: three readers that each
+# learned a spelling on their own would disagree on the first field one of them forgot.
 FIELD_SYNONYMS = {
-    "state": "sastoyanie", "turn": "na_hod", "next": "sledvashto",
-    "done_when": "kriterii_zavarshvane", "timing": "vremevi_kriterii", "priority": "prioritet",
-    "skills": "umeniya", "true_as_of": "vyarno_kum", "review_after": "pregled_sled",
-    "deadline": "srok", "code": "kod", "result": "rezultat",
+    "sastoyanie": "state", "na_hod": "turn", "sledvashto": "next",
+    "kriterii_zavarshvane": "done_when", "vremevi_kriterii": "timing", "prioritet": "priority",
+    "umeniya": "skills", "vyarno_kum": "true_as_of", "pregled_sled": "review_after",
+    "srok": "deadline", "kod": "code", "rezultat": "result",
+    "вярно_към": "true_as_of", "преглед_след": "review_after",
 }
 VALUE_SYNONYMS = {
-    "sastoyanie": {"active": "aktivna", "waiting": "chakashta", "frozen": "zamrazena",
-                   "paused": "zamrazena", "ongoing": "postoyanna", "finished": "priklyuchila",
-                   # `done` is NOT mapped: tasks and plans share this field, and both sets
-                   # already accept `done` as it is -- a task meaning finished, a plan meaning
-                   # carried out. Mapping it to either would break the other.
-                   "open": "otvoren", "abandoned": "izostaven"},
-    "na_hod": {"us": "nie"},
-    "prioritet": {"high": "visok", "medium": "sreden", "low": "nisak"},
-    "vremevi_kriterii": {"any": "po_izbor", "recurring": "postoyanno"},
+    "state": {"aktivna": "active", "активна": "active", "chakashta": "waiting", "чакаща": "waiting",
+              "zamrazena": "frozen", "замразена": "frozen", "paused": "frozen",
+              "postoyanna": "ongoing", "постоянна": "ongoing",
+              "priklyuchila": "finished", "priklyuchena": "finished", "приключила": "finished",
+              "приключена": "finished",
+              # `done` is NOT mapped: tasks and plans share this field, and each already reads
+              # `done` with its own meaning -- a task finished, a plan carried out.
+              "otvoren": "open", "отворен": "open", "izpalnen": "done", "изпълнен": "done",
+              "izostaven": "abandoned", "изоставен": "abandoned", "otkazan": "abandoned",
+              "отказан": "abandoned", "zatvoren": "closed", "затворен": "closed",
+              "priklyuchen": "closed", "приключен": "closed"},
+    "turn": {"nie": "us", "ние": "us", "нас": "us"},
+    "priority": {"visok": "high", "висок": "high", "sreden": "medium", "среден": "medium",
+                 "nisak": "low", "нисък": "low"},
+    "timing": {"po_izbor": "any", "по_избор": "any", "postoyanno": "recurring",
+               "постоянно": "recurring"},
 }
 
 
 def _canonical(fm: dict) -> dict:
-    """English keys and values become the internal ones; a Bulgarian key already present
-    wins over its English twin, so a half-translated header never loses what it said."""
+    """Bulgarian keys and values become the English ones; where both spellings of a field
+    appear, the Bulgarian one wins, so a half-translated header never loses what it said."""
     out = {}
-    for key, val in fm.items():
-        internal = FIELD_SYNONYMS.get(key, key)
-        if internal in out and internal != key:
-            continue
-        out[internal] = val
+    for key, val in fm.items():                      # English (and unknown) keys first
+        if key not in FIELD_SYNONYMS:
+            out[key] = val
+    for key, val in fm.items():                      # then the Bulgarian ones, which win
+        if key in FIELD_SYNONYMS:
+            out[FIELD_SYNONYMS[key]] = val
     for key, table in VALUE_SYNONYMS.items():
         val = out.get(key)
         if isinstance(val, str) and val.strip().lower() in table:
@@ -230,7 +239,7 @@ def first_entry_title(text: str) -> str:
 
 def deadline(fm: dict):
     """A date from `vremevi_kriterii: srok:YYYY-MM-DD` (or a bare `srok:` date field)."""
-    for raw in (fm.get("vremevi_kriterii", ""), fm.get("srok", "")):
+    for raw in (fm.get("timing", ""), fm.get("deadline", "")):
         if isinstance(raw, str) and "srok" in raw and ":" in raw:
             iso = raw.split(":", 1)[1].strip()
             try:
@@ -265,10 +274,10 @@ def review_due(fm: dict, today: date):
     announces its own age instead of being read as current, which is how a
     coverage table written for one version came to be quoted three versions later.
     """
-    since = _as_date(fm.get("vyarno_kum") or fm.get("вярно_към"))
+    since = _as_date(fm.get("true_as_of"))
     if since is None:
         return None
-    raw = str(fm.get("pregled_sled") or fm.get("преглед_след") or "").strip().lower()
+    raw = str(fm.get("review_after") or "").strip().lower()
     match = re.fullmatch(r"(\d+)\s*([dдmм])?", raw)
     if not match:
         return None
@@ -412,7 +421,7 @@ def pointer_drift(fm: dict) -> int | None:
     a hook cannot tell a stale sentence from a current one. What it can tell is that
     a one-sentence field is now a paragraph, which is when the copying has happened.
     """
-    text = str(fm.get("sledvashto", "")).strip()
+    text = str(fm.get("next", "")).strip()
     return len(text) if len(text) > POINTER_MAX else None
 
 
@@ -440,7 +449,7 @@ def kod_drift(fm: dict) -> str | None:
     Returns a line for the report, or None when the field is absent or the code has not
     moved. Absent means no opinion: not every task describes code.
     """
-    raw = str(fm.get("kod", "")).strip()
+    raw = str(fm.get("code", "")).strip()
     if not raw:
         return None
     if "@" not in raw:
@@ -511,7 +520,7 @@ def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
     except OSError:
         return []
     out: list[str] = []
-    for name in sorted({n for n in NAMED_FILE.findall(str(fm.get("sledvashto", "")))
+    for name in sorted({n for n in NAMED_FILE.findall(str(fm.get("next", "")))
                         if n.lower() != logbook.lower()}):
         target = folder / name
         if not target.is_file():
@@ -547,7 +556,7 @@ def skills_root() -> Path:
 
 def skills_for(fm: dict) -> list[str]:
     """What the task's header says it needs: `umeniya: [a, b]`."""
-    value = fm.get("umeniya") or fm.get("skills") or []
+    value = fm.get("skills") or []
     if isinstance(value, str):
         value = [v.strip() for v in value.split(",") if v.strip()]
     return [str(v).strip() for v in value if str(v).strip()]
@@ -606,12 +615,11 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
 # accepted for plans closed before the distinction existed.
 # The states that mean the task itself is finished. Named once, because the plan check
 # now reads them too and two spellings of the same list is how one of them rots.
-FINISHED = ("priklyuchila", "priklyuchena", "приключила", "приключена", "done")
+FINISHED = ("finished", "done")
 
-PLAN_DONE = {"izpalnen", "изпълнен", "done", "carried_out"}
-PLAN_ABANDONED = {"izostaven", "изоставен", "abandoned", "otkazan", "отказан"}
-PLAN_CLOSED = PLAN_DONE | PLAN_ABANDONED | {"zatvoren", "затворен", "closed",
-                                            "priklyuchen", "приключен"}
+PLAN_DONE = {"done", "carried_out"}
+PLAN_ABANDONED = {"abandoned"}
+PLAN_CLOSED = PLAN_DONE | PLAN_ABANDONED | {"closed"}
 
 
 def open_plan(folder: Path) -> str | None:
@@ -662,12 +670,12 @@ def _plan_problem(plan: Path) -> str | None:
     except OSError:
         age = 0
     old_note = f", last touched {age} days ago" if age >= 1 else ""
-    state = str(fm.get("sastoyanie", "")).strip().lower()
+    state = str(fm.get("state", "")).strip().lower()
     if state not in PLAN_CLOSED:
         if not fm:
             return f"{plan.name} has no header, so it was never closed{old_note}"
         return f"{plan.name} is `{state or 'no state'}`{old_note}"
-    if not str(fm.get("rezultat") or fm.get("result") or "").strip():
+    if not str(fm.get("result") or "").strip():
         return (f"{plan.name} says it is closed but not what came of it "
                 "(`result:`) — a close without a result is a tick box")
     return None
@@ -685,20 +693,17 @@ def _our_names() -> set:
 
 
 def is_us(fm: dict) -> bool:
-    return str(fm.get("na_hod", "")).strip().lower() in (US | _our_names())
+    return str(fm.get("turn", "")).strip().lower() in (US | _our_names())
 
 
 def prio(fm: dict) -> int:
-    return PRIORITY_RANK.get(str(fm.get("prioritet", "")).strip().lower(), 3)
+    return PRIORITY_RANK.get(str(fm.get("priority", "")).strip().lower(), 3)
 
 
 def line_for(name: str, fm: dict, tail: str = "") -> str:
-    p = str(fm.get("prioritet", "")).strip()
-    # Shown in English whichever spelling the header used: the board speaks English.
-    p = {"visok": "high", "sreden": "medium", "nisak": "low",
-         "висок": "high", "среден": "medium", "нисък": "low"}.get(p.lower(), p)
+    p = str(fm.get("priority", "")).strip()
     badge = f" [{p}]" if p else ""
-    nxt = fm.get("sledvashto") or fm.get("kriterii_zavarshvane") or ""
+    nxt = fm.get("next") or fm.get("done_when") or ""
     body = f" — {nxt}" if nxt else ""
     # Named, not loaded. The agent reads this and invokes what it needs; the hook
     # never reaches into the session to load anything on its behalf.
@@ -732,7 +737,7 @@ def main() -> int:
         if not fm:  # no header → original behaviour, sorted by mtime later
             plain.append(f)
             continue
-        sast = str(fm.get("sastoyanie", "")).strip().lower()
+        sast = str(fm.get("state", "")).strip().lower()
         # 🔴 An open plan is checked BEFORE the status branch, not after it. A finished
         # header used to `continue` seventeen lines before `open_plan` was called, so a
         # logbook and a plan could say opposite things about whether the work was done
@@ -748,7 +753,7 @@ def main() -> int:
         if sast in FINISHED:
             finished.append(f.name)
             continue
-        if sast in ("zamrazena", "замразена", "frozen", "paused"):
+        if sast == "frozen":
             # parked on purpose: shown for the record, never offered as work
             frozen.append(f.name)
             continue
@@ -788,11 +793,11 @@ def main() -> int:
                          f"is still there: {', '.join(alive)}")
         dl = deadline(fm)
         rec = {"name": f.name, "fm": fm, "dl": dl}
-        if not is_us(fm) or sast in ("chakashta", "чакаща", "waiting"):
+        if not is_us(fm) or sast == "waiting":
             # someone/something else is on the hook — a person OR a condition
             # (a disk to arrive). Never in "we can progress now", even with a deadline.
             external.append(rec)
-        elif sast in ("postoyanna", "постоянна") or str(fm.get("vremevi_kriterii", "")).lower() in ("postoyanno", "постоянно"):
+        elif sast == "ongoing" or str(fm.get("timing", "")).lower() == "recurring":
             recurring.append(rec)
         elif dl is not None and (dl - today).days <= SOON_DAYS:
             overdue.append(rec)
@@ -814,7 +819,7 @@ def main() -> int:
             line_for(r["name"], r["fm"]) for r in recurring))
     if external:
         def ext_tail(r):
-            bits = [] if is_us(r["fm"]) else [f"waiting on: {r['fm'].get('na_hod')}"]
+            bits = [] if is_us(r["fm"]) else [f"waiting on: {r['fm'].get('turn')}"]
             if r["dl"]:
                 bits.append(f"deadline {r['dl']}")
             return f"  ({', '.join(bits)})" if bits else ""

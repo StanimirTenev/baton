@@ -100,3 +100,16 @@ def test_the_board_says_it_is_generated_and_local(tmp_path):
     page = tablo.render(*tablo.collect(tmp_path, "LOGBOOK.md")[:1], tmp_path, TODAY)
     assert "Generated from the logbooks" in page
     assert "Nothing leaves the machine" in page
+
+
+def test_a_finished_task_in_either_language_is_not_live(tmp_path):
+    """v3.2.0 maps every spelling to `finished`; the board's own list of finished words did
+    not know that word, so a finished task would have shown as live. Caught by hand."""
+    for name, state in (("bg", "priklyuchila"), ("cy", "приключила"), ("en", "finished")):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "LOGBOOK.md").write_text(f"---\nsastoyanie: {state}\n---\n\n## 2026-09-01 — x\n",
+                                      encoding="utf-8")
+    rows, _ = tablo.collect(tmp_path, "LOGBOOK.md")
+    page = tablo.render(rows, tmp_path, TODAY)
+    assert "3 finished" in page and "0 live" in page, page[:400]

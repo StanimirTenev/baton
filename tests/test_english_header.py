@@ -85,6 +85,8 @@ def test_session_start_reports_the_same_board(tmp_path):
     board = _session_start(a)
     assert board == _session_start(b)
     assert "replace the disk" in board and "zfs" in board
+    # Equal is not enough: on 2026-09-29 both boards said "waiting on: None" and matched.
+    assert "waiting on: supplier" in board, board
 
 
 def test_stop_sees_the_english_criterion(tmp_path):
@@ -105,22 +107,22 @@ def test_english_values_are_understood(tmp_path):
     bss = _load("baton_session_start")
     fm = bss.parse_frontmatter("---\nstate: active\nturn: us\npriority: low\n---\n")
     assert bss.is_us(fm)
-    assert bss.parse_frontmatter("---\nprioritet: nisak\n---\n")["prioritet"] == fm["prioritet"]
+    assert bss.parse_frontmatter("---\nprioritet: nisak\n---\n")["priority"] == fm["priority"]
 
 
 def test_done_means_finished_for_a_task_and_carried_out_for_a_plan(tmp_path):
     """`done` is deliberately not mapped: tasks and plans share the state field, and mapping
     it to the plan value made a task headed `state: done` stop counting as finished."""
     bss = _load("baton_session_start")
-    assert bss.parse_frontmatter("---\nstate: done\n---\n")["sastoyanie"] in bss.FINISHED
-    assert bss.parse_frontmatter("---\nstate: done\n---\n")["sastoyanie"] in bss.PLAN_DONE
+    assert bss.parse_frontmatter("---\nstate: done\n---\n")["state"] in bss.FINISHED
+    assert bss.parse_frontmatter("---\nstate: done\n---\n")["state"] in bss.PLAN_DONE
 
 
 def test_a_personal_name_for_us_comes_from_the_config_not_the_code(tmp_path, monkeypatch):
     bss = _load("baton_session_start")
-    assert not bss.is_us({"na_hod": "стенли"}), "a user's name is built into a public tool"
+    assert not bss.is_us({"turn": "стенли"}), "a user's name is built into a public tool"
     monkeypatch.setattr(bss, "_our_names", lambda: {"стенли"})
-    assert bss.is_us({"na_hod": "Стенли"})
+    assert bss.is_us({"turn": "Стенли"})
 
 
 def test_a_plan_written_in_english_opens_and_closes(tmp_path):

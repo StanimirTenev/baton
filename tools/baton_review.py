@@ -100,7 +100,7 @@ HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.p
 # every task on the machine: not one used it. A field nobody fills is not a field,
 # it is a line that makes the header look richer than it is. (`chakashta`, a value
 # of `sastoyanie`, is a different thing and is in active use.)
-HEADER_CLAIMS = ("sledvashto", "kriterii_zavarshvane", "sastoyanie", "na_hod")
+HEADER_CLAIMS = ("next", "done_when", "state", "turn")
 
 # Control words, not claims -- `--koe` skips them; `--zadachi` still reads them.
 #
@@ -122,7 +122,7 @@ HEADER_CLAIMS = ("sledvashto", "kriterii_zavarshvane", "sastoyanie", "na_hod")
 #
 # They remain in `--zadachi`, which reads the whole header together. Judging where
 # the work stands is that mode's job; naming which claim broke is this one's.
-KONTROLNI = ("sastoyanie", "na_hod")
+KONTROLNI = ("state", "turn")
 
 
 def _hook():

@@ -16,21 +16,21 @@ spec.loader.exec_module(bss)
 
 
 def test_a_short_pointer_is_not_drift():
-    assert bss.pointer_drift({"sledvashto": "Да се пусне коментарът под поста на Campbell."}) is None
+    assert bss.pointer_drift({"next": "Да се пусне коментарът под поста на Campbell."}) is None
 
 
 def test_an_empty_pointer_is_not_drift():
     assert bss.pointer_drift({}) is None
-    assert bss.pointer_drift({"sledvashto": ""}) is None
-    assert bss.pointer_drift({"sledvashto": "   "}) is None
+    assert bss.pointer_drift({"next": ""}) is None
+    assert bss.pointer_drift({"next": "   "}) is None
 
 
 def test_exactly_at_the_threshold_is_not_drift():
-    assert bss.pointer_drift({"sledvashto": "x" * bss.POINTER_MAX}) is None
+    assert bss.pointer_drift({"next": "x" * bss.POINTER_MAX}) is None
 
 
 def test_one_over_the_threshold_is_drift():
-    assert bss.pointer_drift({"sledvashto": "x" * (bss.POINTER_MAX + 1)}) == bss.POINTER_MAX + 1
+    assert bss.pointer_drift({"next": "x" * (bss.POINTER_MAX + 1)}) == bss.POINTER_MAX + 1
 
 
 def test_the_real_case_that_motivated_it():
@@ -42,12 +42,12 @@ def test_the_real_case_that_motivated_it():
         "Campbell (IBM Quantum-Safe Executive). ⏳ И ТРИТЕ ЧАКАТ ОТГОВОР — следи ги, особено "
         "Campbell. Чакат още за коментар: Olewinski и студентският ECDAT."
     )
-    assert bss.pointer_drift({"sledvashto": bloated}) is not None
+    assert bss.pointer_drift({"next": bloated}) is not None
 
 
 def test_a_non_string_value_does_not_crash():
-    assert bss.pointer_drift({"sledvashto": 12345}) is None
-    assert bss.pointer_drift({"sledvashto": None}) is None
+    assert bss.pointer_drift({"next": 12345}) is None
+    assert bss.pointer_drift({"next": None}) is None
 
 
 # --- the bug the drift check uncovered -------------------------------------
@@ -58,22 +58,22 @@ def test_a_hash_inside_a_quoted_value_is_text_not_a_comment():
     like a whole one, so nothing looked wrong."""
     fm = bss.parse_frontmatter(
         '---\nsledvashto: "issue #1 in appliedquantum/taxonomy is open"\n---\n')
-    assert fm["sledvashto"] == "issue #1 in appliedquantum/taxonomy is open"
+    assert fm["next"] == "issue #1 in appliedquantum/taxonomy is open"
 
 
 def test_a_trailing_comment_on_an_unquoted_value_is_still_stripped():
     fm = bss.parse_frontmatter("---\nprioritet: visok  # the old behaviour\n---\n")
-    assert fm["prioritet"] == "visok"
+    assert fm["priority"] == "high"
 
 
 def test_a_single_quoted_value_keeps_its_hash_too():
     fm = bss.parse_frontmatter("---\nsledvashto: 'PR #17 waits on review'\n---\n")
-    assert fm["sledvashto"] == "PR #17 waits on review"
+    assert fm["next"] == "PR #17 waits on review"
 
 
 def test_an_unterminated_quote_falls_back_and_does_not_crash():
     fm = bss.parse_frontmatter('---\nsledvashto: "no closing quote here\n---\n')
-    assert "sledvashto" in fm
+    assert "next" in fm
 
 
 def test_a_quote_inside_a_quoted_value_does_not_end_it():
@@ -82,11 +82,11 @@ def test_a_quote_inside_a_quoted_value_does_not_end_it():
     the normal case in a logbook header."""
     fm = bss.parse_frontmatter(
         '---\nsledvashto: "David waits — he said "we are on a draft" — so nothing is sent"\n---\n')
-    assert fm["sledvashto"].endswith("so nothing is sent")
-    assert "we are on a draft" in fm["sledvashto"]
+    assert fm["next"].endswith("so nothing is sent")
+    assert "we are on a draft" in fm["next"]
 
 
 def test_both_a_hash_and_an_inner_quote_survive_together():
     fm = bss.parse_frontmatter(
         '---\nsledvashto: "issue #1 is open; he replied "not yet" on 19.09"\n---\n')
-    assert fm["sledvashto"] == 'issue #1 is open; he replied "not yet" on 19.09'
+    assert fm["next"] == 'issue #1 is open; he replied "not yet" on 19.09'

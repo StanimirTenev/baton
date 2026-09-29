@@ -341,29 +341,29 @@ def test_koe_takes_a_task_name_and_asks_its_logbook(tmp_path, monkeypatch, capsy
     bp.koe("k", _koe_cfg(tmp_path), "zadacha")
     out = capsys.readouterr().out
     assert "zadacha" in out
-    assert "sledvashto" in out, "изходът не казва кое поле носи твърдението"
-    assert "kriterii_zavarshvane" in out
+    assert "next" in out, "изходът не казва кое поле носи твърдението"
+    assert "done_when" in out
 
 
 def test_a_header_field_with_several_sentences_becomes_several_claims(tmp_path):
     """`sledvashto` routinely carries more than one assertion; each is asked alone."""
     pairs = bp.zaglavni_tvardeniya({
-        "sledvashto": "the first step is done and checked. The second waits on Monday.",
-        "sastoyanie": "aktivna"})
+        "next": "the first step is done and checked. The second waits on Monday.",
+        "state": "aktivna"})
     fields = [f for f, _ in pairs]
-    assert fields.count("sledvashto") == 2, pairs
+    assert fields.count("next") == 2, pairs
 
 
 def test_a_short_field_falls_back_to_its_whole_value(tmp_path):
     """A one-line criterion yields no sentence; the value itself is the claim."""
-    pairs = bp.zaglavni_tvardeniya({"kriterii_zavarshvane": "the bus is live"})
-    assert pairs == [("kriterii_zavarshvane", "the bus is live")]
+    pairs = bp.zaglavni_tvardeniya({"done_when": "the bus is live"})
+    assert pairs == [("done_when", "the bus is live")]
 
 
 def test_an_empty_or_placeholder_field_is_not_a_claim(tmp_path):
     """A dash is what someone types to mean "nothing here"."""
-    assert bp.zaglavni_tvardeniya({"sledvashto": "-", "kriterii_zavarshvane": "live"}) \
-        == [("kriterii_zavarshvane", "live")]
+    assert bp.zaglavni_tvardeniya({"next": "-", "done_when": "live"}) \
+        == [("done_when", "live")]
 
 
 # --- the control words are not claims --------------------------------------
@@ -386,11 +386,11 @@ def test_an_empty_or_placeholder_field_is_not_a_claim(tmp_path):
 
 def test_the_control_words_are_not_koe_claims(tmp_path):
     pairs = bp.zaglavni_tvardeniya({
-        "sledvashto": "the supplier answered and the second step follows now",
-        "kriterii_zavarshvane": "the bus is live on all three channels",
-        "sastoyanie": "postoyanna", "na_hod": "nie"})
+        "next": "the supplier answered and the second step follows now",
+        "done_when": "the bus is live on all three channels",
+        "state": "postoyanna", "turn": "nie"})
     fields = {f for f, _ in pairs}
-    assert fields == {"sledvashto", "kriterii_zavarshvane"}, pairs
+    assert fields == {"next", "done_when"}, pairs
 
 
 def test_zadachi_still_reads_the_control_words(tmp_path, monkeypatch, capsys):
@@ -406,8 +406,8 @@ def test_zadachi_still_reads_the_control_words(tmp_path, monkeypatch, capsys):
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", capture)
     bp.zadachi("k", _koe_cfg(tmp_path), set())
-    assert "sastoyanie: priklyuchila" in sent["state"]
-    assert "na_hod: nie" in sent["state"]
+    assert "state: finished" in sent["state"]
+    assert "turn: us" in sent["state"]
 
 
 def test_koe_on_a_task_holds_on_the_whole_logbook_not_the_extract(tmp_path, monkeypatch):

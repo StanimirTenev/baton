@@ -47,49 +47,49 @@ def _folder(tmp_path: Path, *, book_days_ago: int = 0, **files: int) -> Path:
 
 def test_a_file_older_than_the_logbook_is_reported(tmp_path):
     folder = _folder(tmp_path, book_days_ago=0, DARVO_md=3)
-    out = bss.stale_reference(folder, LOGBOOK, {"sledvashto": "чакат 5 решения (DARVO.md)"})
+    out = bss.stale_reference(folder, LOGBOOK, {"next": "чакат 5 решения (DARVO.md)"})
     assert len(out) == 1
     assert "DARVO.md" in out[0]
 
 
 def test_a_file_touched_with_the_logbook_is_not_reported(tmp_path):
     folder = _folder(tmp_path, book_days_ago=0, DARVO_md=0)
-    assert bss.stale_reference(folder, LOGBOOK, {"sledvashto": "виж DARVO.md"}) == []
+    assert bss.stale_reference(folder, LOGBOOK, {"next": "виж DARVO.md"}) == []
 
 
 def test_a_file_newer_than_the_logbook_is_not_reported(tmp_path):
     """That direction is the Stop hook's job, and it says something different."""
     folder = _folder(tmp_path, book_days_ago=3, DARVO_md=0)
-    assert bss.stale_reference(folder, LOGBOOK, {"sledvashto": "виж DARVO.md"}) == []
+    assert bss.stale_reference(folder, LOGBOOK, {"next": "виж DARVO.md"}) == []
 
 
 def test_a_name_that_is_not_a_file_here_is_left_alone(tmp_path):
     """The pointer may name the memory index or a document elsewhere. A hook that
     cannot check something must not imply that it did."""
     folder = _folder(tmp_path, book_days_ago=0)
-    assert bss.stale_reference(folder, LOGBOOK, {"sledvashto": "сверѝ с MEMORY.md"}) == []
+    assert bss.stale_reference(folder, LOGBOOK, {"next": "сверѝ с MEMORY.md"}) == []
 
 
 def test_the_logbook_naming_itself_is_not_a_reference(tmp_path):
     folder = _folder(tmp_path, book_days_ago=0)
-    assert bss.stale_reference(folder, LOGBOOK, {"sledvashto": f"виж {LOGBOOK}"}) == []
+    assert bss.stale_reference(folder, LOGBOOK, {"next": f"виж {LOGBOOK}"}) == []
 
 
 def test_an_empty_pointer_reports_nothing(tmp_path):
     folder = _folder(tmp_path, book_days_ago=0, DARVO_md=9)
     assert bss.stale_reference(folder, LOGBOOK, {}) == []
-    assert bss.stale_reference(folder, LOGBOOK, {"sledvashto": ""}) == []
+    assert bss.stale_reference(folder, LOGBOOK, {"next": ""}) == []
 
 
 def test_a_backticked_name_is_found(tmp_path):
     folder = _folder(tmp_path, book_days_ago=0, PLAN_md=2)
-    out = bss.stale_reference(folder, LOGBOOK, {"sledvashto": "изпълнявай `PLAN.md`"})
+    out = bss.stale_reference(folder, LOGBOOK, {"next": "изпълнявай `PLAN.md`"})
     assert len(out) == 1 and "PLAN.md" in out[0]
 
 
 def test_several_named_files_are_each_checked(tmp_path):
     folder = _folder(tmp_path, book_days_ago=0, DARVO_md=4, FAKTI_md=0)
-    out = bss.stale_reference(folder, LOGBOOK, {"sledvashto": "DARVO.md + FAKTI.md"})
+    out = bss.stale_reference(folder, LOGBOOK, {"next": "DARVO.md + FAKTI.md"})
     assert len(out) == 1 and "DARVO.md" in out[0]
 
 
@@ -97,7 +97,7 @@ def test_a_missing_logbook_reports_nothing(tmp_path):
     folder = tmp_path / "prazna"
     folder.mkdir()
     (folder / "DARVO.md").write_text("x", encoding="utf-8")
-    assert bss.stale_reference(folder, LOGBOOK, {"sledvashto": "DARVO.md"}) == []
+    assert bss.stale_reference(folder, LOGBOOK, {"next": "DARVO.md"}) == []
 
 
 def test_the_real_case(tmp_path):
@@ -106,7 +106,7 @@ def test_the_real_case(tmp_path):
     folder = _folder(tmp_path, book_days_ago=0, DARVO_md=1)
     pointer = ("кръг 2 ПРИКЛЮЧИ. Чакат 5 решения на стенли (DARVO.md, най-важно 🧑2 "
                "отрицателният корпус)")
-    out = bss.stale_reference(folder, LOGBOOK, {"sledvashto": pointer})
+    out = bss.stale_reference(folder, LOGBOOK, {"next": pointer})
     assert len(out) == 1
     assert "DARVO.md" in out[0]
     assert str(date.today() - timedelta(days=1)) in out[0]

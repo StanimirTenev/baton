@@ -57,11 +57,11 @@ def _task(tmp_path: Path, book_days_ago: int = 0) -> Path:
 # --- what the header says it needs -------------------------------------------
 
 def test_a_list_is_read():
-    assert bss.skills_for({"umeniya": ["a", "b"]}) == ["a", "b"]
+    assert bss.skills_for({"skills": ["a", "b"]}) == ["a", "b"]
 
 
 def test_a_bare_string_is_read_as_a_list():
-    assert bss.skills_for({"umeniya": "a, b"}) == ["a", "b"]
+    assert bss.skills_for({"skills": "a, b"}) == ["a", "b"]
 
 
 def test_the_english_spelling_works_too():
@@ -70,7 +70,7 @@ def test_the_english_spelling_works_too():
 
 def test_no_skills_named_is_not_an_error():
     assert bss.skills_for({}) == []
-    assert bss.skills_for({"umeniya": ""}) == []
+    assert bss.skills_for({"skills": ""}) == []
 
 
 # --- what the hook does about it ---------------------------------------------
@@ -148,5 +148,5 @@ def test_a_missing_logbook_reports_nothing(tmp_path, monkeypatch):
 
 def test_the_line_names_the_skills_without_loading_them(tmp_path):
     """The header names; the agent loads. The hook never reaches into the session."""
-    line = bss.line_for("zadacha", {"umeniya": ["komentar"], "sledvashto": "нещо"})
+    line = bss.line_for("zadacha", {"skills": ["komentar"], "next": "нещо"})
     assert "skills: komentar" in line

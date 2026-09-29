@@ -54,13 +54,9 @@ def _hook():
     return module
 
 
-STATE_LABEL = {
-    "aktivna": "active", "chakashta": "waiting", "postoyanna": "ongoing",
-    "zamrazena": "frozen", "priklyuchila": "finished", "priklyuchena": "finished",
-    "active": "active", "waiting": "waiting", "frozen": "frozen", "paused": "frozen",
-    "done": "finished",
-}
-PRIORITY_LABEL = {"visok": "high", "sreden": "medium", "nisak": "low"}
+STATE_LABEL = {"active": "active", "waiting": "waiting", "ongoing": "ongoing",
+               "frozen": "frozen", "finished": "finished", "done": "finished"}
+PRIORITY_LABEL = {"high": "high", "medium": "medium", "low": "low"}
 
 CSS = """
 :root{--ink:#14171a;--dim:#5b6570;--line:#e3e6ea;--bg:#fbfcfd;--card:#fff;
@@ -117,18 +113,18 @@ def collect(root: Path, logbook: str) -> tuple[list[dict], date]:
                             f"the oldest {age} days old.")
         for item in hook.retired_but_present(folder):
             warnings.append(f"Marked as retired, but still there: {item}")
-        state = str(fm.get("sastoyanie", "")).strip().lower()
+        state = str(fm.get("state", "")).strip().lower()
         rows.append({
             "name": folder.name,
             "state": STATE_LABEL.get(state, state or "—"),
             "raw_state": state,
             "on_us": hook.is_us(fm) if fm else False,
-            "who": str(fm.get("na_hod", "")).strip(),
+            "who": str(fm.get("turn", "")).strip(),
             "priority": PRIORITY_LABEL.get(
-                str(fm.get("prioritet", "")).strip().lower(),
-                str(fm.get("prioritet", "")).strip()),
+                str(fm.get("priority", "")).strip().lower(),
+                str(fm.get("priority", "")).strip()),
             "rank": hook.prio(fm) if fm else 3,
-            "next": str(fm.get("sledvashto") or fm.get("kriterii_zavarshvane") or "").strip(),
+            "next": str(fm.get("next") or fm.get("done_when") or "").strip(),
             "deadline": hook.deadline(fm) if fm else None,
             "warnings": warnings,
             "headerless": not fm,
@@ -168,12 +164,11 @@ def card(row: dict, today: date) -> str:
 
 
 def render(rows: list[dict], root: Path, today: date) -> str:
-    live = [r for r in rows if r["raw_state"] not in
-            ("zamrazena", "замразена", "frozen", "paused",
-             "priklyuchila", "priklyuchena", "приключила", "приключена", "done")]
-    frozen = [r for r in rows if r["raw_state"] in ("zamrazena", "замразена", "frozen", "paused")]
-    done = [r for r in rows if r["raw_state"] in
-            ("priklyuchila", "priklyuchena", "приключила", "приключена", "done")]
+    # The header parser maps every spelling to `frozen` / `finished` (v3.2.0); `done` is kept
+    # as its own word because plans share the field.
+    live = [r for r in rows if r["raw_state"] not in ("frozen", "finished", "done")]
+    frozen = [r for r in rows if r["raw_state"] == "frozen"]
+    done = [r for r in rows if r["raw_state"] in ("finished", "done")]
 
     def order(r):
         return (0 if r["deadline"] and r["deadline"] <= today else 1, r["rank"], r["name"])

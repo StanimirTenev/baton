@@ -67,13 +67,18 @@ def test_every_header_field_the_hook_reads_is_described_in_the_body():
         text = hook.read_text(encoding="utf-8")
         fields |= set(re.findall(r'fm\.get\(\s*["\'](\w+)["\']', text))
         fields |= set(re.findall(r'frontmatter\.get\(\s*["\'](\w+)["\']', text))
-    # English and Cyrillic spellings of the same field are aliases, documented as such
-    # rather than as fields of their own.
-    aliases = {"result", "skills", "state", "next", "priority", "deadline", "done"}
-    fields = {f for f in fields if f.isascii()} - aliases
+    # English is canonical inside the code since v3.2.0; the Bulgarian spellings live in
+    # FIELD_SYNONYMS and are checked below, each one named in the body.
+    fields = {f for f in fields if f.isascii()}
     missing = sorted(f for f in fields if f not in body)
     assert not missing, f"read by a hook, absent from the README body: {missing}"
     assert len(fields) >= 8, f"extraction found only {fields} — the pattern stopped matching"
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bss_doc", HOOKS / "baton_session_start.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    undocumented = sorted(k for k in mod.FIELD_SYNONYMS if k.isascii() and k not in body)
+    assert not undocumented, f"Bulgarian spellings read but not in the README body: {undocumented}"
 
 
 def test_every_plan_state_the_hook_accepts_is_named_in_the_body():

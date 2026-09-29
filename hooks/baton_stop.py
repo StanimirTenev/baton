@@ -180,7 +180,7 @@ def _criterion(logbook: Path) -> bool:
         fm = _parser()(logbook.read_text("utf-8-sig"))
     except Exception:
         return False
-    return str(fm.get("kriterii_zavarshvane", "")).strip() != ""
+    return str(fm.get("done_when", "")).strip() != ""
 
 
 def undefined(root: Path, name: str) -> list[str]:

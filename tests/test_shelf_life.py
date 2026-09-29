@@ -35,16 +35,16 @@ TODAY = date(2026, 9, 19)
 
 def test_a_header_with_no_shelf_life_behaves_as_before():
     """Every task written before this existed must keep working untouched."""
-    assert baton.review_due({"sastoyanie": "aktivna"}, TODAY) is None
+    assert baton.review_due({"state": "aktivna"}, TODAY) is None
 
 
 def test_a_review_that_has_not_come_due_is_silent():
-    fm = {"vyarno_kum": "2026-09-01", "pregled_sled": "30d"}
+    fm = {"true_as_of": "2026-09-01", "review_after": "30d"}
     assert baton.review_due(fm, TODAY) is None
 
 
 def test_a_review_that_has_passed_is_reported_with_its_lateness():
-    fm = {"vyarno_kum": "2026-08-01", "pregled_sled": "30d"}
+    fm = {"true_as_of": "2026-08-01", "review_after": "30d"}
     due = baton.review_due(fm, TODAY)
     assert due is not None
     when, late = due
@@ -53,23 +53,23 @@ def test_a_review_that_has_passed_is_reported_with_its_lateness():
 
 
 def test_months_are_understood_as_well_as_days():
-    fm = {"vyarno_kum": "2026-01-01", "pregled_sled": "6m"}
+    fm = {"true_as_of": "2026-01-01", "review_after": "6m"}
     assert baton.review_due(fm, TODAY) is not None
 
 
 def test_the_bulgarian_spellings_work_too():
     """The header is written by hand, in whichever alphabet the writer uses."""
-    fm = {"вярно_към": "01.08.2026", "преглед_след": "30д"}
+    fm = baton.parse_frontmatter("---\nвярно_към: 01.08.2026\nпреглед_след: 30д\n---\n")
     assert baton.review_due(fm, TODAY) is not None
 
 
 def test_an_as_of_date_with_no_period_says_nothing():
     """Half the pair is not a rule. It must not start reporting on its own."""
-    assert baton.review_due({"vyarno_kum": "2026-01-01"}, TODAY) is None
+    assert baton.review_due({"true_as_of": "2026-01-01"}, TODAY) is None
 
 
 def test_a_malformed_date_does_not_raise():
-    assert baton.review_due({"vyarno_kum": "last spring", "pregled_sled": "30d"}, TODAY) is None
+    assert baton.review_due({"true_as_of": "last spring", "review_after": "30d"}, TODAY) is None
 
 
 # --- the unverified debt -------------------------------------------------------

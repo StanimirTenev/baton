@@ -44,7 +44,7 @@ def _repo(path: Path, commits: int = 1) -> str:
 def test_a_record_pinned_to_the_current_commit_says_nothing(tmp_path):
     repo = tmp_path / "repo"
     head = _repo(repo, 1)
-    assert bss.kod_drift({"kod": f"{repo}@{head}"}) is None
+    assert bss.kod_drift({"code": f"{repo}@{head}"}) is None
 
 
 def test_a_record_whose_code_has_moved_says_how_far(tmp_path):
@@ -56,7 +56,7 @@ def test_a_record_whose_code_has_moved_says_how_far(tmp_path):
         subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
         subprocess.run(["git", "commit", "-qm", f"later{i}"], cwd=repo, check=True,
                        capture_output=True)
-    note = bss.kod_drift({"kod": f"{repo}@{old}"})
+    note = bss.kod_drift({"code": f"{repo}@{old}"})
     assert note and "3" in note, note
     assert old[:7] in note
 
@@ -65,18 +65,18 @@ def test_a_short_sha_and_a_tag_both_work(tmp_path):
     repo = tmp_path / "repo"
     head = _repo(repo, 2)
     subprocess.run(["git", "tag", "v1"], cwd=repo, check=True, capture_output=True)
-    assert bss.kod_drift({"kod": f"{repo}@{head[:7]}"}) is None
-    assert bss.kod_drift({"kod": f"{repo}@v1"}) is None
+    assert bss.kod_drift({"code": f"{repo}@{head[:7]}"}) is None
+    assert bss.kod_drift({"code": f"{repo}@v1"}) is None
 
 
 def test_a_reference_that_cannot_be_resolved_is_named_not_ignored(tmp_path):
     """The whole doctrine: not knowing is reported, never read as agreement."""
     repo = tmp_path / "repo"
     _repo(repo, 1)
-    note = bss.kod_drift({"kod": f"{repo}@deadbeef"})
+    note = bss.kod_drift({"code": f"{repo}@deadbeef"})
     assert note and ("deadbeef" in note or "not found" in note), note
 
-    missing = bss.kod_drift({"kod": f"{tmp_path / 'nowhere'}@abc1234"})
+    missing = bss.kod_drift({"code": f"{tmp_path / 'nowhere'}@abc1234"})
     assert missing, "a path that is not a repository must be said, not skipped"
     # ⚠️ Mutation caught this: asserting only that *something* came back let the
     # repository check be deleted, because the git call then failed and produced the
@@ -87,13 +87,13 @@ def test_a_reference_that_cannot_be_resolved_is_named_not_ignored(tmp_path):
 
 
 def test_a_malformed_field_is_named(tmp_path):
-    note = bss.kod_drift({"kod": "no-at-sign-here"})
+    note = bss.kod_drift({"code": "no-at-sign-here"})
     assert note and "@" in note, note
 
 
 def test_no_field_means_no_opinion(tmp_path):
     assert bss.kod_drift({}) is None
-    assert bss.kod_drift({"kod": ""}) is None
+    assert bss.kod_drift({"code": ""}) is None
 
 
 def test_the_drift_reaches_the_report_not_only_the_function(tmp_path, monkeypatch):
@@ -133,9 +133,9 @@ def test_a_sha_ref_is_not_printed_twice(tmp_path):
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-qm", "x"], cwd=repo, check=True, capture_output=True)
 
-    by_sha = bss.kod_drift({"kod": f"{repo}@{old[:7]}"})
+    by_sha = bss.kod_drift({"code": f"{repo}@{old[:7]}"})
     assert by_sha.count(old[:7]) == 1, by_sha
 
     subprocess.run(["git", "tag", "v9", old], cwd=repo, check=True, capture_output=True)
-    by_tag = bss.kod_drift({"kod": f"{repo}@v9"})
+    by_tag = bss.kod_drift({"code": f"{repo}@v9"})
     assert "v9" in by_tag, by_tag
