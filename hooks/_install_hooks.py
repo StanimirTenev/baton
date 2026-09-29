@@ -25,7 +25,7 @@ def main() -> int:
     #
     # 🔴 This used to write the file from scratch with `home` and `logbook` only, so a
     # second install took `pregled_poveritelni`, `pregled_indeks` and `source` with it.
-    # That list is what keeps client material off a hosted API, and `baton_pregled`
+    # That list is what keeps client material off a hosted API, and `baton_review`
     # stops when it is missing rather than reading it as empty -- so a silent reinstall
     # turned the review tool off. Found by an external review of v2.14.0.
     #
