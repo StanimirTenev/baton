@@ -74,3 +74,11 @@ def test_a_missing_data_folder_is_created_not_silently_skipped(tmp_path, monkeyp
     data = tmp_path / "not-yet" / "data"
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(data))
     assert _load(name)._local_file("x.json").parent.is_dir()
+
+
+def test_the_plugin_version_is_the_hooks_version():
+    """A second place to bump since 3.8.0. With `version` set, Claude Code keeps users on it
+    until it changes (code.claude.com/docs/en/plugins/manifest-reference) -- a release that
+    forgot plugin.json would never reach a plugin user."""
+    manifest = json.loads((HOOKS.parent / ".claude-plugin" / "plugin.json").read_text())
+    assert manifest["version"] == _load("baton_session_start").BATON_VERSION

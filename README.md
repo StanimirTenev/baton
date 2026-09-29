@@ -1039,6 +1039,31 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.8.0** — Baton as a Claude Code plugin
+
+- **Install with one command**: `claude plugin marketplace add StanimirTenev/baton`, then
+  `claude plugin install baton@baton`. The install script stays and works as before; nothing
+  changes for a script install (the board was compared line by line at every step).
+- The same three hooks and four skills. What differs as a plugin: the skills are
+  `/baton:baton-…`; the rules come with the session-start board (a plugin's `CLAUDE.md` is never
+  loaded); settings and state live in `${CLAUDE_PLUGIN_DATA}`; updates come through Claude Code,
+  and **the hooks make no network request**.
+- **Python is found at run time** by `hooks/run.sh`: `python3`, `python`, `py`, first that really
+  runs. On the Windows test machine `python3` was the Microsoft Store stand-in, which prints
+  "Python" and exits 0 without running anything -- a check on the exit code would have taken it.
+  On Windows the plugin needs Git for Windows (Git Bash runs the start script).
+- **Installed both ways**, the plugin's copy stands down and says which to remove.
+- Found by running it for real, and fixed: the plugin data folder is not always created before
+  the first hook runs; a session with its own `CLAUDE_CONFIG_DIR` was read as if it were
+  `~/.claude` (it "saw" an installer it does not run); settings and state written next to the
+  scripts would have been wiped by every plugin update.
+- The rules text moved to `templates/CLAUDE.md` (a `CLAUDE.md` at a plugin root fails
+  `claude plugin validate --strict`); both installers read it from there.
+- README: installing as a plugin, **what Baton sends over the network** (a table, read against
+  the code), and the Uninstall section, which had listed two hook entries and two of four skills.
+- Not checked: Windows without Git for Windows. Not yet as a plugin: the review tools
+  (`baton_review`, `baton_sift`, `baton_corpus`) and `/baton-key` -- use the script install for them.
+
 **v3.7.1** — the whole board, said outright
 
 - The instruction to the agent now names the ways a board gets shortened: no summary, no merged
