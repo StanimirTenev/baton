@@ -64,7 +64,7 @@ per-process scope PowerShell provides for exactly this.
 ### What it does, on every OS
 
 Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
-skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`), appends to
+skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`, `baton-key`), appends to
 `~/.claude/CLAUDE.md`, merges three entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
 or a USB stick — can be removed afterwards. Run it twice and the second run reports that
@@ -503,6 +503,19 @@ python3 tools/baton_review.py --which <file>    # which claim is unsupported?
 **Optional, off by default, and it needs a key.** Without an
 [OpenRouter](https://openrouter.ai) key this does not run, and nothing else in Baton wants
 one — the hooks never call it and never touch the network.
+
+**Getting the key: `/baton-key`.** The agent walks you through openrouter.ai (account, a little
+credit, a key with a spending limit) and then gives you one command to run **in your own
+terminal**, so the key never enters the conversation:
+
+```
+python3 tools/baton_key.py          # asks for the key without showing it, checks it, stores it
+python3 tools/baton_key.py --check  # the agent runs this: limit and spend, never the key
+```
+
+It is stored in `~/.config/baton/env` (mode 600). A refused key is not stored. On its first real
+run `--check` printed OpenRouter's `label` — which, for a key without a name, is the key's own
+first characters. It no longer prints the label; a test holds it.
 
 It exists for the one kind of rot Baton cannot catch by matching strings: an index line that
 asserts something the file it points at has since contradicted. A contradiction has no
@@ -958,6 +971,15 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.4.0** — `/baton-key`: the agent walks a new user to an OpenRouter key, which never enters the conversation
+
+- `tools/baton_key.py` asks for the key without echoing it, refuses to read it from a pipe,
+  checks it with OpenRouter before storing it, and stores it mode 600 in `~/.config/baton/env`.
+  `--check` reports limit and spend.
+- Found on the first real run: OpenRouter's `label` for an unnamed key is the start of the key.
+  It was about to be printed; it is not printed at all now, and a test holds it.
+- The review reads `~/.config/baton/env` first; the older location is still read.
 
 **v3.3.0** — the names inside the tools are English; the old function names still answer
 
@@ -1468,7 +1490,7 @@ having been done.
 | `BATON_HOME` | where task folders live (default `~/tasks`) |
 | `CLAUDE_CONFIG_DIR` | config directory to install into (default `~/.claude`) |
 | `BATON_LOGBOOK` | name of the logbook file (default `LOGBOOK.md`) — set it to a word in your own language if you prefer |
-| `OPENROUTER_API_KEY` | only for `tools/baton_pregled.py`; nothing else reads it and nothing else needs it |
+| `OPENROUTER_API_KEY` | only for the review tools; overrides the key stored by `tools/baton_key.py`. Nothing else reads it |
 
 `BATON_HOME=~/work ./install.sh` bakes that path into the installed hooks.
 
