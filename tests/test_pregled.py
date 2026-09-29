@@ -26,9 +26,9 @@ spec.loader.exec_module(bp)
 
 def _cfg(tmp_path: Path, **over) -> dict:
     (tmp_path / "hooks").mkdir(exist_ok=True)
-    return {"indeks": str(tmp_path / "INDEX.md"), "podbor": None,
+    return {"index": str(tmp_path / "INDEX.md"), "shortlist": None,
             "home": str(tmp_path), "logbook": "LOGBOOK.md",
-            "poveritelni": ["klient", "Клиент"], **over}
+            "confidential": ["klient", "Клиент"], **over}
 
 
 # --- the list you have to make a decision about -----------------------------
@@ -47,7 +47,7 @@ def test_an_explicitly_empty_list_is_accepted(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_PREGLED_INDEKS", str(tmp_path / "INDEX.md"))
     monkeypatch.setenv("BATON_PREGLED_POVERITELNI", "")
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
-    assert bp.config()["poveritelni"] == []
+    assert bp.config()["confidential"] == []
 
 
 def test_no_index_stops_the_tool(tmp_path, monkeypatch):
@@ -61,20 +61,20 @@ def test_no_index_stops_the_tool(tmp_path, monkeypatch):
 
 # --- what never leaves ------------------------------------------------------
 
-@pytest.mark.parametrize("text,etiket,want", [
+@pytest.mark.parametrize("text,label,want", [
     ("сървърът на Клиент е долу", "note.md", "Клиент"),
     ("work for klient ltd", "note.md", "klient"),
     ("", "klient/vpn.md", "klient"),
     ("an ordinary note about a scanner", "qrp/tool.md", ""),
 ])
-def test_the_guard_reads_path_and_content(text, etiket, want):
-    assert bp.poveritelno(text, etiket, ["klient", "Клиент"]) == want
+def test_the_guard_reads_path_and_content(text, label, want):
+    assert bp.held_word(text, label, ["klient", "Клиент"]) == want
 
 
 def test_a_word_only_in_the_other_alphabet_is_not_found():
     """The defect itself: the Latin spelling alone does not catch Cyrillic prose."""
-    assert bp.poveritelno("диск на Клиент", "n.md", ["klient"]) == ""
-    assert bp.poveritelno("диск на Клиент", "n.md", ["klient", "Клиент"]) == "Клиент"
+    assert bp.held_word("диск на Клиент", "n.md", ["klient"]) == ""
+    assert bp.held_word("диск на Клиент", "n.md", ["klient", "Клиент"]) == "Клиент"
 
 
 def test_a_word_far_into_the_text_is_still_found():
@@ -86,7 +86,7 @@ def test_a_word_far_into_the_text_is_still_found():
     """
     text = "safe text. " * 3000 + "и после за Клиент"
     assert len(text) > 28000
-    assert bp.poveritelno(text, "n.md", ["Клиент"]) == "Клиент"
+    assert bp.held_word(text, "n.md", ["Клиент"]) == "Клиент"
 
 
 def test_detail_hands_back_the_whole_file_for_the_guard(tmp_path):
@@ -94,7 +94,7 @@ def test_detail_hands_back_the_whole_file_for_the_guard(tmp_path):
     (tmp_path / "long.md").write_text("x" * 30000 + "Клиент", encoding="utf-8")
     body, whole = bp.detail(tmp_path, "long.md", 28000)
     assert len(body) == 28000 and "Клиент" not in body
-    assert bp.poveritelno(whole, "long.md", ["Клиент"]) == "Клиент"
+    assert bp.held_word(whole, "long.md", ["Клиент"]) == "Клиент"
 
 
 def test_a_held_text_never_reaches_the_network(monkeypatch):
@@ -102,7 +102,7 @@ def test_a_held_text_never_reaches_the_network(monkeypatch):
         raise AssertionError("a request was sent")
     monkeypatch.setattr(bp.urllib.request, "urlopen", boom)
     with pytest.raises(SystemExit) as err:
-        bp.pitay("k", "диск на Клиент", {"q": {}}, "x", ["Клиент"])
+        bp.ask("k", "диск на Клиент", {"q": {}}, "x", ["Клиент"])
     assert "Клиент" in str(err.value)
 
 
@@ -133,14 +133,14 @@ class _Reply:
 def test_a_broken_envelope_is_an_error_not_clean(payload, want, monkeypatch):
     monkeypatch.setattr(bp.urllib.request, "urlopen", lambda *a, **k: _Reply(payload))
     with pytest.raises(SystemExit) as err:
-        bp.pitay("k", "clear text", {"a": {}, "b": {}}, "x", [])
+        bp.ask("k", "clear text", {"a": {}, "b": {}}, "x", [])
     assert want in str(err.value)
 
 
 def test_a_sound_reply_passes(monkeypatch):
     payload = {"answers": {"a": {"noul": 0.5}, "b": {"noul": 0.1}}}
     monkeypatch.setattr(bp.urllib.request, "urlopen", lambda *a, **k: _Reply(payload))
-    assert bp.pitay("k", "clear text", {"a": {}, "b": {}}, "x", [])["answers"]["a"]["noul"] == 0.5
+    assert bp.ask("k", "clear text", {"a": {}, "b": {}}, "x", [])["answers"]["a"]["noul"] == 0.5
 
 
 # --- the cut announces itself ----------------------------------------------
@@ -161,7 +161,7 @@ def test_pointers_come_from_any_line_that_links(tmp_path):
         "- [One](a/one.md) — still true\n"
         "| 2 | [Two](b/two.md) | |\n"
         "no link on this line\n", encoding="utf-8")
-    found = bp.pokazalci(tmp_path / "INDEX.md", None)
+    found = bp.pointers(tmp_path / "INDEX.md", None)
     assert [t for _, t in found] == ["a/one.md", "b/two.md"]
     assert found[0][0].startswith("[One]")
 
@@ -170,7 +170,7 @@ def test_a_shortlist_narrows_the_index(tmp_path):
     (tmp_path / "INDEX.md").write_text(
         "- [One](a/one.md) — x\n- [Two](b/two.md) — y\n", encoding="utf-8")
     (tmp_path / "SHORT.md").write_text("| 1 | [Two](b/two.md) | |\n", encoding="utf-8")
-    found = bp.pokazalci(tmp_path / "INDEX.md", tmp_path / "SHORT.md")
+    found = bp.pointers(tmp_path / "INDEX.md", tmp_path / "SHORT.md")
     assert [t for _, t in found] == ["b/two.md"]
 
 
@@ -228,7 +228,7 @@ def test_a_value_in_the_grey_band_is_drawn_three_times_and_averaged(
     _index(tmp_path)
     seq = _Sequence(0.41, 0.47, 0.38)
     monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
-    bp.dali("k", _cfg(tmp_path), set())
+    bp.stale("k", _cfg(tmp_path), set())
     out = capsys.readouterr().out
     assert seq.calls == 3, f"очаквани 3 тегления, направени {seq.calls}"
     assert "0.42" in out
@@ -241,7 +241,7 @@ def test_a_confident_value_is_drawn_once(tmp_path, monkeypatch, capsys):
     _index(tmp_path)
     seq = _Sequence(0.12)
     monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
-    bp.dali("k", _cfg(tmp_path), set())
+    bp.stale("k", _cfg(tmp_path), set())
     assert seq.calls == 1, f"очаквано 1 тегление, направени {seq.calls}"
 
 
@@ -250,7 +250,7 @@ def test_a_high_value_is_drawn_once(tmp_path, monkeypatch):
     _index(tmp_path)
     seq = _Sequence(0.90)
     monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
-    bp.dali("k", _cfg(tmp_path), set())
+    bp.stale("k", _cfg(tmp_path), set())
     assert seq.calls == 1
 
 
@@ -258,7 +258,7 @@ def test_the_ledger_counts_every_draw_not_every_row(tmp_path, monkeypatch):
     """What left the machine is three requests. The ledger says what left."""
     _index(tmp_path)
     monkeypatch.setattr(bp.urllib.request, "urlopen", _Sequence(0.50, 0.50, 0.50))
-    bp.dali("k", _cfg(tmp_path), set())
+    bp.stale("k", _cfg(tmp_path), set())
     ledger = (tmp_path / ".pregled-dnevnik.tsv").read_text(encoding="utf-8")
     assert "\t3\t" in ledger, f"описът не брои трите тегления:\n{ledger}"
 
@@ -272,7 +272,7 @@ def test_zadachi_averages_in_the_band_too(tmp_path, monkeypatch, capsys):
         "## 2026-09-23 — доставчикът отговори и работата продължи\n", encoding="utf-8")
     seq = _Sequence(0.41, 0.47, 0.38)
     monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
-    bp.zadachi("k", _cfg(tmp_path, home=str(tmp_path), logbook="DNEVNIK.md"), set())
+    bp.tasks("k", _cfg(tmp_path, home=str(tmp_path), logbook="DNEVNIK.md"), set())
     assert seq.calls == 3, f"--zadachi не усреднява: {seq.calls} тегления"
     assert "0.42" in capsys.readouterr().out
 
@@ -299,7 +299,7 @@ def test_koe_is_deliberately_left_alone(tmp_path, monkeypatch):
         return echo(request)
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", counted)
-    bp.koe("k", _cfg(tmp_path), "detail.md")
+    bp.which("k", _cfg(tmp_path), "detail.md")
     assert calls["n"] == 1, "--koe е започнал да усреднява, без да е мерено"
 
 
@@ -338,7 +338,7 @@ def test_koe_takes_a_task_name_and_asks_its_logbook(tmp_path, monkeypatch, capsy
     _zadacha(tmp_path)
     _index(tmp_path)
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo())
-    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    bp.which("k", _koe_cfg(tmp_path), "zadacha")
     out = capsys.readouterr().out
     assert "zadacha" in out
     assert "next" in out, "изходът не казва кое поле носи твърдението"
@@ -347,7 +347,7 @@ def test_koe_takes_a_task_name_and_asks_its_logbook(tmp_path, monkeypatch, capsy
 
 def test_a_header_field_with_several_sentences_becomes_several_claims(tmp_path):
     """`sledvashto` routinely carries more than one assertion; each is asked alone."""
-    pairs = bp.zaglavni_tvardeniya({
+    pairs = bp.header_claims({
         "next": "the first step is done and checked. The second waits on Monday.",
         "state": "aktivna"})
     fields = [f for f, _ in pairs]
@@ -356,13 +356,13 @@ def test_a_header_field_with_several_sentences_becomes_several_claims(tmp_path):
 
 def test_a_short_field_falls_back_to_its_whole_value(tmp_path):
     """A one-line criterion yields no sentence; the value itself is the claim."""
-    pairs = bp.zaglavni_tvardeniya({"done_when": "the bus is live"})
+    pairs = bp.header_claims({"done_when": "the bus is live"})
     assert pairs == [("done_when", "the bus is live")]
 
 
 def test_an_empty_or_placeholder_field_is_not_a_claim(tmp_path):
     """A dash is what someone types to mean "nothing here"."""
-    assert bp.zaglavni_tvardeniya({"next": "-", "done_when": "live"}) \
+    assert bp.header_claims({"next": "-", "done_when": "live"}) \
         == [("done_when", "live")]
 
 
@@ -385,7 +385,7 @@ def test_an_empty_or_placeholder_field_is_not_a_claim(tmp_path):
 
 
 def test_the_control_words_are_not_koe_claims(tmp_path):
-    pairs = bp.zaglavni_tvardeniya({
+    pairs = bp.header_claims({
         "next": "the supplier answered and the second step follows now",
         "done_when": "the bus is live on all three channels",
         "state": "postoyanna", "turn": "nie"})
@@ -405,26 +405,26 @@ def test_zadachi_still_reads_the_control_words(tmp_path, monkeypatch, capsys):
         return _Reply({"answers": {"stale": {"noul": 0.1}}, "usage": {"cost": 0.0001}})
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", capture)
-    bp.zadachi("k", _koe_cfg(tmp_path), set())
+    bp.tasks("k", _koe_cfg(tmp_path), set())
     assert "state: finished" in sent["state"]
     assert "turn: us" in sent["state"]
 
 
 def test_koe_on_a_task_holds_on_the_whole_logbook_not_the_extract(tmp_path, monkeypatch):
     """The guard reads the whole logbook: a client named on page four is still named."""
-    _zadacha(tmp_path, body="x" * (bp.TSYAL + 1000) + "\nnotes about Клиент further down\n")
+    _zadacha(tmp_path, body="x" * (bp.WHOLE_CHARS + 1000) + "\nnotes about Клиент further down\n")
     monkeypatch.setattr(bp.urllib.request, "urlopen",
                         lambda *a, **k: pytest.fail("изпратено въпреки преградата"))
     with pytest.raises(SystemExit) as err:
-        bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+        bp.which("k", _koe_cfg(tmp_path), "zadacha")
     assert "Клиент" in str(err.value)
 
 
 def test_a_cut_logbook_says_the_cut_keeps_the_newest(tmp_path, monkeypatch, capsys):
     """Newest-first is why this cut is sound where the index corpus's was not."""
-    _zadacha(tmp_path, body="y" * (bp.TSYAL + 500))
+    _zadacha(tmp_path, body="y" * (bp.WHOLE_CHARS + 500))
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo())
-    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    bp.which("k", _koe_cfg(tmp_path), "zadacha")
     out = capsys.readouterr().out
     assert "CUT" in out
     assert "OLDEST" in out, \
@@ -443,7 +443,7 @@ def test_koe_on_a_task_still_draws_once(tmp_path, monkeypatch):
         return echo(request)
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", counted)
-    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    bp.which("k", _koe_cfg(tmp_path), "zadacha")
     assert calls["n"] == 1
 
 
@@ -455,7 +455,7 @@ def test_an_index_target_still_reaches_the_index_mode(tmp_path, monkeypatch, cap
         encoding="utf-8")
     (tmp_path / "detail.md").write_text("The detail file says something.\n", encoding="utf-8")
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo())
-    bp.koe("k", _koe_cfg(tmp_path), "detail.md")
+    bp.which("k", _koe_cfg(tmp_path), "detail.md")
     assert "detail.md" in capsys.readouterr().out
 
 
@@ -470,7 +470,7 @@ def test_a_thin_logbook_is_announced_before_the_numbers(tmp_path, monkeypatch, c
     """
     _zadacha(tmp_path, body="## 2026-09-17 — restored from the inventory\n")
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo(0.1))
-    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    bp.which("k", _koe_cfg(tmp_path), "zadacha")
     out = capsys.readouterr().out
     assert "never mentioned" in out, \
         'не разделя опровергано от никога-не-писано'
@@ -482,7 +482,7 @@ def test_a_full_logbook_is_not_called_thin(tmp_path, monkeypatch, capsys):
     """The other direction: a real logbook must not carry the warning's excuse."""
     _zadacha(tmp_path, body="## 2026-09-23 — an entry\n" + "детайли. " * 400)
     monkeypatch.setattr(bp.urllib.request, "urlopen", _echo(0.1))
-    bp.koe("k", _koe_cfg(tmp_path), "zadacha")
+    bp.which("k", _koe_cfg(tmp_path), "zadacha")
     assert "not written" not in capsys.readouterr().out
 
 
@@ -498,7 +498,7 @@ def test_chaka_is_not_a_claim_field(tmp_path):
     active use — and is untouched.
     """
     assert "chaka" not in bp.HEADER_CLAIMS
-    assert bp.zaglavni_tvardeniya({"chaka": "Ledger"}) == []
+    assert bp.header_claims({"chaka": "Ledger"}) == []
 
 
 def test_the_barrier_reads_everything_that_is_sent_not_only_the_state(monkeypatch):
@@ -524,7 +524,7 @@ def test_the_barrier_reads_everything_that_is_sent_not_only_the_state(monkeypatc
                       "instructions": "Does this mention the акме server outage?",
                       "criteria": {"true": "yes", "false": "no"}}}
     with pytest.raises(SystemExit) as stop:
-        bp.pitay("k", "an entirely innocuous passage", question, "label", words)
+        bp.ask("k", "an entirely innocuous passage", question, "label", words)
     assert "акме" in str(stop.value) and "It does not leave the machine" in str(stop.value)
     assert not sent, "nothing may be serialised onto the wire"
 
@@ -536,7 +536,7 @@ def test_a_confidential_word_in_the_criteria_is_caught_too(monkeypatch):
     question = {"q": {"type": "noul", "instructions": "harmless",
                       "criteria": {"true": "it names акме", "false": "it does not"}}}
     with pytest.raises(SystemExit, match="It does not leave the machine"):
-        bp.pitay("k", "innocuous", question, "label", ["акме"])
+        bp.ask("k", "innocuous", question, "label", ["акме"])
 
 
 # --- `--dali` fetches the part of the file the pointer is about ---------------
@@ -552,11 +552,11 @@ def test_dali_extract_reaches_evidence_below_the_cut():
     head = "Състояние: стратегията е в сила.\n\n"
     deep = "Постът за профилите излезе на 14.09 и вторият на 15.09.\n\n"
     text = head + _FILLER + deep + _FILLER
-    assert text.index(deep) > bp.OTRYAZAK * 2
+    assert text.index(deep) > bp.EXTRACT_CHARS * 2
     pointer = "[LinkedIn стратегия](x.md) — постовете за профилите излязоха на 14.09 и 15.09"
-    out = bp.izvadka(text, pointer)
+    out = bp.extract(text, pointer)
     assert "14.09" in out and "15.09" in out
-    assert len(out) <= bp.OTRYAZAK
+    assert len(out) <= bp.EXTRACT_CHARS
     assert out.startswith(head.strip())
 
 
@@ -564,20 +564,20 @@ def test_dali_extract_keeps_the_head_where_current_state_lives():
     """Head-only beat the whole file 0.73 against 0.43: these files put what is true
     now at the top. Retrieval adds to the head; it never replaces it."""
     text = "ГЛАВА С ТЕКУЩОТО СЪСТОЯНИЕ.\n\n" + _FILLER + "дълбоко нещо за ключа\n\n" + _FILLER
-    out = bp.izvadka(text, "[x](x.md) — ключа")
+    out = bp.extract(text, "[x](x.md) — ключа")
     assert out.startswith("ГЛАВА С ТЕКУЩОТО СЪСТОЯНИЕ.")
 
 
 def test_dali_extract_without_a_match_is_the_old_extract():
     text = "Начало.\n\n" + _FILLER + _FILLER
-    assert bp.izvadka(text, "[x](x.md) — нищо общо тук zzzqqq") == text[:bp.OTRYAZAK]
+    assert bp.extract(text, "[x](x.md) — нищо общо тук zzzqqq") == text[:bp.EXTRACT_CHARS]
 
 
 def test_dali_extract_marks_the_gaps():
     """Stitched pieces must not read as one continuous file: a state line from the
     head followed directly by an old paragraph would look like one statement."""
     text = "Начало.\n\n" + _FILLER + "Ключът е сменен на 20.09.\n\n" + _FILLER
-    out = bp.izvadka(text, "[x](x.md) — ключът е сменен на 20.09")
+    out = bp.extract(text, "[x](x.md) — ключът е сменен на 20.09")
     assert "[…]" in out
 
 
@@ -596,7 +596,7 @@ def test_dali_sends_the_retrieved_extract(tmp_path, monkeypatch):
         return _Reply({"answers": {"stale": {"noul": 0.1}}, "usage": {"cost": 0.0001}})
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", capture)
-    bp.dali("k", _cfg(tmp_path), set())
+    bp.stale("k", _cfg(tmp_path), set())
     # A word only the deep paragraph has: the pointer itself travels in the state too,
     # so a phrase from the pointer would pass without any retrieval at all.
     assert sent and "Петров" in sent[0]
@@ -612,7 +612,7 @@ def test_english_config_keys_are_read(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_REVIEW_CONFIDENTIAL", "acme,акме")
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     cfg = bp.config()
-    assert cfg["indeks"] == str(tmp_path / "INDEX.md") and cfg["poveritelni"] == ["acme", "акме"]
+    assert cfg["index"] == str(tmp_path / "INDEX.md") and cfg["confidential"] == ["acme", "акме"]
 
 
 def test_the_old_file_name_and_flags_still_work(tmp_path):
@@ -622,7 +622,10 @@ def test_the_old_file_name_and_flags_still_work(tmp_path):
     spec2 = importlib.util.spec_from_file_location("bp_old", old)
     m = importlib.util.module_from_spec(spec2)
     spec2.loader.exec_module(m)
-    assert m.pitay and m.poveritelno and m.config, "the old path lost its functions"
+    assert m.ask and m.held_word and m.config, "the old path lost its functions"
+    # The corpus labeller calls these by their names before 3.3.0, and reads the old key.
+    assert (m.pitay, m.poveritelno, m.klyuch) == (m.ask, m.held_word, m.get_api_key)
+    assert "poveritelni" in m.config() and m.config()["poveritelni"] == m.config()["confidential"]
     for flag in ("--dali", "--stale"):
         out = subprocess.run([sys.executable, str(old), flag, "--help"], capture_output=True, text=True)
         assert out.returncode == 0 and "--stale" in out.stdout, out.stderr

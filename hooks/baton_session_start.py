@@ -486,8 +486,8 @@ def kod_drift(fm: dict) -> str | None:
         return (f"`code:` {repo.name} is on a commit that is NOT a descendant of `{ref}` ({pinned[:7]}) "
                 f"— a fork or rewritten history")
     # When the ref IS the sha, naming both reads as a stutter: "after `7374660` (7374660)".
-    kade = f"`{ref}`" if not pinned.startswith(ref.lower()) else f"`{pinned[:7]}`"
-    return (f"`code:` {repo.name} is **{behind}** commits after {kade} — the record describes code "
+    where_ref = f"`{ref}`" if not pinned.startswith(ref.lower()) else f"`{pinned[:7]}`"
+    return (f"`code:` {repo.name} is **{behind}** commits after {where_ref} — the record describes code "
             f"that has moved underneath it")
 
 
@@ -707,8 +707,8 @@ def line_for(name: str, fm: dict, tail: str = "") -> str:
     body = f" — {nxt}" if nxt else ""
     # Named, not loaded. The agent reads this and invokes what it needs; the hook
     # never reaches into the session to load anything on its behalf.
-    umeniya = skills_for(fm)
-    skills = f"  ⟨skills: {', '.join(umeniya)}⟩" if umeniya else ""
+    skill_names = skills_for(fm)
+    skills = f"  ⟨skills: {', '.join(skill_names)}⟩" if skill_names else ""
     return f"- {name}{badge}{body}{tail}{skills}"
 
 

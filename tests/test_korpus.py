@@ -261,7 +261,7 @@ def test_with_no_file_and_no_environment_the_default_is_tasks(tmp_path, monkeypa
 def test_every_tool_reads_the_same_config_object(tmp_path):
     """Not "they agree" — the same function. Agreement is the part that decays."""
     bkade_cfg = _load("baton_where")
-    assert bkade_cfg.korpus.config is bkorpus.config
+    assert bkade_cfg.corpus.config is bkorpus.config
 
 
 def test_the_board_finds_the_tasks_the_config_points_at(tmp_path, monkeypatch):

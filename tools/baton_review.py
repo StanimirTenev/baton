@@ -83,11 +83,11 @@ from pathlib import Path
 ENDPOINT = "https://openrouter.ai/api/alpha/decisions"
 MODEL = "~typesafe/jev-latest"
 
-PRAG = 0.46          # measured, not assumed -- see the module docstring
-SIVA = (0.35, 0.60)  # the band where one draw is partly a coin flip -- measured
-TEGLENIYA = 3        # draws inside that band, averaged
-OTRYAZAK = 2600      # for --dali: the extract that question wants
-TSYAL = 28000        # for --koe: a CEILING, not a promise; it announces itself
+THRESHOLD = 0.46          # measured, not assumed -- see the module docstring
+GREY_BAND = (0.35, 0.60)  # the band where one draw is partly a coin flip -- measured
+DRAWS = 3        # draws inside that band, averaged
+EXTRACT_CHARS = 2600      # for --dali: the extract that question wants
+WHOLE_CHARS = 28000        # for --koe: a CEILING, not a promise; it announces itself
 
 LINK = re.compile(r"\[([^\]]+)\]\(([^)#]+\.md)\)")
 
@@ -122,7 +122,7 @@ HEADER_CLAIMS = ("next", "done_when", "state", "turn")
 #
 # They remain in `--zadachi`, which reads the whole header together. Judging where
 # the work stands is that mode's job; naming which claim broke is this one's.
-KONTROLNI = ("state", "turn")
+CONTROL_FIELDS = ("state", "turn")
 
 
 def _hook():
@@ -156,22 +156,22 @@ def config() -> dict:
     cfg = _k.config()["raw"]
 
     # English names from v3.1.0; the Bulgarian ones every existing install carries are read too.
-    poveritelni = os.environ.get("BATON_REVIEW_CONFIDENTIAL", os.environ.get("BATON_PREGLED_POVERITELNI"))
+    confidential = os.environ.get("BATON_REVIEW_CONFIDENTIAL", os.environ.get("BATON_PREGLED_POVERITELNI"))
     out = {
-        "indeks": (os.environ.get("BATON_REVIEW_INDEX") or os.environ.get("BATON_PREGLED_INDEKS")
+        "index": (os.environ.get("BATON_REVIEW_INDEX") or os.environ.get("BATON_PREGLED_INDEKS")
                    or cfg.get("review_index") or cfg.get("pregled_indeks")),
-        "podbor": (os.environ.get("BATON_REVIEW_SHORTLIST") or os.environ.get("BATON_PREGLED_PODBOR")
+        "shortlist": (os.environ.get("BATON_REVIEW_SHORTLIST") or os.environ.get("BATON_PREGLED_PODBOR")
                    or cfg.get("review_shortlist") or cfg.get("pregled_podbor")),
         "home": os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks"),
         "logbook": (os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"),
-        "poveritelni": ([w.strip() for w in poveritelni.split(",") if w.strip()]
-                        if poveritelni is not None else
+        "confidential": ([w.strip() for w in confidential.split(",") if w.strip()]
+                        if confidential is not None else
                         cfg.get("review_confidential", cfg.get("pregled_poveritelni"))),
     }
-    if not out["indeks"]:
+    if not out["index"]:
         sys.exit("NO index. Put `review_index` in baton.local.json — the file with\n"
                  "the pointers to check (for example, your memory index).")
-    if out["poveritelni"] is None:
+    if out["confidential"] is None:
         # Fail closed on a decision nobody has made. An absent list is not an empty
         # one: it means the question was never asked, and the answer matters more
         # here than anywhere else in Baton, because this is the one thing that sends.
@@ -182,10 +182,13 @@ def config() -> dict:
             '  "review_confidential": ["client-name", "Client Name", "unreleased-product"]\n\n'
             "If truly nothing is held back, write an explicitly empty list: []\n"
             "⚠️ Write every name in EVERY alphabet you use — matching is by string.")
+    # The Bulgarian keys, for scripts outside this repository that read them (a corpus
+    # labeller on the author's machine reads `config()["poveritelni"]`).
+    out["indeks"], out["podbor"], out["poveritelni"] = out["index"], out["shortlist"], out["confidential"]
     return out
 
 
-def klyuch() -> str:
+def get_api_key() -> str:
     value = os.environ.get("OPENROUTER_API_KEY", "")
     if not value:
         path = Path.home() / ".config/typesafe/env"
@@ -201,7 +204,7 @@ def klyuch() -> str:
     return value
 
 
-def poveritelno(text: str, etiket: str, dumi: list[str]) -> str:
+def held_word(text: str, label: str, words: list[str]) -> str:
     """Which configured word held this back, or "" if it is clear.
 
     Checks the path AND the content: material can sit in an innocent folder and
@@ -219,15 +222,15 @@ def poveritelno(text: str, etiket: str, dumi: list[str]) -> str:
     whether this document is about confidential matter, not whether the bytes that
     happened to fit contained the word.
     """
-    lower = f"{etiket} {text}".lower()
-    for duma in dumi:
-        if duma.lower() in lower:
-            return duma
+    lower = f"{label} {text}".lower()
+    for word in words:
+        if word.lower() in lower:
+            return word
     return ""
 
 
-def stoynost(api_key: str, state: str, questions: dict, etiket: str,
-             dumi: list[str], kluch: str = "stale") -> tuple[float, list[float], float]:
+def value_of(api_key: str, state: str, questions: dict, label: str,
+             words: list[str], answer_key: str = "stale") -> tuple[float, list[float], float]:
     """One draw, or `TEGLENIYA` averaged inside the grey band.
 
     Measured 2026-09-23 on 45 pointers, three identical runs of the same request:
@@ -248,20 +251,20 @@ def stoynost(api_key: str, state: str, questions: dict, etiket: str,
     Returns (value, draws, cost) -- `draws` so the caller can print what it paid
     for, because a mean printed alone looks exactly like a single draw.
     """
-    out = pitay(api_key, state, questions, etiket, dumi)
-    draws = [out["answers"][kluch]["noul"]]
+    out = ask(api_key, state, questions, label, words)
+    draws = [out["answers"][answer_key]["noul"]]
     cost = out.get("usage", {}).get("cost", 0)
-    if SIVA[0] <= draws[0] <= SIVA[1]:
-        for _ in range(TEGLENIYA - 1):
+    if GREY_BAND[0] <= draws[0] <= GREY_BAND[1]:
+        for _ in range(DRAWS - 1):
             # No `uid`: the audit that measured all this also measured that the
             # cookbook's uid trick ADDS variance rather than revealing it.
-            again = pitay(api_key, state, questions, etiket, dumi)
-            draws.append(again["answers"][kluch]["noul"])
+            again = ask(api_key, state, questions, label, words)
+            draws.append(again["answers"][answer_key]["noul"])
             cost += again.get("usage", {}).get("cost", 0)
     return sum(draws) / len(draws), draws, cost
 
 
-def pitay(api_key: str, state: str, questions: dict, etiket: str, dumi: list[str]) -> dict:
+def ask(api_key: str, state: str, questions: dict, label: str, words: list[str]) -> dict:
     """One call. A missing or malformed answer is an ERROR, never "clean".
 
     Issues closed in `jkudish/jev-mcp` for exactly this: a null `answers` envelope,
@@ -276,14 +279,14 @@ def pitay(api_key: str, state: str, questions: dict, etiket: str, dumi: list[str
     # builds also carries `questions` -- so a confidential word appearing only in a
     # question reached the wire. Reproduced 2026-09-27 from an external review of
     # v2.14.0: a term present solely in `instructions` arrived in the outgoing JSON.
-    # `baton_sift`, shipped the night before, puts the caller's own `--vapros`
+    # `baton_sift`, shipped the night before, puts the caller's own `--question`
     # straight into that field, which is how a barrier that reads only half of what
     # it sends becomes a barrier that does not hold.
     #
     # So the check reads what is actually sent: the serialised body, whole.
-    zadarzhano = poveritelno(json.dumps(body, ensure_ascii=False), etiket, dumi)
-    if zadarzhano:
-        sys.exit(f"⛔ refused: \"{zadarzhano}\" appears in {etiket}. "
+    held_by = held_word(json.dumps(body, ensure_ascii=False), label, words)
+    if held_by:
+        sys.exit(f"⛔ refused: \"{held_by}\" appears in {label}. "
                  f"It does not leave the machine.")
     request = urllib.request.Request(
         ENDPOINT, data=json.dumps(body).encode(),
@@ -293,19 +296,19 @@ def pitay(api_key: str, state: str, questions: dict, etiket: str, dumi: list[str
             out = json.loads(response.read())
     except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError) as err:
         detail = err.read().decode()[:200] if hasattr(err, "read") else str(err)
-        sys.exit(f"⛔ the call failed ({etiket}): {detail}")
+        sys.exit(f"⛔ the call failed ({label}): {detail}")
 
     answers = out.get("answers")
     if not isinstance(answers, dict) or set(answers) != set(questions):
-        sys.exit(f"⛔ incomplete answer for {etiket}: returned {sorted(answers or [])}, "
+        sys.exit(f"⛔ incomplete answer for {label}: returned {sorted(answers or [])}, "
                  f"asked {sorted(questions)}. Not read as \"clean\".")
     for name, value in answers.items():
         if not isinstance(value.get("noul"), (int, float)):
-            sys.exit(f"⛔ malformed answer for {etiket}/{name}: {value}")
+            sys.exit(f"⛔ malformed answer for {label}/{name}: {value}")
     return out
 
 
-def zapishi(home: str, rezhim: str, koe: str, broy: int, tsena: float) -> None:
+def log_spend(home: str, mode: str, which: str, n_questions: int, cost: float) -> None:
     """What was sent, when, and what it cost. Without this line the review is an
     invisible expense and nobody can say what left the machine."""
     path = Path(home).expanduser() / ".pregled-dnevnik.tsv"
@@ -314,20 +317,20 @@ def zapishi(home: str, rezhim: str, koe: str, broy: int, tsena: float) -> None:
     with path.open("a", encoding="utf-8") as handle:
         if nov:
             handle.write("when\tmode\twhat\tquestions\tcost_usd\n")
-        handle.write(f"{datetime.now():%Y-%m-%d %H:%M}\t{rezhim}\t{koe}\t{broy}\t{tsena:.6f}\n")
+        handle.write(f"{datetime.now():%Y-%m-%d %H:%M}\t{mode}\t{which}\t{n_questions}\t{cost:.6f}\n")
 
 
-def pokazalci(indeks: Path, podbor: Path | None) -> list[tuple[str, str]]:
+def pointers(index_file: Path, shortlist: Path | None) -> list[tuple[str, str]]:
     """(pointer line, target) for every link in the index, optionally narrowed.
 
     `podbor` is any file that names some of the targets -- a shortlist of the rows
     that actually carry state, so a long index does not have to be paid for whole.
     """
     wanted = None
-    if podbor is not None and podbor.is_file():
-        wanted = {m.group(2) for m in LINK.finditer(podbor.read_text(encoding="utf-8"))}
+    if shortlist is not None and shortlist.is_file():
+        wanted = {m.group(2) for m in LINK.finditer(shortlist.read_text(encoding="utf-8"))}
     out = []
-    for line in indeks.read_text(encoding="utf-8").splitlines():
+    for line in index_file.read_text(encoding="utf-8").splitlines():
         match = LINK.search(line)
         if not match:
             continue
@@ -359,21 +362,21 @@ def detail(root: Path, target: str, limit: int) -> tuple[str, str]:
     return text[:limit], text
 
 
-GLAVA = 1000   # for --dali: the head always goes; retrieval fills the rest of OTRYAZAK
-_DUMA = re.compile(r"\d+(?:[.:]\d+)+|\w+")
+HEAD_CHARS = 1000   # for --dali: the head always goes; retrieval fills the rest of OTRYAZAK
+_WORD_RE = re.compile(r"\d+(?:[.:]\d+)+|\w+")
 
 
-def _dumi(text: str) -> set[str]:
+def _words(text: str) -> set[str]:
     """Words as crude stems: lower case, first five letters, four or more letters.
 
     Lexical, not semantic -- Baton is stdlib only. Five letters is enough to meet
     Bulgarian endings halfway (e.g. a plural and a singular); dates stay whole (14.09).
     """
     return {w[:5] if w.isalpha() else w
-            for w in _DUMA.findall(text.lower()) if len(w) >= 4}
+            for w in _WORD_RE.findall(text.lower()) if len(w) >= 4}
 
 
-def izvadka(text: str, pointer: str, limit: int = OTRYAZAK) -> str:
+def extract(text: str, pointer: str, limit: int = EXTRACT_CHARS) -> str:
     """The head of the file, plus the paragraphs the pointer is about, within `limit`.
 
     Measured 2026-09-23: `project_linkedin_strategiya.md` kept scoring 0.77 AFTER its
@@ -388,21 +391,21 @@ def izvadka(text: str, pointer: str, limit: int = OTRYAZAK) -> str:
     `[…]` so stitched pieces do not read as one statement. No paragraph shares a
     word: the old extract, unchanged.
     """
-    head = text[:GLAVA]
-    words = _dumi(re.sub(r"\]\([^)]*\)", "]", pointer))
+    head = text[:HEAD_CHARS]
+    words = _words(re.sub(r"\]\([^)]*\)", "]", pointer))
     chunks, pos = [], 0
     for para in re.split(r"\n\s*\n", text):
         start = text.find(para, pos)
         pos = start + len(para)
-        if start >= GLAVA and para.strip():
+        if start >= HEAD_CHARS and para.strip():
             chunks.append((start, para.strip()[:800]))
     df: dict[str, int] = {}
     for _, para in chunks:
-        for w in _dumi(para) & words:
+        for w in _words(para) & words:
             df[w] = df.get(w, 0) + 1
     scored = []
     for start, para in chunks:
-        score = sum(math.log((len(chunks) + 1) / (df[w] + 0.5)) for w in _dumi(para) & words)
+        score = sum(math.log((len(chunks) + 1) / (df[w] + 0.5)) for w in _words(para) & words)
         if score > 0:
             scored.append((score, start, para))
     chosen, room = [], limit - len(head)
@@ -415,40 +418,40 @@ def izvadka(text: str, pointer: str, limit: int = OTRYAZAK) -> str:
     return head + "".join(f"\n[…]\n{para}" for _, para in sorted(chosen))
 
 
-def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
-    indeks = Path(cfg["indeks"]).expanduser()
-    podbor = Path(cfg["podbor"]).expanduser() if cfg.get("podbor") else None
-    dumi, root = cfg["poveritelni"], indeks.parent
-    results, spent, zadarzhani, izpratani = [], 0.0, [], 0
+def stale(api_key: str, cfg: dict, izbrani: set[str]) -> None:
+    index_file = Path(cfg["index"]).expanduser()
+    shortlist = Path(cfg["shortlist"]).expanduser() if cfg.get("shortlist") else None
+    words, root = cfg["confidential"], index_file.parent
+    results, spent, held, sent = [], 0.0, [], 0
     try:
-        for pointer, target in pokazalci(indeks, podbor):
+        for pointer, target in pointers(index_file, shortlist):
             if izbrani and not any(part in target for part in izbrani):
                 continue
-            body, tsyalo = detail(root, target, OTRYAZAK)
+            body, whole = detail(root, target, EXTRACT_CHARS)
             if not body:
                 print(f"  ⚠️ no file — {target}")
                 continue
-            body = izvadka(tsyalo, pointer)
+            body = extract(whole, pointer)
             state = (f"INDEX LINE (a pointer in an index):\n{pointer}\n\n"
                      f"DETAIL FILE ({target}), the source of truth:\n{body}")
             # A confidential row stops ITSELF, not the review: otherwise the only
             # way to get a review is to remove the barrier. Judged on the WHOLE
             # file, not the extract -- a client named on page four is still named.
-            zadarzhano = poveritelno(f"{pointer}\n{tsyalo}", target, dumi)
-            if zadarzhano:
-                zadarzhani.append((target, zadarzhano))
-                print(f"  ⛔ held ({zadarzhano}) — {target}")
+            held_by = held_word(f"{pointer}\n{whole}", target, words)
+            if held_by:
+                held.append((target, held_by))
+                print(f"  ⛔ held ({held_by}) — {target}")
                 continue
-            izpratani += 1   # counted BEFORE the send: the ledger records what left
-            value, draws, cost = stoynost(api_key, state, {"stale": {
+            sent += 1   # counted BEFORE the send: the ledger records what left
+            value, draws, cost = value_of(api_key, state, {"stale": {
                 "type": "noul",
                 "instructions": ("The index line is only a pointer; the detail file is the source "
                                  "of truth. Does the index line assert anything the detail file "
                                  "contradicts, has superseded, or now reports differently?"),
                 "criteria": {"true": "The index says something the file no longer supports",
                              "false": "Consistent, or asserts nothing the file covers"}}},
-                target, dumi)
-            izpratani += len(draws) - 1   # the band's extra draws also left
+                target, words)
+            sent += len(draws) - 1   # the band's extra draws also left
             spent += cost
             results.append((value, target))
             # The draws are printed, never only the mean: a mean of three shown
@@ -459,14 +462,14 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     finally:
         # Written even when the run falls over: text that left the machine does not
         # come back because the reply did not.
-        zapishi(cfg["home"], "dali", indeks.name, izpratani, spent)
+        log_spend(cfg["home"], "dali", index_file.name, sent, spent)
 
-    if zadarzhani:
-        print(f"\nHELD ({len(zadarzhani)}) — not sent:")
-        for target, duma in zadarzhani:
-            print(f"  ⛔ {target} ({duma})")
-    print(f"\nABOVE THE THRESHOLD ({PRAG}) — look at them, do not trust them:")
-    flagged = [r for r in sorted(results, reverse=True) if r[0] >= PRAG]
+    if held:
+        print(f"\nHELD ({len(held)}) — not sent:")
+        for target, word in held:
+            print(f"  ⛔ {target} ({word})")
+    print(f"\nABOVE THE THRESHOLD ({THRESHOLD}) — look at them, do not trust them:")
+    flagged = [r for r in sorted(results, reverse=True) if r[0] >= THRESHOLD]
     for value, target in flagged:
         print(f"  🔴 {value:.2f}  {target}")
     if not flagged:
@@ -474,7 +477,7 @@ def dali(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     print(f"\ncost: ${spent:.6f}")
 
 
-def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
+def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     """Every task header against the logbook it sits on top of."""
     hook = _hook()
     root = Path(cfg["home"]).expanduser()
@@ -482,8 +485,8 @@ def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     # from hook.config() read a different baton.local.json -- the source copy, which
     # has none -- and the run silently found no logbooks at all and cost $0.
     logbook_name = cfg["logbook"]
-    dumi = cfg["poveritelni"]
-    results, spent, zadarzhani, izpratani = [], 0.0, [], 0
+    words = cfg["confidential"]
+    results, spent, held, sent = [], 0.0, [], 0
     try:
         for folder in sorted(p for p in root.iterdir() if p.is_dir()
                              and not p.name.startswith(".")):
@@ -500,16 +503,16 @@ def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
                 continue
             body = whole.split("---", 2)[2].strip() if whole.startswith("---") else whole
             pointer = "\n".join(f"{k}: {v}" for k, v in claims.items())
-            zadarzhano = poveritelno(f"{pointer}\n{whole}", folder.name, dumi)
-            if zadarzhano:
-                zadarzhani.append((folder.name, zadarzhano))
-                print(f"  ⛔ held ({zadarzhano}) — {folder.name}")
+            held_by = held_word(f"{pointer}\n{whole}", folder.name, words)
+            if held_by:
+                held.append((folder.name, held_by))
+                print(f"  ⛔ held ({held_by}) — {folder.name}")
                 continue
             state = (f"TASK HEADER (what it claims about where the work stands):\n{pointer}\n\n"
                      f"LOGBOOK ({logbook_name}), newest entries first, the source of truth:\n"
-                     f"{body[:OTRYAZAK]}")
-            izpratani += 1
-            value, draws, cost = stoynost(api_key, state, {"stale": {
+                     f"{body[:EXTRACT_CHARS]}")
+            sent += 1
+            value, draws, cost = value_of(api_key, state, {"stale": {
                 "type": "noul",
                 "instructions": ("The header is only a pointer; the logbook is the source of "
                                  "truth. Does the header assert anything the recent entries "
@@ -518,26 +521,26 @@ def zadachi(api_key: str, cfg: dict, izbrani: set[str]) -> None:
                                  "who is no longer the one holding the move?"),
                 "criteria": {"true": "The header says something the logbook no longer supports",
                              "false": "Consistent, or asserts nothing the entries cover"}}},
-                folder.name, dumi)
-            izpratani += len(draws) - 1
+                folder.name, words)
+            sent += len(draws) - 1
             spent += cost
             results.append((value, folder.name))
             povtoreno = f"  ({' '.join(f'{d:.2f}' for d in draws)})" if len(draws) > 1 else ""
             print(f"  {value:<5.2f} {folder.name}{povtoreno}")
     finally:
-        zapishi(cfg["home"], "zadachi", root.name, izpratani, spent)
+        log_spend(cfg["home"], "zadachi", root.name, sent, spent)
 
-    if zadarzhani:
-        print(f"\nHELD ({len(zadarzhani)}) — not sent:")
-        for name, duma in zadarzhani:
-            print(f"  ⛔ {name} ({duma})")
+    if held:
+        print(f"\nHELD ({len(held)}) — not sent:")
+        for name, word in held:
+            print(f"  ⛔ {name} ({word})")
     print(f"\nORDERED BY SUSPICION — ⚠️ the threshold was NOT measured on this corpus:")
     for value, name in sorted(results, reverse=True):
-        print(f"  {'🔴' if value >= PRAG else '  '} {value:.2f}  {name}")
+        print(f"  {'🔴' if value >= THRESHOLD else '  '} {value:.2f}  {name}")
     print(f"\ncost: ${spent:.6f}")
 
 
-def tvardeniya(line: str) -> list[str]:
+def claims(line: str) -> list[str]:
     """Cut a pointer line into separate claims, on the separators prose uses."""
     body = re.sub(r"^\[[^\]]*\]\([^)]*\)\s*[—-]\s*", "", line)
     body = re.sub(r"\*\*|`|⚠️|⭐|✅|⛔|🔴|⏳", "", body)
@@ -545,7 +548,7 @@ def tvardeniya(line: str) -> list[str]:
     return [p.strip() for p in parts if len(p.strip()) > 25][:9]
 
 
-def zaglavni_tvardeniya(fm: dict) -> list[tuple[str, str]]:
+def header_claims(fm: dict) -> list[tuple[str, str]]:
     """(field, claim) for every assertion a task header makes.
 
     A header is multi-claim by construction -- five fields, and `sledvashto`
@@ -564,16 +567,16 @@ def zaglavni_tvardeniya(fm: dict) -> list[tuple[str, str]]:
     """
     out = []
     for field in HEADER_CLAIMS:
-        if field in KONTROLNI:
+        if field in CONTROL_FIELDS:
             continue
         value = str(fm.get(field, "")).strip()
         if len(value) < 3 or not any(ch.isalnum() for ch in value):
             continue
-        out.extend((field, piece) for piece in (tvardeniya(value) or [value]))
+        out.extend((field, piece) for piece in (claims(value) or [value]))
     return out
 
 
-def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
+def which_task(api_key: str, cfg: dict, name: str, book: Path) -> None:
     """Every claim a task header makes, against the logbook under it.
 
     The corpus `--koe` was built for -- index lines cut into claims -- is gone.
@@ -593,18 +596,18 @@ def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
     is still announced, but it no longer means "a claim may fail for nothing".
     """
     hook = _hook()
-    dumi = cfg["poveritelni"]
-    whole = kniga.read_text(encoding="utf-8", errors="replace")
-    pairs = zaglavni_tvardeniya(hook.parse_frontmatter(whole))
+    words = cfg["confidential"]
+    whole = book.read_text(encoding="utf-8", errors="replace")
+    pairs = header_claims(hook.parse_frontmatter(whole))
     if not pairs:
         sys.exit(f"the header of {name} carries no claims to check")
     body = whole.split("---", 2)[2].strip() if whole.startswith("---") else whole
     pointer = "\n".join(f"{field}: {claim}" for field, claim in pairs)
     # The WHOLE logbook, not the part that fits: a client named on page four is
     # still named. Same rule as everywhere else here, and the reason is 13:20.
-    zadarzhano = poveritelno(f"{pointer}\n{whole}", name, dumi)
-    if zadarzhano:
-        sys.exit(f"⛔ refused: \"{zadarzhano}\" appears in {name}. It does not leave the machine.")
+    held_by = held_word(f"{pointer}\n{whole}", name, words)
+    if held_by:
+        sys.exit(f"⛔ refused: \"{held_by}\" appears in {name}. It does not leave the machine.")
 
     questions = {f"c{i}": {
         "type": "noul",
@@ -612,15 +615,15 @@ def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
         "criteria": {"true": "The entries state or confirm it",
                      "false": "Not stated, contradicted, or reported differently"}}
         for i, (_, claim) in enumerate(pairs)}
-    state = f"LOGBOOK ({kniga.name}), newest entries first:\n{body[:TSYAL]}"
+    state = f"LOGBOOK ({book.name}), newest entries first:\n{body[:WHOLE_CHARS]}"
     spent = 0.0
     try:
-        out = pitay(api_key, state, questions, name, dumi)
+        out = ask(api_key, state, questions, name, words)
         spent = out.get("usage", {}).get("cost", 0)
     finally:
-        zapishi(cfg["home"], "koe-zadacha", name, len(pairs), spent)
+        log_spend(cfg["home"], "koe-zadacha", name, len(pairs), spent)
 
-    zapisi = body.count("\n## ") + body.startswith("## ")
+    entries = body.count("\n## ") + body.startswith("## ")
     print(f"### {name} — the header against its own logbook\n")
     # Said before the numbers, all three, because each changes how they read.
     print("⚠️ The 0.4 / 0.7 boundaries were NOT measured on this corpus. An ordering, not a verdict.")
@@ -633,10 +636,10 @@ def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
     # finding: one says the header is wrong, the other says the logbook is thin.
     print("⚠️ \"Not supported\" means BOTH \"contradicted\" AND \"never mentioned\". "
           "The two are not the same.")
-    print(f"   The logbook here is {len(body)} characters, {zapisi} entries — "
+    print(f"   The logbook here is {len(body)} characters, {entries} entries — "
           f"{'thin, so a low score means \"not written\" rather than \"not true\"' if len(body) < 2000 else 'enough to carry a contradiction'}.\n")
-    if len(body) > TSYAL:
-        print(f"⚠️ THE LOGBOOK IS CUT at {TSYAL} of {len(body)} characters. A logbook is "
+    if len(body) > WHOLE_CHARS:
+        print(f"⚠️ THE LOGBOOK IS CUT at {WHOLE_CHARS} of {len(body)} characters. A logbook is "
               f"newest first, so what is cut are the OLDEST entries — the opposite "
               f"of the index, where the cut failed claims innocently.\n")
     for value, field, claim in sorted(
@@ -647,20 +650,20 @@ def koe_zadacha(api_key: str, cfg: dict, name: str, kniga: Path) -> None:
     print(f"\ncost: ${spent:.6f}")
 
 
-def koe(api_key: str, cfg: dict, target: str) -> None:
+def which(api_key: str, cfg: dict, target: str) -> None:
     # A bare task name wins over an index target. Nothing in an index resolves to
     # a task folder -- index targets carry a path, task names do not -- but the
     # rule is written down and pinned rather than left to that staying true.
-    kniga = Path(cfg["home"]).expanduser() / target / cfg["logbook"]
-    if kniga.is_file():
-        return koe_zadacha(api_key, cfg, target, kniga)
-    indeks = Path(cfg["indeks"]).expanduser()
-    dumi, root = cfg["poveritelni"], indeks.parent
-    pointer = next((p for p, t in pokazalci(indeks, None) if t == target), "")
+    book = Path(cfg["home"]).expanduser() / target / cfg["logbook"]
+    if book.is_file():
+        return which_task(api_key, cfg, target, book)
+    index_file = Path(cfg["index"]).expanduser()
+    words, root = cfg["confidential"], index_file.parent
+    pointer = next((p for p, t in pointers(index_file, None) if t == target), "")
     if not pointer:
-        sys.exit(f"no line in {indeks.name} for {target}")
-    body, tsyalo = detail(root, target, TSYAL)
-    pieces = tvardeniya(pointer)
+        sys.exit(f"no line in {index_file.name} for {target}")
+    body, whole = detail(root, target, WHOLE_CHARS)
+    pieces = claims(pointer)
     if not pieces:
         sys.exit("no claims could be extracted from the line")
 
@@ -671,23 +674,23 @@ def koe(api_key: str, cfg: dict, target: str) -> None:
                      "false": "Not stated, contradicted, or reported differently"}}
         for i, claim in enumerate(pieces)}
     state = f"DETAIL FILE ({target}):\n{body}"
-    zadarzhano = poveritelno(f"{pointer}\n{tsyalo}", target, dumi)
-    if zadarzhano:
+    held_by = held_word(f"{pointer}\n{whole}", target, words)
+    if held_by:
         # Here the whole move stops: a person named this one file.
-        sys.exit(f"⛔ refused: \"{zadarzhano}\" appears in {target}. It does not leave the machine.")
+        sys.exit(f"⛔ refused: \"{held_by}\" appears in {target}. It does not leave the machine.")
     spent = 0.0
     try:
-        out = pitay(api_key, state, questions, target, dumi)
+        out = ask(api_key, state, questions, target, words)
         spent = out.get("usage", {}).get("cost", 0)
     finally:
-        zapishi(cfg["home"], "koe", target, len(pieces), spent)
+        log_spend(cfg["home"], "koe", target, len(pieces), spent)
 
     print(f"### {target}\n")
-    if len(tsyalo) > TSYAL:
+    if len(whole) > WHOLE_CHARS:
         # Said BEFORE the numbers, because it changes how they read: below the cut
         # nothing can support anything, and a low score there means "don't know".
-        print(f"⚠️ THE FILE IS CUT at {TSYAL} of {len(tsyalo)} characters "
-              f"({100 - TSYAL * 100 // len(tsyalo)}% not sent). "
+        print(f"⚠️ THE FILE IS CUT at {WHOLE_CHARS} of {len(whole)} characters "
+              f"({100 - WHOLE_CHARS * 100 // len(whole)}% not sent). "
               f"A claim whose evidence is below the cut fails INNOCENTLY.\n")
     for value, claim in sorted((out["answers"][f"c{i}"]["noul"], c)
                                for i, c in enumerate(pieces)):
@@ -697,25 +700,29 @@ def koe(api_key: str, cfg: dict, target: str) -> None:
     print(f"\ncost: ${spent:.6f}")
 
 
+# The names before 3.3.0, for scripts outside this repository that call them.
+pitay, poveritelno, klyuch = ask, held_word, get_api_key
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--stale", "--dali", dest="dali", nargs="*", metavar="PART",
+    parser.add_argument("--stale", "--dali", dest="stale", nargs="*", metavar="PART",
                         help="has a pointer gone stale? (optionally: parts of paths)")
-    parser.add_argument("--which", "--koe", dest="koe", metavar="FILE", help="which claim exactly is unsupported?")
-    parser.add_argument("--tasks", "--zadachi", dest="zadachi", nargs="*", metavar="PART",
+    parser.add_argument("--which", "--koe", dest="which", metavar="FILE", help="which claim exactly is unsupported?")
+    parser.add_argument("--tasks", "--zadachi", dest="tasks", nargs="*", metavar="PART",
                         help="each task header against its own logbook")
     args = parser.parse_args()
-    if args.dali is None and args.zadachi is None and not args.koe:
+    if args.stale is None and args.tasks is None and not args.which:
         parser.error("choose --stale, --which or --tasks")
     cfg = config()
-    api_key = klyuch()
-    if args.koe:
-        koe(api_key, cfg, args.koe)
-    elif args.zadachi is not None:
-        zadachi(api_key, cfg, set(args.zadachi))
+    api_key = get_api_key()
+    if args.which:
+        which(api_key, cfg, args.which)
+    elif args.tasks is not None:
+        tasks(api_key, cfg, set(args.tasks))
     else:
-        dali(api_key, cfg, set(args.dali))
+        stale(api_key, cfg, set(args.stale))
 
 
 if __name__ == "__main__":

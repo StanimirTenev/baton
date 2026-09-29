@@ -44,19 +44,19 @@ def test_a_new_pointer_without_the_old_one_fails(tmp_path):
     """The worst outcome is the entry landing while the pointer keeps its old text."""
     path = _logbook(tmp_path)
     with pytest.raises(ValueError, match="BOTH"):
-        bv.vpishi(str(path), "## 2026-09-26 11:00 — new", sledvashto='sledvashto: "new"')
+        bv.write_entry(str(path), "## 2026-09-26 11:00 — new", next_line='sledvashto: "new"')
 
 
 def test_the_old_pointer_without_a_new_one_also_fails(tmp_path):
     path = _logbook(tmp_path)
     with pytest.raises(ValueError, match="BOTH"):
-        bv.vpishi(str(path), "## 2026-09-26 11:00 — new", staro='sledvashto: "the old one"')
+        bv.write_entry(str(path), "## 2026-09-26 11:00 — new", old_line='sledvashto: "the old one"')
 
 
 def test_both_together_replace_the_pointer(tmp_path):
     path = _logbook(tmp_path)
-    bv.vpishi(str(path), "## 2026-09-26 11:00 — new",
-              sledvashto='sledvashto: "the new one"', staro='sledvashto: "the old one"')
+    bv.write_entry(str(path), "## 2026-09-26 11:00 — new",
+              next_line='sledvashto: "the new one"', old_line='sledvashto: "the old one"')
     text = path.read_text(encoding="utf-8")
     assert 'sledvashto: "the new one"' in text
     assert 'sledvashto: "the old one"' not in text
@@ -68,13 +68,13 @@ def test_a_heading_glued_to_the_previous_line_is_caught(tmp_path):
     """Invisible to any heading-based read, including the author's own grep."""
     path = _logbook(tmp_path, OLD_ENTRY + "last line## 2026-09-19 09:00 — older still\n")
     with pytest.raises(ValueError, match="glued mid-file"):
-        bv.vpishi(str(path), "## 2026-09-26 11:00 — new")
+        bv.write_entry(str(path), "## 2026-09-26 11:00 — new")
 
 
 def test_a_quotation_in_inline_code_is_not_a_gluing(tmp_path):
     """A logbook describing this defect contains the broken string verbatim."""
     path = _logbook(tmp_path, OLD_ENTRY + "Line 93 read `x.## 2026-09-23 14:05` — wrong\n")
-    bv.vpishi(str(path), "## 2026-09-26 11:00 — new")
+    bv.write_entry(str(path), "## 2026-09-26 11:00 — new")
     assert "## 2026-09-26 11:00" in path.read_text(encoding="utf-8")
 
 
@@ -88,7 +88,7 @@ def test_a_double_backtick_span_may_contain_single_backticks(tmp_path):
     """
     quoted = "Line 93 read `` `some_file`.## 2026-09-23 14:05 `` — wrong\n"
     path = _logbook(tmp_path, OLD_ENTRY + quoted)
-    bv.vpishi(str(path), "## 2026-09-26 11:10 — new")
+    bv.write_entry(str(path), "## 2026-09-26 11:10 — new")
     assert "## 2026-09-26 11:10" in path.read_text(encoding="utf-8")
 
 
@@ -99,7 +99,7 @@ def test_a_heading_ahead_of_the_clock_warns_and_still_writes(tmp_path, capsys):
     that refuses a write on a guess gets worked around instead of fixed."""
     ahead = (datetime.datetime.now() + datetime.timedelta(hours=5)).strftime("%Y-%m-%d %H:%M")
     path = _logbook(tmp_path)
-    bv.vpishi(str(path), f"## {ahead} — from the future")
+    bv.write_entry(str(path), f"## {ahead} — from the future")
     out = capsys.readouterr().out
     # ⚠️ NOT `"ahead" in out.lower()` -- pytest's tmp_path is named after the test,
     # so that string is in the printed path and the assertion passed with the
@@ -111,7 +111,7 @@ def test_a_heading_ahead_of_the_clock_warns_and_still_writes(tmp_path, capsys):
 def test_a_normal_hour_says_nothing(tmp_path, capsys):
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     path = _logbook(tmp_path)
-    bv.vpishi(str(path), f"## {now} — now")
+    bv.write_entry(str(path), f"## {now} — now")
     assert "AHEAD of the system clock" not in capsys.readouterr().out
 
 
@@ -122,7 +122,7 @@ def test_the_closing_fence_never_ends_up_glued(tmp_path):
     path = tmp_path / "LOGBOOK.md"
     path.write_text('---\nsastoyanie: aktivna\n---\n## 2026-09-20 10:00 — tight\n',
                     encoding="utf-8")
-    bv.vpishi(str(path), "## 2026-09-26 11:00 — new")
+    bv.write_entry(str(path), "## 2026-09-26 11:00 — new")
     text = path.read_text(encoding="utf-8")
     assert "---##" not in text
     assert text.count("---") >= 2
@@ -145,7 +145,7 @@ def test_a_failed_validation_leaves_the_file_byte_identical(tmp_path):
     # An entry with no dated heading of its own glues onto the next one.
     bad = "not a heading at all, and no date"
     with pytest.raises((AssertionError, ValueError)):
-        bv.vpishi(str(log), bad + "## 2026-09-21 09:00 — glued")
+        bv.write_entry(str(log), bad + "## 2026-09-21 09:00 — glued")
     assert log.read_bytes() == before, "a rejected entry must leave nothing behind"
 
 
@@ -163,8 +163,8 @@ def test_the_old_pointer_must_be_in_the_header_not_in_history(tmp_path):
     before = log.read_bytes()
     entry = "## 2026-09-21 09:00 — new\n\ntext\n"
     with pytest.raises((AssertionError, ValueError)):
-        bv.vpishi(str(log), entry, sledvashto="something new",
-                  staro='sledvashto: "decide the price"')
+        bv.write_entry(str(log), entry, next_line="something new",
+                  old_line='sledvashto: "decide the price"')
     assert log.read_bytes() == before, "history is a record and is never edited"
 
 
@@ -190,3 +190,12 @@ def test_the_checks_survive_python_dash_O(tmp_path):
                          capture_output=True, text=True)
     assert "REFUSED" in out.stdout, (
         f"under -O the barrier disappeared: {out.stdout!r} {out.stderr[-200:]!r}")
+
+
+def test_the_old_function_name_and_keywords_still_work(tmp_path):
+    """`~/bin/vpishi.py` on the author's machine calls `vpishi(..., sledvashto=, staro=)`."""
+    path = tmp_path / "LOGBOOK.md"
+    path.write_text(HEADER + "## 2026-09-25 10:00 — old\n", encoding="utf-8")
+    bv.vpishi(str(path), "## 2026-09-26 11:00 — new",
+              sledvashto='sledvashto: "the new one"', staro='sledvashto: "the old one"')
+    assert 'sledvashto: "the new one"' in path.read_text(encoding="utf-8")

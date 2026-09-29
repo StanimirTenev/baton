@@ -952,9 +952,23 @@ They all still work: `baton_pregled` → `baton_review`, `baton_kade` → `baton
 `baton_tablo` → `baton_board`, `baton_vpishi` → `baton_entry`, `baton_otsey` → `baton_sift`,
 `baton_korpus` → `baton_corpus` (the old files run the new ones); `--dali`/`--koe`/`--zadachi` →
 `--stale`/`--which`/`--tasks`; `pregled_indeks`/`pregled_podbor`/`pregled_poveritelni` →
-`review_index`/`review_shortlist`/`review_confidential`.
+`review_index`/`review_shortlist`/`review_confidential`. Before v3.3.0 the functions a script
+could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=, staro=)` →
+`write_entry(..., next_line=, old_line=)`, `otsey` → `sift`, `pitay` / `poveritelno` / `klyuch` →
+`ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.3.0** — the names inside the tools are English; the old function names still answer
+
+- Every function, variable and constant inside the tools and hooks renamed to English, by token
+  position (a first attempt through `untokenize` reformatted 4,400 lines and was thrown away).
+  Nothing a user sees changes: same output, same flags, same header words.
+- Scripts outside the repository call the tools by their old names. On the author's machine
+  three do (a corpus labeller, a corpus builder, a logbook writer); they were run against this
+  version. The old names are kept as aliases, each pinned by a test that fails when it is removed.
+- `baton_sift --out` writes `# question=` / `# threshold=` at the top of the TSV, not
+  `# vapros=` / `# prag=`.
 
 **v3.2.0** — English is canonical inside the code too
 

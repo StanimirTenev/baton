@@ -5,8 +5,8 @@
 
 Or from Python, which is how an agent uses it:
 
-    from baton_entry import vpishi
-    vpishi("<path>/LOGBOOK.md", "<the entry>", sledvashto="<new line>", staro="<old, verbatim>")
+    from baton_entry import write_entry
+    write_entry("<path>/LOGBOOK.md", "<the entry>", next_line="<new line>", old_line="<old, verbatim>")
 
 The Stop hook demands an entry at the top of the logbook. Nothing in Baton helped
 write one, so it was done by hand, and doing it by hand went wrong four times in
@@ -31,7 +31,7 @@ double-backtick form exists precisely so a span can contain single backticks, an
 the first fix got that wrong -- seven unit tests passed and a real logbook was
 falsely rejected. The test for it is taken from that file.
 
-**Half a pointer replacement.** `if sledvashto and staro:` means passing only the
+**Half a pointer replacement.** `if next_line and old_line:` means passing only the
 new value is skipped in silence: the entry lands, the pointer keeps its old text,
 and nothing says so. Silence is worse than refusal, because nobody looks twice.
 Both or neither, or it fails.
@@ -81,11 +81,11 @@ def _hours_ahead(entry: str) -> str | None:
             f"({datetime.now():%Y-%m-%d %H:%M}). Read the hour from the machine.")
 
 
-def vpishi(path, entry: str, sledvashto: str | None = None,
-           staro: str | None = None) -> None:
+def write_entry(path, entry: str, next_line: str | None = None,
+                old_line: str | None = None) -> None:
     """Prepend `entry`, optionally replacing the header's pointer line.
 
-    `staro` is the old line verbatim, so a pointer that has already moved is a
+    `old_line` is the old line verbatim, so a pointer that has already moved is a
     loud failure rather than a silent duplicate.
     """
     file = Path(path)
@@ -94,7 +94,7 @@ def vpishi(path, entry: str, sledvashto: str | None = None,
     # 🔴 Three defects from an external review of v2.14.0, all here:
     #   * the file was written BEFORE these checks ran, so a rejected entry was
     #     already on disk when the rejection was printed;
-    #   * `staro` was looked for in the whole file and replaced at the first hit, so a
+    #   * `old_line` was looked for in the whole file and replaced at the first hit, so a
     #     pointer surviving only in an old entry got rewritten -- editing the record,
     #     which is never edited -- while the header stayed as it was;
     #   * `assert` is stripped by `python -O`, so every barrier here vanished under a
@@ -102,22 +102,22 @@ def vpishi(path, entry: str, sledvashto: str | None = None,
     # Build in memory, validate, then replace atomically; and raise, do not assert.
 
     # Half a replacement is worse than none: it keeps the old pointer and says nothing.
-    if bool(sledvashto) != bool(staro):
+    if bool(next_line) != bool(old_line):
         raise ValueError(
-            "pass BOTH `sledvashto` and `staro`, or neither. "
-            f"Got sledvashto={'yes' if sledvashto else 'no'}, "
-            f"staro={'yes' if staro else 'no'}")
-    if sledvashto:
+            "pass BOTH `next_line` and `old_line`, or neither. "
+            f"Got next_line={'yes' if next_line else 'no'}, "
+            f"old_line={'yes' if old_line else 'no'}")
+    if next_line:
         head_end = text.find("\n---", 3) + 4 if text.startswith("---") else 0
         header = text[:head_end]
-        hits = header.count(staro)
+        hits = header.count(old_line)
         if hits != 1:
             where = "nowhere in the front matter" if hits == 0 else f"{hits} times there"
             raise ValueError(
                 f"the old pointer line must appear exactly once in the front matter; "
                 f"found it {where}. A logbook entry is a record and is never edited, so "
                 f"a match further down the file is refused rather than rewritten.")
-        text = header.replace(staro, sledvashto, 1) + text[head_end:]
+        text = header.replace(old_line, next_line, 1) + text[head_end:]
 
     first = re.search(r'^## \d{4}-', text, re.M)
     if not first:
@@ -144,16 +144,21 @@ def vpishi(path, entry: str, sledvashto: str | None = None,
         print(note)
 
 
+def vpishi(logbook, entry, sledvashto=None, staro=None):
+    """The name before 3.3.0, kept for scripts outside this repository that call it."""
+    return write_entry(logbook, entry, next_line=sledvashto, old_line=staro)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("logbook")
     parser.add_argument("entry", help="file holding the entry, or - for stdin")
-    parser.add_argument("--next", "--sledvashto", dest="sledvashto", help="the new pointer line, in full")
-    parser.add_argument("--old", "--staro", dest="staro", help="the old pointer line, verbatim")
+    parser.add_argument("--next", "--sledvashto", dest="next_line", help="the new pointer line, in full")
+    parser.add_argument("--old", "--staro", dest="old_line", help="the old pointer line, verbatim")
     args = parser.parse_args()
     entry = sys.stdin.read() if args.entry == "-" else Path(args.entry).read_text(encoding="utf-8")
-    vpishi(args.logbook, entry, args.sledvashto, args.staro)
+    write_entry(args.logbook, entry, args.next_line, args.old_line)
 
 
 if __name__ == "__main__":

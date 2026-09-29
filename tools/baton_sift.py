@@ -61,14 +61,14 @@ import importlib.util
 import pathlib
 import sys
 
-PREGLED = pathlib.Path(__file__).resolve().parent / "baton_review.py"
+REVIEW = pathlib.Path(__file__).resolve().parent / "baton_review.py"
 
 
-def _pregled():
+def _review():
     """`baton_review` owns the key, the confidentiality guard and the spend log."""
     if "baton_review" in sys.modules:
         return sys.modules["baton_review"]
-    spec = importlib.util.spec_from_file_location("baton_review", PREGLED)
+    spec = importlib.util.spec_from_file_location("baton_review", REVIEW)
     module = importlib.util.module_from_spec(spec)
     sys.modules["baton_review"] = module
     spec.loader.exec_module(module)
@@ -85,49 +85,49 @@ def kandidati(lines):
         yield parts[0], " · ".join(p for p in parts if p.strip())
 
 
-def otsey(items, vapros: str, bp=None):
+def sift(items, question: str, bp=None):
     """[(id, text, score)] in input order. Confidential items are kept and marked -1.0."""
-    if not vapros or not vapros.strip():
-        raise ValueError("pass --vapros: a typed question. A score with no question is a "
+    if not question or not question.strip():
+        raise ValueError("pass --question: a typed question. A score with no question is a "
                          "number nobody can check.")
-    bp = bp or _pregled()
-    key, words = bp.klyuch(), bp.config()["poveritelni"]
+    bp = bp or _review()
+    key, words = bp.get_api_key(), bp.config()["confidential"]
     # The question is asked of every candidate, so it is checked once, here, before a
-    # single call is made. `pitay` now reads the whole serialised body and would stop
+    # single call is made. `ask` now reads the whole serialised body and would stop
     # this too -- on candidate one, after the run has started. Refusing up front says
     # what is wrong instead of failing mid-list.
-    held_question = bp.poveritelno(vapros, "--vapros", words)
+    held_question = bp.held_word(question, "--question", words)
     if held_question:
         raise ValueError(f"the question itself carries „{held_question}“ and is asked of "
                          f"every candidate. It does not leave the machine.")
-    question = {"otsey": {"type": "noul", "instructions": vapros.strip(),
+    question = {"otsey": {"type": "noul", "instructions": question.strip(),
                           "criteria": {"true": "yes", "false": "no"}}}
     out, spent, held = [], 0.0, 0
     for ident, text in items:
-        if bp.poveritelno(text, ident, words):
+        if bp.held_word(text, ident, words):
             held += 1
             out.append((ident, text, -1.0))
             continue
-        answer = bp.pitay(key, text, question, ident, words)
+        answer = bp.ask(key, text, question, ident, words)
         spent += answer.get("usage", {}).get("cost", 0)
         out.append((ident, text, answer["answers"]["otsey"]["noul"]))
     return out, spent, held
 
 
-def report(scored, prag, vapros, spent, held, stream=sys.stdout):
+def report(scored, threshold, question, spent, held, stream=sys.stdout):
     """Everything, sorted, in two named groups. Nothing is ever omitted."""
     order = sorted(scored, key=lambda r: -r[2])
-    print(f"question: {vapros.strip()[:110]}", file=stream)
+    print(f"question: {question.strip()[:110]}", file=stream)
     print(f"candidates: {len(order)} · spent ${spent:.5f}"
           + (f" · held back as confidential: {held}" if held else ""), file=stream)
-    if prag is None:
+    if threshold is None:
         print("no threshold given — the whole list, in reading order:\n", file=stream)
         for ident, _text, score in order:
             print(f"  {score:5.2f}  {ident}", file=stream)
         return order
-    first = [r for r in order if r[2] >= prag]
-    later = [r for r in order if r[2] < prag]
-    print(f"threshold {prag} · read first {len(first)} · "
+    first = [r for r in order if r[2] >= threshold]
+    later = [r for r in order if r[2] < threshold]
+    print(f"threshold {threshold} · read first {len(first)} · "
           f"read after {len(later)} — NOT discarded\n", file=stream)
     for name, rows in (("READ FIRST", first), ("READ AFTER (nothing is dropped)", later)):
         print(f"--- {name} ({len(rows)}) ---", file=stream)
@@ -140,23 +140,27 @@ def report(scored, prag, vapros, spent, held, stream=sys.stdout):
     return order
 
 
+# The name before 3.3.0.
+otsey = sift
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--question", "--vapros", dest="vapros", metavar="QUESTION", required=True, help="the typed question, in English")
-    parser.add_argument("--threshold", "--prag", dest="prag", metavar="THRESHOLD", type=float, default=None,
+    parser.add_argument("--question", "--vapros", dest="question", metavar="QUESTION", required=True, help="the typed question, in English")
+    parser.add_argument("--threshold", "--prag", dest="threshold", metavar="THRESHOLD", type=float, default=None,
                         help="split into read-first/read-after; both are printed")
-    parser.add_argument("--out", "--izhod", dest="izhod", metavar="FILE", default=None, help="also write every score as TSV")
+    parser.add_argument("--out", "--izhod", dest="out", metavar="FILE", default=None, help="also write every score as TSV")
     args = parser.parse_args(argv)
 
     items = list(kandidati(sys.stdin))
     if not items:
         print("no candidates on stdin", file=sys.stderr)
         return 1
-    scored, spent, held = otsey(items, args.vapros)
-    order = report(scored, args.prag, args.vapros, spent, held)
-    if args.izhod:
-        with open(args.izhod, "w", encoding="utf-8") as handle:
-            handle.write(f"# vapros={args.vapros.strip()}\n# prag={args.prag}\n")
+    scored, spent, held = sift(items, args.question)
+    order = report(scored, args.threshold, args.question, spent, held)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as handle:
+            handle.write(f"# question={args.question.strip()}\n# threshold={args.threshold}\n")
             handle.write("id\tnoul\n")
             for ident, _text, score in order:
                 handle.write(f"{ident}\t{score}\n")

@@ -87,7 +87,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-def _load_korpus():
+def _load_corpus():
     """One module object, not one per importer.
 
     ⚠️ The first version of this exec_module'd a fresh copy every time, so two
@@ -106,14 +106,14 @@ def _load_korpus():
     return module
 
 
-korpus = _load_korpus()
+corpus = _load_corpus()
 
 # The five kinds and the corpus scope have ONE owner -- `baton_corpus`. They used to
 # be declared here as well, with a second set of regular expressions, and nothing had
 # broken yet only because both copies still agreed.
 ENTRY, SKIP, REGISTERS, DATED_NAME = (
-    korpus.ENTRY, korpus.SKIP, korpus.REGISTERS, korpus.DATED_NAME)
-kind = korpus.kind
+    corpus.ENTRY, corpus.SKIP, corpus.REGISTERS, corpus.DATED_NAME)
+kind = corpus.kind
 
 # Money, a percentage, a threshold, a version. Dates are facts, not decisions.
 NUMBERS = re.compile(
@@ -132,7 +132,7 @@ LIVE = ("LIVE", "HEADER")
 
 def settings() -> tuple[Path, str, Path | None]:
     """From `baton_corpus.config()` -- one reader, not a second one that can disagree."""
-    cfg = korpus.config()
+    cfg = corpus.config()
     index = cfg["raw"].get("pregled_indeks")
     return (cfg["home"], cfg["logbook"],
             Path(index).expanduser().parent if index else None)
@@ -153,8 +153,8 @@ def search(pattern: re.Pattern, home: Path, logbook: str, memory: Path | None,
     tree that did nothing. It is gone with the walk it was part of; it produced no
     output and nothing referenced it.
     """
-    scope = scope if scope is not None else korpus.Scope([])
-    for _root, file in korpus.walk([p for p in (home, memory) if p], scope,
+    scope = scope if scope is not None else corpus.Scope([])
+    for _root, file in corpus.walk([p for p in (home, memory) if p], scope,
                                    suffixes=(".md",)):
         try:
             text = file.read_text(encoding="utf-8")

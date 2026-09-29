@@ -31,13 +31,13 @@ class _Fake:
     def __init__(self, scores, confidential=()):
         self.scores, self.confidential, self.asked = scores, set(confidential), []
 
-    def klyuch(self):
+    def get_api_key(self):
         return "k"
 
     def config(self):
-        return {"poveritelni": ["acme", "акме"]}
+        return {"confidential": ["acme", "акме"]}
 
-    def poveritelno(self, text, ident, words):
+    def held_word(self, text, ident, words):
         """Same shape as the real one: it reads the TEXT for a word, and the id too.
 
         ⚠️ The first version of this fake looked only at `ident`, so a test about a
@@ -49,7 +49,7 @@ class _Fake:
             return ident
         return next((w for w in words if w in (text or "")), None)
 
-    def pitay(self, key, state, questions, label, words):
+    def ask(self, key, state, questions, label, words):
         self.asked.append((label, questions["otsey"]["instructions"]))
         return {"answers": {"otsey": {"noul": self.scores[label]}},
                 "usage": {"cost": 0.0001}}
@@ -98,12 +98,12 @@ def test_the_order_is_by_score_not_by_input():
 def test_a_score_with_no_question_is_refused():
     for empty in (None, "", "   "):
         with pytest.raises(ValueError, match="a typed question"):
-            bo.otsey([("a", "t")], empty, bp=_Fake({}))
+            bo.sift([("a", "t")], empty, bp=_Fake({}))
 
 
 def test_the_question_reaches_every_candidate_unchanged():
     fake = _Fake({"a": 0.5, "b": 0.5})
-    bo.otsey([("a", "t"), ("b", "t")], "  Does it ship a scanner?  ", bp=fake)
+    bo.sift([("a", "t"), ("b", "t")], "  Does it ship a scanner?  ", bp=fake)
     assert {q for _l, q in fake.asked} == {"Does it ship a scanner?"}
 
 
@@ -111,7 +111,7 @@ def test_the_question_reaches_every_candidate_unchanged():
 
 def test_a_confidential_candidate_is_kept_and_marked_never_sent():
     fake = _Fake({"public": 0.8}, confidential={"secret"})
-    scored, spent, held = bo.otsey([("public", "t"), ("secret", "t")], "q", bp=fake)
+    scored, spent, held = bo.sift([("public", "t"), ("secret", "t")], "q", bp=fake)
     assert held == 1
     assert [label for label, _q in fake.asked] == ["public"], "it must not be sent"
     assert ("secret", "t", -1.0) in scored, "and it must not vanish either"
@@ -145,5 +145,9 @@ def test_a_confidential_question_is_refused_before_any_candidate_is_scored():
     """
     fake = _Fake({"a": 0.5, "b": 0.5})
     with pytest.raises(ValueError, match="does not leave the machine"):
-        bo.otsey([("a", "t"), ("b", "t")], "Does this mention the acme outage?", bp=fake)
+        bo.sift([("a", "t"), ("b", "t")], "Does this mention the acme outage?", bp=fake)
     assert not fake.asked, "not a single candidate may be scored"
+
+
+def test_the_old_function_name_still_works():
+    assert bo.otsey is bo.sift

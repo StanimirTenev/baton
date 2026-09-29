@@ -29,7 +29,7 @@ from pathlib import Path
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
 
 
-def _korpus():
+def _corpus():
     """One owner for where the tasks are -- see `baton_corpus.config`."""
     if "baton_corpus" in sys.modules:
         return sys.modules["baton_corpus"]
@@ -211,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     # loads the hook out of the repository, where `baton.local.json` deliberately is not
     # -- it holds client folder names and stays outside git. The board therefore printed
     # "no tasks under ~/tasks" on every machine configured anywhere else.
-    root, logbook = _korpus().config()["home"], _korpus().config()["logbook"]
+    root, logbook = _corpus().config()["home"], _corpus().config()["logbook"]
     rows, today = collect(root, logbook)
     if not rows:
         print(f"baton: no tasks under {root}", file=sys.stderr)
