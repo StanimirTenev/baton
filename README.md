@@ -16,6 +16,46 @@ written at the end. The hooks are executed by the harness, not by the agent's ju
 
 ## Install
 
+### As a Claude Code plugin
+
+```bash
+claude plugin marketplace add StanimirTenev/baton
+claude plugin install baton@baton
+```
+
+Claude Code asks for two things: the folder your task folders live in (default `~/tasks`) and the
+name of the logbook file (default `LOGBOOK.md`; use a word in your own language if you prefer).
+Skip the questions and the hooks use those same defaults.
+
+**Requires Python 3.8 or later** (`python3`, `python` or `py` -- the first one that really
+runs is used). **On Windows it also requires [Git for Windows](https://git-scm.com/downloads/win):**
+the hooks start through a small shell script, which Claude Code runs in Git Bash. Without Git
+for Windows the hooks cannot start. (Claude Code itself runs without it, so it is worth
+checking: `where bash`.) Note that on Windows `python3` is often the Microsoft Store stand-in,
+which does nothing; the start script recognises it and moves on to `python`.
+
+As a plugin, Baton behaves as it does when installed by script, with these differences:
+
+- **The skills carry the plugin's name:** `/baton:baton-task`, `/baton:baton-plan`,
+  `/baton:baton-inventory`, `/baton:baton-key`.
+- **The rules** (what `install.sh` appends to `~/.claude/CLAUDE.md`) arrive with the
+  session-start board instead, because a plugin's `CLAUDE.md` is never loaded.
+- **Settings and state** live in Claude Code's plugin data folder
+  (`~/.claude/plugins/data/`), which survives plugin updates.
+- **Updates** come through Claude Code: `claude plugin update baton@baton`, or turn on
+  auto-update for the `baton` marketplace under `/plugin` -> *Marketplaces*. The hooks do not
+  check for a newer version themselves, so **as a plugin they make no network request at all.**
+- **Installed both ways** (script and plugin), every hook would run twice. The plugin's copy
+  notices the script's entries in `settings.json`, stands down, and says once which to remove.
+- The optional review tools (`baton_review`, `baton_sift`, `baton_corpus`, and the key
+  set-up behind `/baton-key`) keep their settings next to the script-installed hooks; for now,
+  use them with the script install.
+
+Uninstall: `claude plugin uninstall baton`. Claude Code deletes the plugin's data folder with
+it unless you add `--keep-data`. Your task folders are not touched.
+
+### With the install script
+
 **Linux / macOS:**
 
 ```bash
@@ -1574,10 +1614,30 @@ having been done.
 
 ## Uninstall
 
-Remove the two `baton_` entries from `~/.claude/settings.json`, delete the Baton section
-from `~/.claude/CLAUDE.md`, and remove `~/.claude/baton`, `~/.claude/skills/baton-inventory`, `~/.claude/skills/baton-plan` and
-`~/.baton`. Your task folders are plain directories
-of plain Markdown — they keep working without any of this, which is the point.
+**Plugin:** `claude plugin uninstall baton` (add `--keep-data` to keep its settings).
+
+**Script install:** remove the three hook entries whose command runs a `baton_` script
+(`baton_session_start.py`, `baton_stop.py`, `baton_prompt.py`) from `~/.claude/settings.json`,
+delete the Baton section from `~/.claude/CLAUDE.md` (the heading
+`# Baton — task folders and logbooks` and the text under it, marked
+`<!-- Installed by Baton. ... -->`), and remove `~/.claude/baton`, the four skills
+`~/.claude/skills/baton-inventory`, `baton-plan`, `baton-task` and `baton-key`, and the clone
+(`~/.baton`).
+
+Either way, your task folders are plain directories of plain Markdown -- they keep working
+without any of this, which is the point.
+
+## What Baton sends over the network
+
+| what | when | to |
+|---|---|---|
+| the hooks, installed as a plugin | never | -- |
+| the hooks, installed by script | once a week, **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
+| `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
+| `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; folders listed as confidential are refused before anything is sent |
+
+`tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
+schedule except the opt-in update check above.
 
 ## Not solved here
 
