@@ -203,13 +203,13 @@ What the agent gets:
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
-- migrate-billing [visok] — decide tax_region before the run
+- migrate-billing [high] — decide tax_region before the run
 
 🔁 Ongoing:
-- weekly-report [nisak] — Monday export
+- weekly-report [low] — Monday export
 
 ⛔ Waiting on someone OUTSIDE / blocked (for information):
-- broken-disk [sreden] — zpool replace  (waiting on: new disk (delivery))
+- broken-disk [medium] — zpool replace  (waiting on: new disk (delivery))
 
 ❄️ Frozen (not offered): old-scraper
 
@@ -220,8 +220,9 @@ The groups mean overdue (a deadline within 3 days), on us, recurring, waiting on
 else, frozen and done. A task with no header falls back to the v1 line: its name, the date
 of its last entry, and that entry's title.
 
-> The group labels and header keys are Bulgarian (transliterated), because that is where
-> Baton was built. English values are accepted where noted below.
+> The board is written in English and shown to you in your language by the agent. Header
+> fields and values are English; the Bulgarian names Baton started with are still read
+> (see *The same header in Bulgarian* below).
 
 **Stop** checks whether any task folder holds a file newer than its `LOGBOOK.md`. If one
 does, the turn is handed back with a note naming it. The test is deliberately narrow: a
