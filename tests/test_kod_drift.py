@@ -121,7 +121,7 @@ def test_the_drift_reaches_the_report_not_only_the_function(tmp_path, monkeypatc
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     message = json.loads(out.stdout).get("systemMessage", "")
-    assert "zadacha" in message and "2" in message and "kod:" in message, message[-400:]
+    assert "zadacha" in message and "2" in message and "code:" in message, message[-400:]
 
 
 def test_a_sha_ref_is_not_printed_twice(tmp_path):

@@ -23,7 +23,7 @@ from pathlib import Path
 
 MAX_PLAIN = 6                 # cap only on the fall-back (header-less) list
 SOON_DAYS = 3                 # a deadline within this many days counts as "near"
-US = {"nie", "us", "нас", "ние", "стенли", "me", "self", ""}
+US = {"nie", "us", "нас", "ние", "me", "self", ""}   # + `us` names from baton.local.json
 PRIORITY_RANK = {"visok": 0, "висок": 0, "sreden": 1, "среден": 1, "nisak": 2, "нисък": 2}
 
 DATED_HEADING = re.compile(
@@ -136,7 +136,51 @@ def read_head(logbook: Path) -> str:
         return ""
 
 
+# English header names (v3.0.0) and the Bulgarian ones every existing header uses. One map, read
+# by every hook through `parse_frontmatter`: three readers that each learned English on their
+# own would disagree on the first field one of them forgot. The internal names stay Bulgarian
+# for now (renamed in a later stage); what a user writes may be either, forever.
+FIELD_SYNONYMS = {
+    "state": "sastoyanie", "turn": "na_hod", "next": "sledvashto",
+    "done_when": "kriterii_zavarshvane", "timing": "vremevi_kriterii", "priority": "prioritet",
+    "skills": "umeniya", "true_as_of": "vyarno_kum", "review_after": "pregled_sled",
+    "deadline": "srok", "code": "kod", "result": "rezultat",
+}
+VALUE_SYNONYMS = {
+    "sastoyanie": {"active": "aktivna", "waiting": "chakashta", "frozen": "zamrazena",
+                   "paused": "zamrazena", "ongoing": "postoyanna", "finished": "priklyuchila",
+                   # `done` is NOT mapped: tasks and plans share this field, and both sets
+                   # already accept `done` as it is -- a task meaning finished, a plan meaning
+                   # carried out. Mapping it to either would break the other.
+                   "open": "otvoren", "abandoned": "izostaven"},
+    "na_hod": {"us": "nie"},
+    "prioritet": {"high": "visok", "medium": "sreden", "low": "nisak"},
+    "vremevi_kriterii": {"any": "po_izbor", "recurring": "postoyanno"},
+}
+
+
+def _canonical(fm: dict) -> dict:
+    """English keys and values become the internal ones; a Bulgarian key already present
+    wins over its English twin, so a half-translated header never loses what it said."""
+    out = {}
+    for key, val in fm.items():
+        internal = FIELD_SYNONYMS.get(key, key)
+        if internal in out and internal != key:
+            continue
+        out[internal] = val
+    for key, table in VALUE_SYNONYMS.items():
+        val = out.get(key)
+        if isinstance(val, str) and val.strip().lower() in table:
+            out[key] = table[val.strip().lower()]
+    return out
+
+
 def parse_frontmatter(text: str) -> dict:
+    """The header, with English names and values mapped to the internal ones."""
+    return _canonical(_parse_raw(text))
+
+
+def _parse_raw(text: str) -> dict:
     """A deliberately small parser: `key: value` lines between a leading pair of
     `---` fences. Scalars, quoted strings, `[a, b]` lists, and trailing ` #` comments.
     Not full YAML — Baton stays dependency-free."""
@@ -400,13 +444,13 @@ def kod_drift(fm: dict) -> str | None:
     if not raw:
         return None
     if "@" not in raw:
-        return (f"`kod: {raw[:60]}` has no `@` — write `kod: <path to repository>@<commit "
+        return (f"`code: {raw[:60]}` has no `@` — write `code: <path to repository>@<commit "
                 f"or tag>`, otherwise there is nothing to compare")
     where, _, ref = raw.rpartition("@")
     repo = Path(where.strip()).expanduser()
     ref = ref.strip()
     if not (repo / ".git").exists():
-        return f"`kod:` points at {repo}, which is not a repository — the record rests on nothing checkable"
+        return f"`code:` points at {repo}, which is not a repository — the record rests on nothing checkable"
 
     def git(*args) -> str | None:
         try:
@@ -418,23 +462,23 @@ def kod_drift(fm: dict) -> str | None:
 
     pinned = git("rev-parse", "--verify", f"{ref}^{{commit}}")
     if not pinned:
-        return (f"`kod:` points at `{ref}` in {repo.name}, which is **not found** there — a deleted "
+        return (f"`code:` points at `{ref}` in {repo.name}, which is **not found** there — a deleted "
                 f"branch, an unpushed commit or a mistyped tag. Not read as \"matches\"")
     head = git("rev-parse", "HEAD")
     if not head:
-        return f"`kod:` could not read the HEAD of {repo.name} — saying so rather than passing over it"
+        return f"`code:` could not read the HEAD of {repo.name} — saying so rather than passing over it"
     if head == pinned:
         return None
     behind = git("rev-list", "--count", f"{pinned}..{head}")
     if behind is None:
-        return (f"`kod:` {repo.name} is on a different commit from `{ref}` ({pinned[:7]}), and the "
+        return (f"`code:` {repo.name} is on a different commit from `{ref}` ({pinned[:7]}), and the "
                 f"difference could not be counted")
     if behind == "0":
-        return (f"`kod:` {repo.name} is on a commit that is NOT a descendant of `{ref}` ({pinned[:7]}) "
+        return (f"`code:` {repo.name} is on a commit that is NOT a descendant of `{ref}` ({pinned[:7]}) "
                 f"— a fork or rewritten history")
     # When the ref IS the sha, naming both reads as a stutter: "after `7374660` (7374660)".
     kade = f"`{ref}`" if not pinned.startswith(ref.lower()) else f"`{pinned[:7]}`"
-    return (f"`kod:` {repo.name} is **{behind}** commits after {kade} — the record describes code "
+    return (f"`code:` {repo.name} is **{behind}** commits after {kade} — the record describes code "
             f"that has moved underneath it")
 
 
@@ -625,12 +669,23 @@ def _plan_problem(plan: Path) -> str | None:
         return f"{plan.name} is `{state or 'no state'}`{old_note}"
     if not str(fm.get("rezultat") or fm.get("result") or "").strip():
         return (f"{plan.name} says it is closed but not what came of it "
-                "(`rezultat:`) — a close without a result is a tick box")
+                "(`result:`) — a close without a result is a tick box")
     return None
 
 
+def _our_names() -> set:
+    """Names that mean "us" on this machine -- a person's own name in `turn:` -- from
+    `us` in baton.local.json. Kept out of the code: a public tool should not carry one
+    user's name as a built-in synonym (it did until v3.0.0)."""
+    try:
+        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+        return {str(n).strip().lower() for n in cfg.get("us", [])}
+    except Exception:
+        return set()
+
+
 def is_us(fm: dict) -> bool:
-    return str(fm.get("na_hod", "")).strip().lower() in US
+    return str(fm.get("na_hod", "")).strip().lower() in (US | _our_names())
 
 
 def prio(fm: dict) -> int:
@@ -639,6 +694,9 @@ def prio(fm: dict) -> int:
 
 def line_for(name: str, fm: dict, tail: str = "") -> str:
     p = str(fm.get("prioritet", "")).strip()
+    # Shown in English whichever spelling the header used: the board speaks English.
+    p = {"visok": "high", "sreden": "medium", "nisak": "low",
+         "висок": "high", "среден": "medium", "нисък": "low"}.get(p.lower(), p)
     badge = f" [{p}]" if p else ""
     nxt = fm.get("sledvashto") or fm.get("kriterii_zavarshvane") or ""
     body = f" — {nxt}" if nxt else ""
@@ -701,7 +759,7 @@ def main() -> int:
         if due:
             _, late = due
             stale.append(f"- {f.name} — the state review was due {late} "
-                         f"{'day' if late == 1 else 'days'} ago (`vyarno_kum` + `pregled_sled`)")
+                         f"{'day' if late == 1 else 'days'} ago (`true_as_of` + `review_after`)")
         debt = unverified_debt(f, today)
         if debt:
             count, age = debt
@@ -712,7 +770,7 @@ def main() -> int:
             stale.append(f"- {f.name} — {moved}")
         drift = pointer_drift(fm)
         if drift:
-            stale.append(f"- {f.name} — `sledvashto` is {drift} characters: a pointer that has started "
+            stale.append(f"- {f.name} — `next` is {drift} characters: a pointer that has started "
                          f"carrying state. State lives in the logbook; this field holds the next move")
         bad_skills = skill_trouble(skills_for(fm), f, name)
         if bad_skills:
@@ -721,7 +779,7 @@ def main() -> int:
                          + ". A missing skill does not load; a stale one is read with confidence")
         behind = stale_reference(f, name, fm)
         if behind:
-            stale.append(f"- {f.name} — `sledvashto` points at {', '.join(behind)}. "
+            stale.append(f"- {f.name} — `next` points at {', '.join(behind)}. "
                          f"Work has happened since that file was last read — check whether "
                          f"part of what it asks for is already done (possibly in another folder)")
         alive = retired_but_present(f)
@@ -789,7 +847,7 @@ def main() -> int:
         blocks.append(
             "⛔ UNCLOSED PLANS — the task counts as not done:\n"
             + "\n".join(sorted(unfinished))
-            + "\n(Close it with `sastoyanie: izpalnen` OR `izostaven`, AND `rezultat:` in PLAN.md — "
+            + "\n(Close it with `state: done` OR `abandoned`, AND `result:` in PLAN.md — "
               "what came of it. An abandoned plan is closed the same way.)")
     if stale:
         blocks.append(

@@ -62,6 +62,27 @@ def header(text: str) -> dict:
     return out
 
 
+_PARSE = None
+
+
+def _parse(text: str) -> dict:
+    """SessionStart's parser when it is next to this file (repository and install alike), so
+    `next`/`sledvashto` and every other synonym mean one thing in every hook; the small local
+    reader otherwise. Never a reason to fail the prompt."""
+    global _PARSE
+    try:
+        if _PARSE is None:       # once per message, not once per task folder
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _PARSE = mod.parse_frontmatter
+        return _PARSE(text)
+    except Exception:
+        return header(text)
+
+
 def names_of(folder: Path, head: dict) -> list[str]:
     aliases = head.get("aliases") or []
     if isinstance(aliases, str):
@@ -105,7 +126,7 @@ def touched(root: Path, logbook: str, prompt: str) -> list[tuple[str, str, str]]
             text = book.read_text("utf-8-sig")
         except OSError:
             continue
-        head = header(text)
+        head = _parse(text)
         if any(matches(n, prompt, ps) for n in names_of(folder, head)):
             found.append((folder.name, last_entry(text), str(head.get("sledvashto", ""))))
     return found

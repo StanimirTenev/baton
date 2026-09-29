@@ -54,7 +54,7 @@ def test_a_closed_plan_with_a_result_is_quiet(tmp_path):
 def test_closed_with_no_result_is_not_closed(tmp_path):
     """A tick is how a check gets satisfied without the thing behind it being true."""
     out = bss.open_plan(_task(tmp_path, TICKED))
-    assert out is not None and "rezultat" in out
+    assert out is not None and "result" in out
 
 
 def test_an_abandoned_plan_closes_the_same_way(tmp_path):
@@ -98,7 +98,7 @@ def test_a_plan_abandoned_closes_too(tmp_path):
 def test_abandoned_still_needs_a_result(tmp_path):
     """Why we gave up is the part worth keeping."""
     out = bss.open_plan(_task(tmp_path, "---\nsastoyanie: izostaven\n---\n"))
-    assert out is not None and "rezultat" in out
+    assert out is not None and "result" in out
 
 
 def test_the_older_generic_closer_is_still_accepted(tmp_path):

@@ -38,7 +38,7 @@ Before proposing anything:
 > Paid for on 2026-09-28: the agent proposed reviewing 42 candidates. They had been reviewed
 > two days earlier; the review was four entries below the one it read.
 
-**If the last entry is a week old or more and the next move is not ours** (`na_hod` names an
+**If the last entry is a week old or more and the next move is not ours** (`turn` names an
 outsider, a delivery, a reply), **ask the human first: "what happened outside the logbook?"** —
 then propose. A logbook records sessions; it cannot record a disk that was returned, an email
 sent from a phone, or a timer switched off on another machine.
@@ -57,10 +57,10 @@ Write, in the human's words wherever possible:
 
 | field | what goes in |
 |---|---|
-| `cel` | the goal in one sentence — what is different when it is done |
-| `kriterii_zavarshvane` | one sentence a person could check: a number, a page that exists, a yes from someone |
-| `na_hod` | who holds the next move: `nie`, the human, or a named outsider |
-| `sledvashto` | one sentence: the next move, not a summary |
+| `goal` | the goal in one sentence — what is different when it is done |
+| `done_when` | one sentence a person could check: a number, a page that exists, a yes from someone |
+| `turn` | who holds the next move: `us`, the human, or a named outsider |
+| `next` | one sentence: the next move, not a summary |
 | `aliases` | the words people will use for it, **in every alphabet they write in** — the prompt hook matches on these |
 
 And in the first logbook entry: what is known — checked against a source or on the spot — and what is not: an agent's word, or an inference.

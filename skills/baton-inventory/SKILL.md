@@ -51,18 +51,18 @@ done, which unclear items to drop, whether frozen items get folders.
 ## 4. Apply — only what was confirmed
 
 - One folder per confirmed item with a next step, and for recurring products. Frozen items
-  may get a folder with `sastoyanie: zamrazena` (SessionStart lists them but never offers
+  may get a folder with `state: frozen` (SessionStart lists them but never offers
   them as work) or go into one `<task root>/ARCHIVE.md` index — ask which.
 - Each new logbook opens with the header, then **one entry marked as reconstructed**:
 
 ```markdown
 ---
-sastoyanie: aktivna          # aktivna | chakashta | postoyanna | zamrazena | priklyuchila
-na_hod: "nie"                # nie = us; otherwise who/what we wait for
-kriterii_zavarshvane: "…"    # when is it done
-vremevi_kriterii: po_izbor   # po_izbor | postoyanno | YYYY-MM-DD
-sledvashto: "…"              # the next concrete action
-prioritet: sreden            # visok | sreden | nisak
+state: active                # active | waiting | ongoing | frozen | finished
+turn: us                     # us; otherwise who/what we wait for
+done_when: "…"               # when is it done
+timing: any                  # any | recurring | YYYY-MM-DD
+next: "…"                    # the next concrete action
+priority: medium             # high | medium | low
 ---
 
 ## YYYY-MM-DD — reconstructed from the inventory

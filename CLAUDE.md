@@ -79,7 +79,7 @@ Three hooks ship with Baton and do not depend on the agent remembering any of th
   priority (from each logbook's header), or by last entry when a logbook has no header.
 - **Stop** checks whether a task folder has files newer than its `LOGBOOK.md`, and if so
   returns the turn to the agent with a note saying which one is unrecorded.
-  It also asks, once per session, for a `kriterii_zavarshvane` when a task worked on has none.
+  It also asks, once per session, for a `done_when` when a task worked on has none.
   And it names a newest entry headed later than the clock, and does not count a header-only
   edit as an entry.
 - **UserPromptSubmit** names a task a message touches — by folder or `aliases` — with its last
@@ -94,7 +94,7 @@ research rounds with sources and a verifier. It builds the plan backwards from t
 and you decide at every checkpoint. Research is never skipped in favour of a plan written
 from memory.
 
-A task parked on purpose gets `sastoyanie: zamrazena` in its header. SessionStart lists
+A task parked on purpose gets `state: frozen` in its header. SessionStart lists
 it but never offers it as work.
 
 The rule is the fallback. The hooks are what actually holds.

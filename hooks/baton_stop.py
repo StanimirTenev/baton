@@ -155,20 +155,32 @@ def unrecorded(root: Path, name: str) -> list[str]:
 RECENT_SECONDS = 1800
 
 
+_PARSER = None
+
+
+def _parser():
+    """SessionStart's header parser -- one reader for all three hooks. The hooks are copied
+    together, so it sits next to this file both in the repository and once installed."""
+    global _PARSER
+    if _PARSER is None:          # once per run, not once per folder
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _PARSER = mod.parse_frontmatter
+    return _PARSER
+
+
 def _criterion(logbook: Path) -> bool:
-    """Does the header carry a non-empty `kriterii_zavarshvane`? No header is no."""
+    """Does the header say when it is done -- `done_when` or `kriterii_zavarshvane`?
+    No header is no. Read through the shared parser: a reader of its own learned only the
+    Bulgarian name and would have asked for a criterion an English header already has."""
     try:
-        text = logbook.read_text("utf-8-sig")
-    except OSError:
+        fm = _parser()(logbook.read_text("utf-8-sig"))
+    except Exception:
         return False
-    if not text.startswith("---"):
-        return False
-    head = text.split("---", 2)[1] if text.count("---") >= 2 else ""
-    for line in head.splitlines():
-        key, _, value = line.partition(":")
-        if key.strip() == "kriterii_zavarshvane":
-            return value.strip().strip("\"'").strip() != ""
-    return False
+    return str(fm.get("kriterii_zavarshvane", "")).strip() != ""
 
 
 def undefined(root: Path, name: str) -> list[str]:
@@ -282,7 +294,7 @@ def main() -> int:
         parts.append(
             f"Baton: these tasks were worked on now, and their {name} header does not say "
             f"when they are finished:\n{listed}\n\n"
-            "Add `kriterii_zavarshvane:` to the header — one sentence a person could check. "
+            "Add `done_when:` to the header (or `kriterii_zavarshvane:`) — one sentence a person could check. "
             "If it is not known yet, ask the human rather than inventing one. "
             "(Asked once per session.)")
         _remember(session, asked | set(open_ended))

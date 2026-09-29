@@ -68,7 +68,7 @@ def test_a_stale_reference_reaches_the_report(tmp_path):
 
 def test_a_bloated_pointer_reaches_the_report(tmp_path):
     _task(tmp_path, "zadacha", "x" * 400)
-    assert "sledvashto" in _run(tmp_path)["systemMessage"]
+    assert "`next`" in _run(tmp_path)["systemMessage"]
 
 
 def test_an_empty_root_says_nothing_rather_than_failing(tmp_path):

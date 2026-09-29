@@ -203,41 +203,67 @@ does, the turn is handed back with a note naming it. The test is deliberately na
 session that touched no task folder is never interrupted, and `stop_hook_active` is honoured
 so it can block at most once per turn.
 
-## The task header (v2)
+## The task header
 
 A logbook can open with a small header. It is optional. With a header, SessionStart knows
 what the task *means* right now, not only when it was last touched.
 
 ```markdown
 ---
-sastoyanie: aktivna          # state
-na_hod: nie                  # who holds the next move: nie (= us) or a name / a condition
-kriterii_zavarshvane: "migration ran, row counts match"   # when is it done
-vremevi_kriterii: po_izbor   # po_izbor (any time) | postoyanno (recurring) | YYYY-MM-DD (deadline)
-sledvashto: "decide tax_region before the run"             # the next concrete action
-prioritet: visok             # visok | sreden | nisak  (high | medium | low)
-umeniya: [db-migration]      # optional: the skills this task needs (see below)
+state: active                # active | waiting | ongoing | frozen | finished
+turn: us                     # who holds the next move: us, or a name / a condition
+done_when: "migration ran, row counts match"   # one sentence a person could check
+timing: any                  # any | recurring | YYYY-MM-DD (deadline)
+next: "decide tax_region before the run"       # the next concrete action
+priority: high               # high | medium | low
+skills: [db-migration]       # optional: the skills this task needs (see below)
 aliases: [migration, миграция]  # optional: words people use for it, any alphabet (prompt hook)
-vyarno_kum: 2026-03-14       # optional: when this header was last true
-pregled_sled: 30d            # optional: how long that is expected to hold (30d, 6m)
-srok: 2026-04-01             # optional: a deadline on its own line, if you prefer it there
-kod: ~/dev/thing@v1.2.0      # optional: the code this record rests on (path@commit-or-tag)
+true_as_of: 2026-03-14       # optional: when this header was last true
+review_after: 30d            # optional: how long that is expected to hold (30d, 6m)
+deadline: 2026-04-01         # optional: a deadline on its own line, if you prefer it there
+code: ~/dev/thing@v1.2.0     # optional: the code this record rests on (path@commit-or-tag)
 ---
 ```
 
-`srok:` and `vremevi_kriterii: srok:YYYY-MM-DD` are the same deadline written two ways — the
-hook reads either, so a folder can keep the date where it reads best.
+`deadline:` and `timing: srok:YYYY-MM-DD` are the same deadline written two ways — the hook
+reads either, so a folder can keep the date where it reads best.
 
-| `sastoyanie` | meaning | also accepted |
+| `state` | meaning |
+|---|---|
+| `active` | in progress |
+| `waiting` | waiting on someone or something external |
+| `ongoing` | recurring, never finishes |
+| `frozen` | parked on purpose; listed, never offered as work (`paused` too) |
+| `finished` | done; listed, not touched (`done` too) |
+
+For `turn`, anything other than `us` / `me` / `self` (or empty) counts as "waiting on someone
+else". A task waiting on someone never lands in "on us", even with a deadline. Your own name
+can mean "us" too: list it under `"us"` in `baton.local.json` next to the hooks.
+
+**The same header in Bulgarian.** Baton began as one person's tool and every field had a
+Bulgarian (transliterated) name. They are read forever, so nothing written before v3.0.0 stops
+working, and a header may mix the two — where both spellings of one field appear, the Bulgarian
+one wins, so a half-translated header never loses what it said.
+
+| English | Bulgarian | values |
 |---|---|---|
-| `aktivna` | in progress | |
-| `chakashta` | waiting on someone or something external | `waiting` |
-| `postoyanna` | recurring, never finishes | |
-| `zamrazena` | parked on purpose; listed, never offered as work | `frozen`, `paused` |
-| `priklyuchila` | done; listed, not touched | `priklyuchena`, `done` |
+| `state` | `sastoyanie` | active `aktivna` · waiting `chakashta` · ongoing `postoyanna` · frozen `zamrazena` · finished `priklyuchila` |
+| `turn` | `na_hod` | us `nie` |
+| `next` | `sledvashto` | |
+| `done_when` | `kriterii_zavarshvane` | |
+| `timing` | `vremevi_kriterii` | any `po_izbor` · recurring `postoyanno` |
+| `priority` | `prioritet` | high `visok` · medium `sreden` · low `nisak` |
+| `skills` | `umeniya` | |
+| `true_as_of` | `vyarno_kum` | |
+| `review_after` | `pregled_sled` | |
+| `deadline` | `srok` | |
+| `code` | `kod` | |
+| `result` (plans) | `rezultat` | open `otvoren` · done `izpalnen` · abandoned `izostaven` |
 
-For `na_hod`, anything other than `nie` / `us` / `me` / `self` (or empty) counts as "waiting
-on someone else". A task waiting on someone never lands in "on us", even with a deadline.
+All three hooks read the header through one parser, and the synonym map lives there
+(`FIELD_SYNONYMS`, `VALUE_SYNONYMS`). Until v3.0.0 Stop and the prompt hook each had a reader
+of their own, and one of them would have asked an English header for a criterion it already had.
+
 The parser is deliberately small: `key: value` lines, quoted strings, `[a, b]` lists and
 trailing ` #` comments. It is not full YAML, so Baton needs no dependencies.
 
@@ -922,6 +948,22 @@ and you get a file that is too long to load every session and too disordered to 
 per project, a short state file under 150 lines, chronology in a separate history file.
 
 ## Versions
+
+**v3.0.0** — the header speaks English; every Bulgarian header still works
+
+- Header fields and values have English names: `state`, `turn`, `next`, `done_when`, `timing`,
+  `priority`, `skills`, `true_as_of`, `review_after`, `deadline`, `code`, plan `result`;
+  `active / waiting / ongoing / frozen / finished`, `us`, `high / medium / low`, `any / recurring`,
+  plan `open / done / abandoned`. The Bulgarian names are read forever; see "The task header".
+- One parser for all three hooks. Stop and the prompt hook each had a reader of their own; one
+  would have asked an English header for a criterion it already had. A test runs the same task
+  headed in English and in Bulgarian through all three and requires the same result.
+- `done` is deliberately not mapped: tasks and plans share the state field, and both already
+  accept `done` with their own meaning. Mapping it (the first attempt) broke finished tasks.
+- A user's own name meaning "us" moves from the code to `"us"` in `baton.local.json`.
+- The board shows priority in English whichever spelling the header used.
+- Checked: on the author's 22 Bulgarian headers the board is identical apart from the field names
+  quoted in messages; in a Windows sandbox all three hooks read an English header.
 
 **v2.18.0** — Baton speaks English (stage A of four)
 

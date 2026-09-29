@@ -52,10 +52,10 @@ answer to that, the round will not produce a fact — it will produce a longer f
 
 1. **The expected result.** Make it concrete and checkable. "First paid order, then
    recurring sales" is a goal; "a page is live" is only a step toward one. This becomes
-   `kriterii_zavarshvane` in the header.
+   `done_when` in the header.
 2. **Known gates and constraints.** Ask. Do not assume a gate from memory still applies.
 3. **Create the task folder.**
-   - `LOGBOOK` with the Baton header (`sastoyanie: aktivna`, `prioritet`, …) and a
+   - `LOGBOOK` with the Baton header (`state: active`, `priority`, …) and a
      one-line pointer in `MEMORY.md`.
    - `PLAN.md` **v0**, drafted from what memory already says and labelled *"draft from
      memory, before research"*. It is the yardstick: did research change it?
@@ -237,8 +237,8 @@ Every `PLAN.md` opens with a header, from v0:
 
 ```markdown
 ---
-sastoyanie: otvoren        # otvoren | izpalnen | izostaven
-rezultat: ""               # what came of it — required to close, either way
+state: open               # open | done | abandoned
+result: ""                 # what came of it — required to close, either way
 ---
 ```
 
@@ -246,7 +246,7 @@ The session-start hook reports a task whose plan does not say it is closed, **ev
 session**, as unfinished work. There is no grace period, because this is not a guess about
 whether something aged: the plan either says it is finished or it does not.
 
-**Closing requires saying what came of it.** A state with an empty `rezultat` is not closed —
+**Closing requires saying what came of it.** A state with an empty `result` is not closed —
 it is a tick, and a tick is how a check gets satisfied without the thing behind it being true.
 
 **A plan ends in one of two ways, and they are not the same fact.** `izpalnen` — it was
