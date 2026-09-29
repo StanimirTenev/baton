@@ -38,6 +38,19 @@ Before proposing anything:
 > Paid for on 2026-09-28: the agent proposed reviewing 42 candidates. They had been reviewed
 > two days earlier; the review was four entries below the one it read.
 
+**If the last entry is a week old or more and the next move is not ours** (`na_hod` names an
+outsider, a delivery, a reply), **ask the human first: "what happened outside the logbook?"** —
+then propose. A logbook records sessions; it cannot record a disk that was returned, an email
+sent from a phone, or a timer switched off on another machine.
+
+**Say the next move in words the human understands without the logbook.** Not "decide gate #4",
+but what it means: "is the rule 'no selling until the article is out' still in force?"
+
+> Measured on 2026-09-29, six tasks idle for a week or more, each resumed in a fresh session:
+> 6/6 answered in under a minute, but only 1/6 was right. Three misses were events outside any
+> session (a disk returned, timers switched off, an email already sent); one was the logbook's
+> own shorthand, which the human no longer recognised. Speed was never the problem; stale state was.
+
 ## 3. Formulate — goal, criterion, who decides
 
 Write, in the human's words wherever possible:
