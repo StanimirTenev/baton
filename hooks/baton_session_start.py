@@ -84,6 +84,90 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
+BATON_VERSION = "3.5.0"   # bumped with every release; a test holds it to the README's top version
+RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
+
+
+def _local() -> dict:
+    try:
+        return json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+    except Exception:
+        return {}
+
+
+def _state_file() -> Path:
+    return Path(os.environ.get("BATON_SESSION_STATE")
+                or Path(__file__).with_name("baton.state.json"))
+
+
+def _version(tag: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", tag)[:3])
+
+
+def update_notice(today: date) -> str | None:
+    """Once a week, IF the human switched it on: is there a newer Baton? Never installs.
+
+    Off until chosen, because the README promised the hooks never touch the network, and a
+    promise changed by default is a promise broken. While nobody has chosen, the agent is
+    asked -- once a day -- to put the question to the human.
+    """
+    cfg = _local()
+    repo = cfg.get("repo")
+    tool = f"python3 {Path(repo) / 'tools/baton_update.py'}" if repo else \
+        "python3 <the Baton repository>/tools/baton_update.py"
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+
+    def save():
+        try:
+            _state_file().write_text(json.dumps(state), "utf-8")
+        except OSError:
+            pass
+
+    setting = cfg.get("update_check")
+    if setting is None:
+        if state.get("asked") == today.isoformat():
+            return None
+        state["asked"] = today.isoformat()
+        save()
+        return ("🔔 Baton can check once a week whether a newer version is out: one request to "
+                "GitHub at session start, and nothing is ever installed on its own. It is off until "
+                "the human chooses. Ask them once, in their language, then run "
+                f"`{tool} on` or `{tool} off`.")
+    if setting is not True:
+        return None
+
+    checked = _as_date(state.get("checked"))
+    wait = 1 if state.get("failed") else 7
+    if checked is None or (today - checked).days >= wait:
+        state["checked"] = today.isoformat()
+        try:
+            import urllib.request
+            req = urllib.request.Request(os.environ.get("BATON_UPDATE_URL") or RELEASES,
+                                         headers={"Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                rel = json.load(resp)
+            state.update(latest=rel["tag_name"], url=rel.get("html_url", ""), failed=False)
+        except Exception as err:
+            state["failed"] = True
+            save()
+            return (f"🔔 Could not check for a newer Baton ({type(err).__name__}); "
+                    "it will try again tomorrow.")
+        save()
+
+    latest = state.get("latest")
+    if not latest or _version(latest) <= _version(BATON_VERSION):
+        return None
+    how = (f"`cd {repo} && git pull && {'install.cmd' if os.name == 'nt' else './install.sh'}`"
+           if repo and Path(repo).is_dir() else
+           "download it from the release page and run the installer again")
+    return (f"⬆️ Baton {latest} is out; this machine runs v{BATON_VERSION}. Tell the human what "
+            f"changed ({state.get('url') or 'the release page'}) and how to update: {how}. "
+            "Never update without their yes.")
+
+
 def source_dir() -> Path | None:
     """Where these hooks are developed, if this is a working copy rather than an install.
 
@@ -712,13 +796,23 @@ def line_for(name: str, fm: dict, tail: str = "") -> str:
     return f"- {name}{badge}{body}{tail}{skills}"
 
 
+def _notices_only(notices: list[str]) -> int:
+    """A board with no tasks still carries what the agent must say to the human."""
+    if notices:
+        text = "\n\n".join(notices)
+        json.dump({"systemMessage": text, "hookSpecificOutput": {
+            "hookEventName": "SessionStart", "additionalContext": text}}, sys.stdout)
+    return 0
+
+
 def main() -> int:
     root, name = config()
+    notices = [n for n in (update_notice(date.today()),) if n]
     if not root.is_dir():
-        return 0
+        return _notices_only(notices)
     folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
     if not folders:
-        return 0
+        return _notices_only(notices)
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
     stale: list[str] = []
@@ -844,7 +938,7 @@ def main() -> int:
         blocks.append(block)
 
     if not blocks and not frozen and not finished and not stale:
-        return 0
+        return _notices_only(notices)
 
     if unfinished:
         # Its own block, above the shelf-life notes: an unclosed plan is not a
@@ -867,7 +961,7 @@ def main() -> int:
 
     summary = (
         f"Baton — the tasks in {root}, ordered by whose move it is and by priority:\n\n"
-        + "\n\n".join(blocks)
+        + "\n\n".join(blocks + notices)
     )
     context = (
         summary

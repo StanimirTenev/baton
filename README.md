@@ -77,6 +77,21 @@ at run time. On Windows without Python, the installer uses a bundled copy if one
 `python-win\` (the USB build carries it), otherwise it prints the one-line,
 no-administrator `winget` command to add it for your user.
 
+### Updates: off until you choose
+
+At the first session after installing, the agent asks whether Baton may check once a week for a
+newer version. Until you answer, **the hooks never touch the network**. Your answer:
+
+```
+python3 tools/baton_update.py on    # one request to GitHub a week, at session start
+python3 tools/baton_update.py off   # never
+```
+
+With it on, a newer release is named at session start with what changed and the command to
+update. Nothing is installed on its own: the hooks run in every session, and code that replaced
+itself unasked would put whoever controlled the repository into every one of them. A check that
+fails says so, and tries again the next day.
+
 ### Existing work: `/baton-inventory`
 
 The installer also copies one skill, `~/.claude/skills/baton-inventory/`. Baton starts
@@ -502,7 +517,8 @@ python3 tools/baton_review.py --which <file>    # which claim is unsupported?
 
 **Optional, off by default, and it needs a key.** Without an
 [OpenRouter](https://openrouter.ai) key this does not run, and nothing else in Baton wants
-one — the hooks never call it and never touch the network.
+one — the hooks never call it. (The one request the hooks may make is the weekly update check,
+and only if you switched it on.)
 
 **Getting the key: `/baton-key`.** The agent walks you through openrouter.ai (account, a little
 credit, a key with a spending limit) and then gives you one command to run **in your own
@@ -971,6 +987,18 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.5.0** — a weekly check for a newer version, if you want one
+
+- At the first session the agent asks whether Baton may check once a week for a newer release.
+  Until the answer, nothing reaches the network; `tools/baton_update.py on|off` records it.
+- With it on: one request to GitHub a week at session start, two-second timeout. A newer release
+  is named with what changed and the command to update, every session until you update. Nothing
+  installs on its own. A failed check says so and retries the next day.
+- The notice reaches a new user with no tasks yet: the board used to print nothing at all when the
+  task root was empty, which is exactly where a new user starts.
+- The hook carries its version; a test holds it to the top of this list, so a release that forgets
+  to bump it fails.
 
 **v3.4.0** — `/baton-key`: the agent walks a new user to an OpenRouter key, which never enters the conversation
 
