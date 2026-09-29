@@ -84,7 +84,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.7.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.7.1"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -832,9 +832,10 @@ def inventory_notice(today: date) -> str | None:
 
 
 SHOW_BOARD = (
-    "The human has not seen this board. Open your first reply with it, translated into the "
-    "human's language: every group and every line, nothing shortened or left out. Task names, "
-    "file names, commands, fields in backticks and identifiers stay as they are."
+    "The human has not seen this board. Open your first reply with the WHOLE board, translated "
+    "into the human's language: every group and every line, nothing shortened or left out -- "
+    "no summary, no merged lines, no \"...and the rest\", and the notes in parentheses too. "
+    "Task names, file names, commands, fields in backticks and identifiers stay as they are."
 )
 
 

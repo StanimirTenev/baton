@@ -86,4 +86,5 @@ def test_the_board_goes_to_the_agent_to_show_in_the_humans_language(tmp_path):
     assert "zadacha" in context
     assert "translated into the human's language" in context
     assert "every group and every line" in context
+    assert "WHOLE board" in context and "no summary" in context
     assert LOGBOOK in context

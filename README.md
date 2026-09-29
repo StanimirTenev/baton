@@ -998,6 +998,12 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.7.1** — the whole board, said outright
+
+- The instruction to the agent now names the ways a board gets shortened: no summary, no merged
+  lines, no "...and the rest", the notes in parentheses included. The first translated board
+  shown to the author ended one group with "...(the rest as before)" — exactly that.
+
 **v3.7.0** — the board reaches you in your language
 
 - The session-start board was printed to the human as it is (`systemMessage`), so everything the
