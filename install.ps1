@@ -100,7 +100,7 @@ if ($alreadyThere) {
     Say "would append Baton section to $ClaudeMd"
 } else {
     if (-not (Test-Path -LiteralPath $ClaudeDir)) { New-Item -ItemType Directory -Force -Path $ClaudeDir | Out-Null }
-    $body = Get-Content -LiteralPath (Join-Path $Repo "CLAUDE.md") -Raw -Encoding UTF8
+    $body = Get-Content -LiteralPath (Join-Path $Repo "templates\CLAUDE.md") -Raw -Encoding UTF8
     if (Test-Path -LiteralPath $ClaudeMd) { $body = "`n`n---`n`n" + $body }
     # UTF-8 without BOM, so the file reads cleanly everywhere.
     $enc = New-Object System.Text.UTF8Encoding($false)

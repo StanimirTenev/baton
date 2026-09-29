@@ -1,0 +1,14 @@
+{
+  "name": "baton",
+  "displayName": "Baton",
+  "version": "3.7.1",
+  "description": "Every task is a folder with a logbook, and three hooks keep it that way: a session opens on the board of what is whose move, a turn that leaves work unrecorded is handed back, and a message that names a task brings up its record.",
+  "author": {
+    "name": "Stanimir Tenev",
+    "url": "https://github.com/StanimirTenev"
+  },
+  "homepage": "https://github.com/StanimirTenev/baton",
+  "repository": "https://github.com/StanimirTenev/baton",
+  "license": "MIT",
+  "keywords": ["logbook", "tasks", "memory", "handoff", "hooks", "continuity"]
+}

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "python3",
+                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/baton_session_start.py"], "timeout": 20}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "python3",
+                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/baton_stop.py"], "timeout": 20}]}
+    ],
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "python3",
+                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/baton_prompt.py"], "timeout": 20}]}
+    ]
+  }
+}

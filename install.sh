@@ -69,7 +69,7 @@ elif [ "$DRY_RUN" = 1 ]; then
 else
   mkdir -p "$CLAUDE_DIR"
   [ -f "$CLAUDE_DIR/CLAUDE.md" ] && printf '\n\n---\n\n' >> "$CLAUDE_DIR/CLAUDE.md"
-  cat "$REPO/CLAUDE.md" >> "$CLAUDE_DIR/CLAUDE.md"
+  cat "$REPO/templates/CLAUDE.md" >> "$CLAUDE_DIR/CLAUDE.md"
   say "instructions appended to $CLAUDE_DIR/CLAUDE.md"
 fi
 
