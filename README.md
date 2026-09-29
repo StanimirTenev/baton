@@ -113,8 +113,11 @@ each time.
 
 You do not have to remember it: while the task root is empty and the machine has earlier Claude
 Code conversations, the session starts with the agent offering it — once a day, until there is a
-folder. Claude Code keeps conversation transcripts for a limited time (by default about a month),
-so for older work the memory and history are what is left; the inventory reads both.
+folder. Claude Code deletes conversation transcripts older than `cleanupPeriodDays` — 30 days by
+default ([its documentation](https://code.claude.com/docs/en/claude-directory#cleaned-up-automatically)).
+Its auto memory is kept. The same page lists the prompt history (`history.jsonl`) in the sweep; on
+the author's machine it still reached back six months. For work older than a month, the memory is
+what is certain to be left. The inventory reads all three.
 
 ### Two paths, and the cheap one is the default
 
@@ -992,6 +995,17 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.6.1** — the commands the agent hands over name the right folder, for everyone
+
+- The installer now records where the repository is (`repo` in `baton.local.json`). Before, only
+  the author's machine had a path (`source`, written by hand), so for every other user the update
+  question said `<the Baton repository>` and `/baton-key` pointed at a key that did not exist.
+  Found by review before any user met it. If the folder is gone, the message says where to get it.
+- Windows gets `python`, not `python3`, in those commands.
+- v3.6.0 said transcripts are kept "about a month" and that history survives. The first half is
+  now sourced (30 days, `cleanupPeriodDays`); the second was not true as written — the
+  documentation lists the prompt history in the same sweep.
 
 **v3.6.0** — a new user with months of Claude Code behind them is offered the inventory
 

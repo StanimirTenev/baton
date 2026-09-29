@@ -4,7 +4,7 @@
 Writes baton.local.json (task root + logbook name) next to the hooks, then merges the
 two hook commands into settings.json without disturbing anything already there.
 
-Usage: _install_hooks.py <settings.json> <hookdir> <pyexe> <dry:0|1> <home> <logbook>
+Usage: _install_hooks.py <settings.json> <hookdir> <pyexe> <dry:0|1> <home> <logbook> [<repo>]
 
 `pyexe` is the ABSOLUTE path to the Python interpreter. The hooks are installed in the
 exec ("args") form — `command` is that interpreter, spawned directly with the script as an
@@ -19,6 +19,9 @@ import sys
 
 def main() -> int:
     settings_path, hookdir, pyexe, dry_s, home, logbook = sys.argv[1:7]
+    # Where the tools live (baton_key, baton_update): the hooks name it in the commands they
+    # hand the human. Optional, so an older install script still works.
+    repo = sys.argv[7] if len(sys.argv) > 7 else ""
     dry = dry_s == "1"
 
     # 1. local config the hooks read at runtime (so the command needs no env prefix)
@@ -61,10 +64,12 @@ def main() -> int:
     if dry:
         print(f"  would write {local}")
     else:
-        # Only the two fields this installer owns; everything else is the user's.
+        # Only the fields this installer owns; everything else is the user's.
         merged = dict(existing)
         merged["home"], merged["logbook"] = home, logbook
-        kept = sorted(set(existing) - {"home", "logbook"})
+        if repo:
+            merged["repo"] = repo
+        kept = sorted(set(existing) - {"home", "logbook", "repo"})
         tmp = local + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(merged, fh, ensure_ascii=False, indent=2)

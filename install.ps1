@@ -134,7 +134,7 @@ foreach ($skill in Get-ChildItem -Directory (Join-Path $Repo "skills")) {
 
 # 4. local config + hooks, merged into settings.json without disturbing anything else
 $dryArg = if ($DryRun) { "1" } else { "0" }
-& $PyLauncher (Join-Path $Repo "hooks\_install_hooks.py") $Settings $HookDir $PyExe $dryArg $Tasks $Logbook
+& $PyLauncher (Join-Path $Repo "hooks\_install_hooks.py") $Settings $HookDir $PyExe $dryArg $Tasks $Logbook $Repo
 
 Write-Host ""
 Write-Host "Done. Open /hooks once in Claude Code (or restart) so it reloads settings.json."

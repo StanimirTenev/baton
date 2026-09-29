@@ -95,7 +95,7 @@ for skill in "$REPO"/skills/*/; do
 done
 
 # 4. local config + hooks, merged into settings.json without disturbing anything else
-"$PY" "$REPO/hooks/_install_hooks.py" "$SETTINGS" "$HOOKDIR" "$PYEXE" "$DRY_RUN" "$TASKS" "$LOGBOOK"
+"$PY" "$REPO/hooks/_install_hooks.py" "$SETTINGS" "$HOOKDIR" "$PYEXE" "$DRY_RUN" "$TASKS" "$LOGBOOK" "$REPO"
 
 echo
 echo "Done. Open /hooks once (or restart) so the harness reloads settings.json."

@@ -84,7 +84,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.6.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.6.1"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -112,9 +112,13 @@ def update_notice(today: date) -> str | None:
     asked -- once a day -- to put the question to the human.
     """
     cfg = _local()
-    repo = cfg.get("repo")
-    tool = f"python3 {Path(repo) / 'tools/baton_update.py'}" if repo else \
-        "python3 <the Baton repository>/tools/baton_update.py"
+    repo = cfg.get("repo")          # written by the installer since v3.6.1
+    py = "python" if os.name == "nt" else "python3"
+    known = bool(repo) and Path(repo).is_dir()
+    tool = f"{py} {Path(repo) / 'tools' / 'baton_update.py'}" if known else \
+        f"{py} <the Baton repository>/tools/baton_update.py"
+    gone = "" if known else (" The folder Baton was installed from is not known or is gone; "
+                             "it can be downloaded again from https://github.com/StanimirTenev/baton.")
     try:
         state = json.loads(_state_file().read_text("utf-8"))
     except Exception:
@@ -135,7 +139,7 @@ def update_notice(today: date) -> str | None:
         return ("🔔 Baton can check once a week whether a newer version is out: one request to "
                 "GitHub at session start, and nothing is ever installed on its own. It is off until "
                 "the human chooses. Ask them once, in their language, then run "
-                f"`{tool} on` or `{tool} off`.")
+                f"`{tool} on` or `{tool} off`." + gone)
     if setting is not True:
         return None
 

@@ -154,3 +154,11 @@ def test_months_of_earlier_work_and_no_tasks_offers_the_inventory_once_a_day(tmp
 def test_a_machine_with_no_earlier_conversations_hears_nothing(tmp_path):
     out = _hook_with_empty_root(tmp_path, talks=0)()
     assert out.returncode == 0 and out.stdout == "" and not out.stderr
+
+
+def test_the_ask_names_the_repository_the_installer_recorded(tmp_path, monkeypatch):
+    """For everyone but the author, `source` was never written; the command said `<the Baton
+    repository>` and the human had to guess."""
+    bss = _load()
+    monkeypatch.setattr(bss, "_local", lambda: {"repo": str(tmp_path)})
+    assert f"{tmp_path / 'tools' / 'baton_update.py'} on" in bss.update_notice(TODAY)

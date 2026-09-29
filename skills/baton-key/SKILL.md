@@ -25,8 +25,9 @@ use the pasted one.
    **$3.39**. A few dollars last a long time.
 3. **Key.** Account menu → *Keys* → *Create Key*. Give it a name (e.g. `baton`) and **a credit
    limit** — the most it may ever spend. Copy the key; OpenRouter shows it only once.
-4. **Store it — in their own terminal, not here.** Find the repository path in
-   `~/.claude/baton/hooks/baton.local.json` (`source` is its `hooks` folder) and give them:
+4. **Store it — in their own terminal, not here.** The repository path is `repo` in
+   `~/.claude/baton/hooks/baton.local.json` (the installer writes it). If that folder is gone,
+   they download Baton again from https://github.com/StanimirTenev/baton. Give them:
 
    ```
    python3 <repo>/tools/baton_key.py

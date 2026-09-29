@@ -108,3 +108,19 @@ def test_a_second_install_without_env_keeps_the_task_root_and_logbook(tmp_path):
     cfg = json.loads((claude / "baton" / "hooks" / "baton.local.json").read_text(encoding="utf-8"))
     assert cfg["home"] == str(zad) and cfg["logbook"] == "DNEVNIK.md", cfg
     assert not (home / "tasks").exists(), "a second install created the default folder"
+
+
+def test_the_installer_records_the_repository_and_keeps_the_update_choice(tmp_path):
+    """The hooks hand the human commands in the repository's `tools/`; they need its path."""
+    hookdir = tmp_path / "hooks"
+    hookdir.mkdir()
+    local = hookdir / "baton.local.json"
+    local.write_text(json.dumps({"update_check": True}), encoding="utf-8")
+    settings = tmp_path / "settings.json"
+    settings.write_text("{}", encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(INSTALL), str(settings), str(hookdir), sys.executable,
+         "0", "/home/x/tasks", "LOGBOOK.md", "/home/x/dev/baton"], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    after = json.loads(local.read_text(encoding="utf-8"))
+    assert after["repo"] == "/home/x/dev/baton" and after["update_check"] is True
