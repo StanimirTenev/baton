@@ -849,13 +849,44 @@ SHOW_BOARD = (
 )
 
 
-def _notices_only(notices: list[str]) -> int:
-    """A board with no tasks still carries what the agent must say to the human."""
-    if notices:
-        text = "\n\n".join(notices)
+def plugin_rules() -> str | None:
+    """Baton's rules, when installed as a plugin and nowhere else.
+
+    install.sh appends templates/CLAUDE.md to ~/.claude/CLAUDE.md: the fallback that holds
+    where a hook does not. A plugin's CLAUDE.md is never loaded, so a plugin install would
+    lose the rules; they come from here instead. Not when the installer has already put
+    them in CLAUDE.md -- the same marker it checks before appending -- or they would be
+    read twice."""
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if not root:
+        return None
+    try:
+        if "Installed by Baton" in (Path.home() / ".claude" / "CLAUDE.md").read_text("utf-8"):
+            return None
+    except OSError:
+        pass
+    try:
+        text = (Path(root) / "templates" / "CLAUDE.md").read_text("utf-8")
+    except OSError:
+        return None
+    tasks, logbook = config()
+    return (f"Baton's working rules. Baton is installed as a plugin, so they arrive here rather "
+            f"than from CLAUDE.md. On this machine the task root is {tasks} and the logbook "
+            f"file in each task folder is {logbook}.\n\n{text}")
+
+
+def _emit(context: str | None) -> int:
+    """The one way out: whatever the hook has to say, plus the rules in plugin mode."""
+    text = "\n\n".join(t for t in (context, plugin_rules()) if t)
+    if text:
         json.dump({"hookSpecificOutput": {
             "hookEventName": "SessionStart", "additionalContext": text}}, sys.stdout)
     return 0
+
+
+def _notices_only(notices: list[str]) -> int:
+    """A board with no tasks still carries what the agent must say to the human."""
+    return _emit("\n\n".join(notices) if notices else None)
 
 
 def main() -> int:
@@ -1025,11 +1056,7 @@ def main() -> int:
 
     # No systemMessage: that one reaches the human as it is, in English. The agent knows the
     # human's language and the hook does not, so the agent shows the board -- translated.
-    json.dump(
-        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}},
-        sys.stdout,
-    )
-    return 0
+    return _emit(context)
 
 
 if __name__ == "__main__":
