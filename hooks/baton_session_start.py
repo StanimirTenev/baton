@@ -84,7 +84,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.6.1"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.7.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -831,11 +831,18 @@ def inventory_notice(today: date) -> str | None:
             "each one. Ask once; if they decline, leave it.")
 
 
+SHOW_BOARD = (
+    "The human has not seen this board. Open your first reply with it, translated into the "
+    "human's language: every group and every line, nothing shortened or left out. Task names, "
+    "file names, commands, fields in backticks and identifiers stay as they are."
+)
+
+
 def _notices_only(notices: list[str]) -> int:
     """A board with no tasks still carries what the agent must say to the human."""
     if notices:
         text = "\n\n".join(notices)
-        json.dump({"systemMessage": text, "hookSpecificOutput": {
+        json.dump({"hookSpecificOutput": {
             "hookEventName": "SessionStart", "additionalContext": text}}, sys.stdout)
     return 0
 
@@ -998,18 +1005,17 @@ def main() -> int:
         + "\n\n".join(blocks + notices)
     )
     context = (
-        summary
+        SHOW_BOARD
+        + "\n\n" + summary
         + f"\n\nBefore working on one, read its {name} (the record of earlier sessions; "
         f"the front-matter header on top carries the current state). After working, add a new entry "
         f"at the top and update the header if the state has changed."
     )
 
+    # No systemMessage: that one reaches the human as it is, in English. The agent knows the
+    # human's language and the hook does not, so the agent shows the board -- translated.
     json.dump(
-        {
-            # additionalContext reaches only the agent; systemMessage is what the human sees
-            "systemMessage": summary,
-            "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context},
-        },
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}},
         sys.stdout,
     )
     return 0

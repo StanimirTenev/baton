@@ -195,7 +195,9 @@ the shape of the product and caught a factual error left over from round one.
 
 **SessionStart** tells the session which task comes first, so it never opens blind.
 Tasks with a header (see below) are grouped by who holds the next move and sorted by
-priority. The human sees the same list the agent gets:
+priority. The list goes to the agent, which opens its first reply with it, translated into
+your language, every group and every line. The hook does not know your language; the agent does.
+What the agent gets:
 
 ```
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
@@ -995,6 +997,19 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.7.0** — the board reaches you in your language
+
+- The session-start board was printed to the human as it is (`systemMessage`), so everything the
+  hook writes itself came out in English — the group titles, and whole lines such as the unclosed
+  plans and the notes past their shelf life. Only the `next` fields, copied from your headers,
+  were in your language. Noticed by the author, whose board was half Bulgarian and half English.
+- The hook no longer prints anything to the human. The board goes to the agent with one
+  instruction: open the first reply with it, translated into the human's language — every group
+  and every line, nothing shortened; task names, file names, commands and identifiers unchanged.
+- Not changed: what is checked, the groups, their order. No translations are kept in Baton; the
+  agent does it for any language. The cost: you see the board after your first message, not before
+  it, and a board the agent is told to show in full is now only as complete as the agent makes it.
 
 **v3.6.1** — the commands the agent hands over name the right folder, for everyone
 

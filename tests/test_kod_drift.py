@@ -120,7 +120,7 @@ def test_the_drift_reaches_the_report_not_only_the_function(tmp_path, monkeypatc
     out = subprocess.run([sys.executable, str(HOOK)], input="{}",
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
-    message = json.loads(out.stdout).get("systemMessage", "")
+    message = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
     assert "zadacha" in message and "2" in message and "code:" in message, message[-400:]
 
 

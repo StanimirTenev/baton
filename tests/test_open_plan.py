@@ -172,7 +172,7 @@ def test_a_finished_task_still_reports_an_open_plan(tmp_path, monkeypatch):
     out = subprocess.run([sys.executable, str(hook)], input="{}",
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
-    message = json.loads(out.stdout).get("systemMessage", "")
+    message = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
     assert "otvoren-plan" in message
     assert "PLAN.md" in message, (
         "a finished task with an open plan must show BOTH facts, not only the header: "

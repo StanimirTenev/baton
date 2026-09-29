@@ -49,7 +49,7 @@ def _task(root: Path, name: str, pointer: str) -> Path:
 
 def test_a_task_is_listed(tmp_path):
     _task(tmp_path, "zadacha", "да се пусне коментарът")
-    report = _run(tmp_path)["systemMessage"]
+    report = _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
     assert "zadacha" in report
     assert "да се пусне коментарът" in report
 
@@ -61,23 +61,29 @@ def test_a_stale_reference_reaches_the_report(tmp_path):
     darvo.write_text("въпроси\n", encoding="utf-8")
     old = time.time() - 4 * 86400
     os.utime(darvo, (old, old))
-    report = _run(tmp_path)["systemMessage"]
+    report = _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
     assert "DARVO.md" in report
     assert "shelf life" in report
 
 
 def test_a_bloated_pointer_reaches_the_report(tmp_path):
     _task(tmp_path, "zadacha", "x" * 400)
-    assert "`next`" in _run(tmp_path)["systemMessage"]
+    assert "`next`" in _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
 
 
 def test_an_empty_root_says_nothing_rather_than_failing(tmp_path):
     assert _run(tmp_path) == {}
 
 
-def test_the_agent_gets_the_instruction_the_human_does_not(tmp_path):
+def test_the_board_goes_to_the_agent_to_show_in_the_humans_language(tmp_path):
+    """The board used to reach the human as a systemMessage -- in English, whatever language
+    they speak. Only the agent knows that language, so only the agent gets the board, with
+    the instruction to show all of it, translated."""
     _task(tmp_path, "zadacha", "нещо")
     out = _run(tmp_path)
     context = out["hookSpecificOutput"]["additionalContext"]
-    assert out["systemMessage"] in context
+    assert "systemMessage" not in out
+    assert "zadacha" in context
+    assert "translated into the human's language" in context
+    assert "every group and every line" in context
     assert LOGBOOK in context
