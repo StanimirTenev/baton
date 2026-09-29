@@ -1,0 +1,15 @@
+{
+  "name": "baton",
+  "owner": {
+    "name": "Stanimir Tenev",
+    "url": "https://github.com/StanimirTenev"
+  },
+  "description": "Baton: every task a folder with a logbook, kept that way by three hooks.",
+  "plugins": [
+    {
+      "name": "baton",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

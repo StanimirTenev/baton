@@ -78,6 +78,13 @@ def plugin() -> bool:
     return bool(os.environ.get("CLAUDE_PLUGIN_ROOT"))
 
 
+def claude_dir() -> Path:
+    """Claude Code's configuration folder: CLAUDE_CONFIG_DIR, else ~/.claude -- the same
+    rule install.sh and install.ps1 use. Reading ~/.claude regardless made a session with
+    its own config see an installer it does not run (2026-09-29)."""
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
 def installed_twice() -> bool:
     """Running as a plugin while install.sh's hooks are also in ~/.claude/settings.json.
 
@@ -87,7 +94,7 @@ def installed_twice() -> bool:
     if not plugin():
         return False
     try:
-        settings = json.loads((Path.home() / ".claude" / "settings.json").read_text("utf-8-sig"))
+        settings = json.loads((claude_dir() / "settings.json").read_text("utf-8-sig"))
     except Exception:
         return False
     # A plugin's own hooks come from its hooks.json, never from settings.json: any Baton
@@ -702,8 +709,8 @@ def skills_root() -> Path:
         cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         cfg = {}
-    raw = os.environ.get("BATON_SKILLS") or cfg.get("skills") or "~/.claude/skills"
-    return Path(raw).expanduser()
+    raw = os.environ.get("BATON_SKILLS") or cfg.get("skills")
+    return Path(raw).expanduser() if raw else claude_dir() / "skills"
 
 
 def skills_for(fm: dict) -> list[str]:
@@ -875,7 +882,7 @@ def inventory_notice(today: date) -> str | None:
     Found 2026-09-29: the installer printed one line about it, and a line printed once at
     install is a line nobody acts on. Once a day while the root stays empty.
     """
-    claude = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    claude = claude_dir()
     try:
         talks = list((claude / "projects").glob("*/*.jsonl"))
     except OSError:
@@ -920,7 +927,7 @@ def plugin_rules() -> str | None:
     if not root:
         return None
     try:
-        if "Installed by Baton" in (Path.home() / ".claude" / "CLAUDE.md").read_text("utf-8"):
+        if "Installed by Baton" in (claude_dir() / "CLAUDE.md").read_text("utf-8"):
             return None
     except OSError:
         pass

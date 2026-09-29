@@ -75,3 +75,17 @@ def test_the_installer_alone_is_untouched(tmp_path):
     env = _env(tmp_path, plugin=False)
     out = _run("baton_session_start.py", env, {})
     assert "billing" in out and "installed twice" not in out
+
+
+def test_claude_config_dir_is_where_the_installer_would_be(tmp_path):
+    """Found in the first real plugin session, 2026-09-29: with CLAUDE_CONFIG_DIR pointing
+    at a clean config, the hook read ~/.claude/settings.json anyway, saw the installer's
+    hooks there -- which that session does not run -- and stood down for nothing."""
+    env = _env(tmp_path)                      # installer entries in HOME/.claude/settings.json
+    cfg = tmp_path / "clean-config"
+    cfg.mkdir()
+    env["CLAUDE_CONFIG_DIR"] = str(cfg)
+    out = _run("baton_session_start.py", env, {})
+    assert "installed twice" not in out and "billing" in out
+    (cfg / "settings.json").write_text((tmp_path / "home" / ".claude" / "settings.json").read_text())
+    assert "installed twice" in _run("baton_session_start.py", env, {})

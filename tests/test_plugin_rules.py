@@ -55,3 +55,19 @@ def test_rules_the_installer_already_wrote_are_not_repeated(tmp_path):
 
 def test_installed_by_the_script_nothing_is_added(tmp_path):
     assert RULE not in _run(tmp_path, plugin=False)
+
+
+def test_the_marker_is_looked_for_in_claude_config_dir(tmp_path):
+    installed = (ROOT / "templates" / "CLAUDE.md").read_text(encoding="utf-8")
+    home = tmp_path / "home" / ".claude"
+    home.mkdir(parents=True)
+    (home / "CLAUDE.md").write_text(installed, encoding="utf-8")   # another config's rules
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("BATON_", "CLAUDE_PLUGIN"))}
+    env.update(HOME=str(tmp_path / "home"), CLAUDE_CONFIG_DIR=str(cfg), BATON_HOME=str(tasks),
+               CLAUDE_PLUGIN_ROOT=str(ROOT), CLAUDE_PLUGIN_DATA=str(tmp_path / "data"))
+    out = subprocess.run([sys.executable, str(HOOK)], input="{}", capture_output=True, text=True, env=env)
+    assert RULE in out.stdout, "this session's config has no rules, so the plugin brings them"
