@@ -35,3 +35,4 @@ def test_no_python_says_why_and_does_not_break_the_session(tmp_path):
     out = subprocess.run([shutil.which("sh"), str(RUN), "x.py"], capture_output=True,
                          text=True, env=dict(os.environ, PATH=str(empty)))
     assert out.returncode == 0 and "no Python" in out.stderr
+

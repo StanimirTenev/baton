@@ -16,8 +16,10 @@ returns less than it costs; run a third only if the human asks for it. What is s
 unclear by then goes to the human as a decision, or into the plan as a task (a cheap
 test, a question for a lawyer). After that the plan is **executed**, not researched further.
 
-Task root and logbook name come from `~/.claude/baton/hooks/baton.local.json` (`home`,
-`logbook`). The files below are written into `<task root>/<task>/`.
+Task root and logbook name: the session-start board names the task root in its first line
+("Baton — the tasks in …"); installed as a plugin, the rules that come with it name both. With
+the install script they are also in `~/.claude/baton/hooks/baton.local.json` (`home`,
+`logbook`; defaults `~/tasks`, `LOGBOOK.md`). The files below are written into `<task root>/<task>/`.
 
 ## Before you run this at all: is it a swarm question?
 

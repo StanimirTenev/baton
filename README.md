@@ -37,7 +37,8 @@ which does nothing; the start script recognises it and moves on to `python`.
 As a plugin, Baton behaves as it does when installed by script, with these differences:
 
 - **The skills carry the plugin's name:** `/baton:baton-task`, `/baton:baton-plan`,
-  `/baton:baton-inventory`, `/baton:baton-key`.
+  `/baton:baton-inventory`, `/baton:baton-key`. They take the task root from the session-start
+  board, which names it in both installs.
 - **The rules** (what `install.sh` appends to `~/.claude/CLAUDE.md`) arrive with the
   session-start board instead, because a plugin's `CLAUDE.md` is never loaded.
 - **Settings and state** live in Claude Code's plugin data folder
@@ -46,7 +47,8 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   auto-update for the `baton` marketplace under `/plugin` -> *Marketplaces*. The hooks do not
   check for a newer version themselves, so **as a plugin they make no network request at all.**
 - **Installed both ways** (script and plugin), every hook would run twice. The plugin's copy
-  notices the script's entries in `settings.json`, stands down, and says once which to remove.
+  notices the script's entries in `settings.json`, stands down, and at each session start says
+  which to remove, until one is.
 - The optional review tools (`baton_review`, `baton_sift`, `baton_corpus`, and the key
   set-up behind `/baton-key`) keep their settings next to the script-installed hooks; for now,
   use them with the script install.
@@ -1052,11 +1054,18 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   runs. On the Windows test machine `python3` was the Microsoft Store stand-in, which prints
   "Python" and exits 0 without running anything -- a check on the exit code would have taken it.
   On Windows the plugin needs Git for Windows (Git Bash runs the start script).
-- **Installed both ways**, the plugin's copy stands down and says which to remove.
+- **Installed both ways**, the plugin's copy stands down and, at each session start, says which to remove.
+- Found by an independent review before release, and fixed: a `CLAUDE.md` in UTF-16 or cp1251
+  (PowerShell 5's default) wiped the whole board in plugin mode; three skills still read the
+  script install's settings file and named `/baton-plan` without the prefix; the tests depended on
+  the runner's own `CLAUDE_CONFIG_DIR`; a local state file had been committed.
 - Found by running it for real, and fixed: the plugin data folder is not always created before
   the first hook runs; a session with its own `CLAUDE_CONFIG_DIR` was read as if it were
   `~/.claude` (it "saw" an installer it does not run); settings and state written next to the
   scripts would have been wiped by every plugin update.
+- Script installs with `CLAUDE_CONFIG_DIR` set: the skills check now looks in that folder's `skills/`,
+  where the installer puts them (it looked in `~/.claude/skills`). A fix; without the variable
+  nothing changes.
 - The rules text moved to `templates/CLAUDE.md` (a `CLAUDE.md` at a plugin root fails
   `claude plugin validate --strict`); both installers read it from there.
 - README: installing as a plugin, **what Baton sends over the network** (a table, read against
@@ -1657,7 +1666,7 @@ without any of this, which is the point.
 | what | when | to |
 |---|---|---|
 | the hooks, installed as a plugin | never | -- |
-| the hooks, installed by script | once a week, **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
+| the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
 | `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; folders listed as confidential are refused before anything is sent |
 

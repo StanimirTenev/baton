@@ -23,7 +23,7 @@ def _load(name):
 
 @pytest.fixture
 def plugin(tmp_path, monkeypatch):
-    for var in ("BATON_HOME", "BATON_LOGBOOK", "BATON_SESSION_STATE", "BATON_BODY_STATE",
+    for var in ("BATON_HOME", "CLAUDE_CONFIG_DIR", "BATON_LOGBOOK", "BATON_SESSION_STATE", "BATON_BODY_STATE",
                 "CLAUDE_PLUGIN_OPTION_TASKS_FOLDER", "CLAUDE_PLUGIN_OPTION_LOGBOOK"):
         monkeypatch.delenv(var, raising=False)
     data = tmp_path / "data"

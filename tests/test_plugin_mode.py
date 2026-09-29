@@ -26,7 +26,7 @@ def _hook():
 
 @pytest.fixture
 def plugin(tmp_path, monkeypatch):
-    for var in ("BATON_HOME", "BATON_SKILLS", "BATON_SOURCE", "BATON_SESSION_STATE",
+    for var in ("BATON_HOME", "CLAUDE_CONFIG_DIR", "BATON_SKILLS", "BATON_SOURCE", "BATON_SESSION_STATE",
                 "BATON_UPDATE_URL"):
         monkeypatch.delenv(var, raising=False)
     data = tmp_path / "data"

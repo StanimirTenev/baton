@@ -108,12 +108,16 @@ def installed_twice() -> bool:
     return False
 
 
-TWICE = ("⚠️ Baton is installed twice on this machine: by its installer (three hooks in "
-         "~/.claude/settings.json) and as a plugin. Every hook would run twice, so the plugin's "
-         "copy has stood down and the installed one is doing the work. Tell the human, in their "
-         "language, and ask which to keep. To keep the plugin: remove Baton's three entries from "
-         "~/.claude/settings.json (the README's Uninstall section lists them). To keep the "
-         "installer: `claude plugin uninstall baton`.")
+def twice_message() -> str:
+    """Said at each session start while both installs are present. Names the settings file
+    this session actually reads, not ~/.claude when CLAUDE_CONFIG_DIR says otherwise."""
+    settings = claude_dir() / "settings.json"
+    return ("⚠️ Baton is installed twice on this machine: by its installer (its hook entries in "
+            f"{settings}) and as a plugin. Every hook would run twice, so the plugin's copy has "
+            "stood down and the installed one is doing the work. Tell the human, in their "
+            "language, and ask which to keep. To keep the plugin: remove the entries whose "
+            f"command runs a baton_ script from {settings} (the README's Uninstall section lists "
+            "them). To keep the installer: `claude plugin uninstall baton`.")
 
 
 def command(skill: str) -> str:
@@ -927,13 +931,18 @@ def plugin_rules() -> str | None:
     if not root:
         return None
     try:
-        if "Installed by Baton" in (claude_dir() / "CLAUDE.md").read_text("utf-8"):
+        # Any encoding the file may be in, never an exception: PowerShell 5 writes UTF-16,
+        # older files are cp1251, and an error here once took the whole board with it.
+        raw = (claude_dir() / "CLAUDE.md").read_bytes()
+        mine = (raw.decode("utf-16", "replace") if raw[:2] in (b"\xff\xfe", b"\xfe\xff")
+                else raw.decode("utf-8", "replace"))
+        if "Installed by Baton" in mine:
             return None
     except OSError:
         pass
     try:
         text = (Path(root) / "templates" / "CLAUDE.md").read_text("utf-8")
-    except OSError:
+    except (OSError, ValueError):
         return None
     tasks, logbook = config()
     return (f"Baton's working rules. Baton is installed as a plugin, so they arrive here rather "
@@ -960,7 +969,7 @@ def main() -> int:
     if installed_twice():
         # Not _emit(): the rules already come from the installer's CLAUDE.md.
         json.dump({"hookSpecificOutput": {"hookEventName": "SessionStart",
-                                          "additionalContext": TWICE}}, sys.stdout)
+                                          "additionalContext": twice_message()}}, sys.stdout)
         return 0
     root, name = config()
     notices = [n for n in (update_notice(date.today()),) if n]

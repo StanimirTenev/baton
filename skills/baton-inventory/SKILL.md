@@ -9,8 +9,10 @@ Baton starts empty, but the machine does not. This walks the machine once, finds
 that was done before Baton existed, and turns it into task folders — **after the human
 confirms**. Nothing is moved, and no folder is created before that confirmation.
 
-Task root and logbook name: read `~/.claude/baton/hooks/baton.local.json`
-(`home`, `logbook`; defaults `~/tasks`, `LOGBOOK.md`).
+Task root and logbook name: the session-start board names the task root in its first line
+("Baton — the tasks in …"); installed as a plugin, the rules that come with it name both. With
+the install script they are also in `~/.claude/baton/hooks/baton.local.json` (`home`,
+`logbook`; defaults `~/tasks`, `LOGBOOK.md`).
 
 ## 1. Scan — four read-only agents in parallel
 
@@ -88,7 +90,9 @@ during the work; the state was confirmed by the human on that date.
 Run the SessionStart hook by hand and check the new folders land in the right groups:
 
 ```bash
-python3 ~/.claude/baton/hooks/baton_session_start.py </dev/null
+python3 ~/.claude/baton/hooks/baton_session_start.py </dev/null          # install script
+BATON_HOME=<task root> BATON_LOGBOOK=<logbook> \
+  sh "${CLAUDE_PLUGIN_ROOT}/hooks/run.sh" "${CLAUDE_PLUGIN_ROOT}/hooks/baton_session_start.py" </dev/null   # plugin
 ```
 
 Then log the inventory itself in `<task root>/baton/<logbook>`.

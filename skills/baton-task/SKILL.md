@@ -1,6 +1,6 @@
 ---
 name: baton-task
-description: Form the task before researching or acting on it. Recognise when a conversation has become a task or a decision, read back what was already done and decided, and write the goal and a checkable criterion of done into the logbook header. Use at the start of any new piece of work, when the human says "let's do X" or makes a choice between options, when a message names an existing task, and before handing a large goal to /baton-plan.
+description: Form the task before researching or acting on it. Recognise when a conversation has become a task or a decision, read back what was already done and decided, and write the goal and a checkable criterion of done into the logbook header. Use at the start of any new piece of work, when the human says "let's do X" or makes a choice between options, when a message names an existing task, and before handing a large goal to /baton-plan (/baton:baton-plan when installed as a plugin).
 ---
 
 # Baton task — form it before you research it
@@ -70,7 +70,8 @@ then trusted.
 
 ## 4. Only then — outward
 
-Small and clear: do it. Large, several directions, or unknown ground: `/baton-plan`, which
+Small and clear: do it. Large, several directions, or unknown ground: `/baton-plan`
+(`/baton:baton-plan` as a plugin), which
 starts from the goal you have just written instead of inventing one.
 
 ---

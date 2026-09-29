@@ -34,7 +34,7 @@ def _env(tmp_path, *, plugin=True, installer=True):
     (task / "draft.txt").write_text("unrecorded work")
     ten_min = time.time() - 600          # past Stop's 90 s grace, after the last entry
     os.utime(task / "draft.txt", (ten_min, ten_min))
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("BATON_", "CLAUDE_PLUGIN"))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
     env.update(HOME=str(home), BATON_HOME=str(tasks), BATON_LOGBOOK="LOGBOOK.md",
                BATON_SESSION_STATE=str(tmp_path / "s.json"), BATON_BODY_STATE=str(tmp_path / "b.json"),
                BATON_STATE_DIR=str(tmp_path))   # the prompt hook's per-session memory, not /tmp's
@@ -89,3 +89,14 @@ def test_claude_config_dir_is_where_the_installer_would_be(tmp_path):
     assert "installed twice" not in out and "billing" in out
     (cfg / "settings.json").write_text((tmp_path / "home" / ".claude" / "settings.json").read_text())
     assert "installed twice" in _run("baton_session_start.py", env, {})
+
+
+def test_the_message_names_the_settings_file_this_session_reads(tmp_path):
+    env = _env(tmp_path, installer=False)
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    (cfg / "settings.json").write_text(json.dumps({"hooks": {"Stop": [{"hooks": [
+        {"type": "command", "command": "python3", "args": ["/x/baton_stop.py"]}]}]}}))
+    env["CLAUDE_CONFIG_DIR"] = str(cfg)
+    out = _run("baton_session_start.py", env, {})
+    assert str(cfg / "settings.json") in out and "~/.claude/settings.json" not in out
