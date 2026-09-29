@@ -10,5 +10,26 @@
   "homepage": "https://github.com/StanimirTenev/baton",
   "repository": "https://github.com/StanimirTenev/baton",
   "license": "MIT",
-  "keywords": ["logbook", "tasks", "memory", "handoff", "hooks", "continuity"]
+  "keywords": [
+    "logbook",
+    "tasks",
+    "memory",
+    "handoff",
+    "hooks",
+    "continuity"
+  ],
+  "userConfig": {
+    "tasks_folder": {
+      "type": "directory",
+      "title": "Task folder",
+      "description": "Where your task folders live: one folder per task, each with its logbook. Created by you; Baton only reads it and names what it finds.",
+      "default": "~/tasks"
+    },
+    "logbook": {
+      "type": "string",
+      "title": "Logbook file name",
+      "description": "The file in each task folder that holds its record, newest entry first. Use a word in your own language if you prefer.",
+      "default": "LOGBOOK.md"
+    }
+  }
 }

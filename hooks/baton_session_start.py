@@ -73,14 +73,24 @@ ROW_DATE = re.compile(
     r"^(\d{4}-\d\d-\d\d|\d\d\.\d\d\.\d{4})(?:[ T](\d\d:\d\d))?$")
 
 
+def _local_file(name: str) -> Path:
+    """Where a settings or state file lives. Installed as a plugin, the hooks run from a
+    folder replaced on every update, so these go to ${CLAUDE_PLUGIN_DATA}, which survives
+    updates. Installed by install.sh, next to the hooks, as always."""
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    return Path(data) / name if data else Path(__file__).with_name(name)
+
+
 def config() -> tuple[Path, str]:
     cfg = {}
     try:
-        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         cfg = {}
-    home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")
-    logbook = os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"
+    home = (os.environ.get("BATON_HOME") or os.environ.get("CLAUDE_PLUGIN_OPTION_TASKS_FOLDER")
+            or cfg.get("home") or str(Path.home() / "tasks"))
+    logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
+               or cfg.get("logbook") or "LOGBOOK.md")
     return Path(home).expanduser(), logbook
 
 
@@ -90,14 +100,14 @@ RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 def _local() -> dict:
     try:
-        return json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+        return json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         return {}
 
 
 def _state_file() -> Path:
     return Path(os.environ.get("BATON_SESSION_STATE")
-                or Path(__file__).with_name("baton.state.json"))
+                or _local_file("baton.state.json"))
 
 
 def _version(tag: str) -> tuple:
@@ -179,7 +189,7 @@ def source_dir() -> Path | None:
     to compare against and nothing is reported.
     """
     try:
-        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         return None
     raw = os.environ.get("BATON_SOURCE") or cfg.get("source")
@@ -635,7 +645,7 @@ SKILL_STALE_DAYS = 14
 def skills_root() -> Path:
     """Where the skills live. `~/.claude/skills` unless told otherwise."""
     try:
-        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         cfg = {}
     raw = os.environ.get("BATON_SKILLS") or cfg.get("skills") or "~/.claude/skills"
@@ -774,7 +784,7 @@ def _our_names() -> set:
     `us` in baton.local.json. Kept out of the code: a public tool should not carry one
     user's name as a built-in synonym (it did until v3.0.0)."""
     try:
-        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
         return {str(n).strip().lower() for n in cfg.get("us", [])}
     except Exception:
         return set()

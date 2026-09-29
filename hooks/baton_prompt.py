@@ -30,15 +30,25 @@ MAX_TASKS = 3
 _WORD = re.compile(r"\w+", re.UNICODE)
 
 
+def _local_file(name: str) -> Path:
+    """Where a settings or state file lives. Installed as a plugin, the hooks run from a
+    folder replaced on every update, so these go to ${CLAUDE_PLUGIN_DATA}, which survives
+    updates. Installed by install.sh, next to the hooks, as always."""
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    return Path(data) / name if data else Path(__file__).with_name(name)
+
+
 def config() -> tuple[Path, str]:
     """Task root and logbook name -- the same resolution as the other two hooks."""
     cfg = {}
     try:
-        cfg = json.loads((Path(__file__).with_name("baton.local.json")).read_text("utf-8-sig"))
+        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
     except Exception:
         cfg = {}
-    home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")
-    logbook = os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"
+    home = (os.environ.get("BATON_HOME") or os.environ.get("CLAUDE_PLUGIN_OPTION_TASKS_FOLDER")
+            or cfg.get("home") or str(Path.home() / "tasks"))
+    logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
+               or cfg.get("logbook") or "LOGBOOK.md")
     return Path(home).expanduser(), logbook
 
 
