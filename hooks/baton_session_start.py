@@ -73,6 +73,16 @@ ROW_DATE = re.compile(
     r"^(\d{4}-\d\d-\d\d|\d\d\.\d\d\.\d{4})(?:[ T](\d\d:\d\d))?$")
 
 
+def plugin() -> bool:
+    """Installed as a Claude Code plugin: Claude Code sets CLAUDE_PLUGIN_ROOT for its hooks."""
+    return bool(os.environ.get("CLAUDE_PLUGIN_ROOT"))
+
+
+def command(skill: str) -> str:
+    """How the human invokes a Baton skill. A plugin's skills are namespaced by the plugin."""
+    return f"/baton:{skill}" if plugin() else f"/{skill}"
+
+
 def _local_file(name: str) -> Path:
     """Where a settings or state file lives. Installed as a plugin, the hooks run from a
     folder replaced on every update, so these go to ${CLAUDE_PLUGIN_DATA}, which survives
@@ -120,7 +130,12 @@ def update_notice(today: date) -> str | None:
     Off until chosen, because the README promised the hooks never touch the network, and a
     promise changed by default is a promise broken. While nobody has chosen, the agent is
     asked -- once a day -- to put the question to the human.
+
+    Not as a plugin: Claude Code updates it (`claude plugin update`, or auto-update for the
+    marketplace), and a plugin-mode hook makes no network request at all.
     """
+    if plugin():
+        return None
     cfg = _local()
     repo = cfg.get("repo")          # written by the installer since v3.6.1
     py = "python" if os.name == "nt" else "python3"
@@ -210,6 +225,8 @@ def install_drift() -> list[str]:
     file it was built from and say when they differ, which is the same question asked
     somewhere it can actually be answered.
     """
+    if plugin():                    # Claude Code owns the plugin's copy
+        return []
     src = source_dir()
     if src is None or not src.is_dir():
         return []
@@ -693,10 +710,15 @@ def skill_trouble(names: list[str], folder: Path, logbook: str) -> list[str]:
     except OSError:
         return []
     out: list[str] = []
+    inside = Path(os.environ["CLAUDE_PLUGIN_ROOT"]) / "skills" if plugin() else None
     for name in names:
+        # A plugin's skills live inside it and may be written with its prefix.
+        bare = name.split(":", 1)[1] if name.startswith("baton:") else name
         skill = root / name / "SKILL.md"
+        if not skill.is_file() and inside is not None and (inside / bare / "SKILL.md").is_file():
+            skill = inside / bare / "SKILL.md"
         if not skill.is_file():
-            out.append(f"{name} — MISSING in {root}")
+            out.append(f"{name} — MISSING in {root}" + (f" and in {inside}" if inside else ""))
             continue
         try:
             seen = date.fromtimestamp(skill.stat().st_mtime)
@@ -836,7 +858,7 @@ def inventory_notice(today: date) -> str | None:
         pass
     oldest = date.fromtimestamp(min(t.stat().st_mtime for t in talks))
     return (f"📦 No task folders yet, but this machine has {len(talks)} earlier Claude Code "
-            f"conversations (the oldest from {oldest.isoformat()}). Offer the human /baton-inventory: "
+            f"conversations (the oldest from {oldest.isoformat()}). Offer the human {command('baton-inventory')}: "
             "it maps that earlier work into task folders, and creates nothing until they confirm "
             "each one. Ask once; if they decline, leave it.")
 
@@ -872,7 +894,8 @@ def plugin_rules() -> str | None:
     tasks, logbook = config()
     return (f"Baton's working rules. Baton is installed as a plugin, so they arrive here rather "
             f"than from CLAUDE.md. On this machine the task root is {tasks} and the logbook "
-            f"file in each task folder is {logbook}.\n\n{text}")
+            f"file in each task folder is {logbook}.\n\n"
+            + re.sub(r"`/(baton-[a-z-]+)`", lambda m: f"`{command(m.group(1))}`", text))
 
 
 def _emit(context: str | None) -> int:
