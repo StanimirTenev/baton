@@ -13,10 +13,10 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_tablo.py"
-spec = importlib.util.spec_from_file_location("baton_tablo", TOOL)
+TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_board.py"
+spec = importlib.util.spec_from_file_location("baton_board", TOOL)
 tablo = importlib.util.module_from_spec(spec)
-sys.modules["baton_tablo"] = tablo
+sys.modules["baton_board"] = tablo
 spec.loader.exec_module(tablo)
 
 TODAY = date(2026, 9, 19)

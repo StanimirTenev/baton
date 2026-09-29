@@ -6,7 +6,7 @@ wrote `baton.local.json` from scratch with `home` and `logbook` only, so
 it did that *before* validating `settings.json`, so an invalid settings file returned 1
 with the config already destroyed.
 
-The barrier that keeps client material off a hosted API reads that list. `baton_pregled`
+The barrier that keeps client material off a hosted API reads that list. `baton_review`
 is written to stop when the list is missing rather than treat it as empty — which is the
 right refusal, and also means a silent reinstall turns the review tool off.
 """

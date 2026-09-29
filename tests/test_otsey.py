@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_otsey.py"
+TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_sift.py"
 spec = importlib.util.spec_from_file_location("bo", TOOL)
 bo = importlib.util.module_from_spec(spec)
 sys.modules["bo"] = bo
@@ -26,7 +26,7 @@ SCORED = [("alpha", "t", 0.91), ("beta", "t", 0.55), ("gama", "t", 0.12), ("delt
 
 
 class _Fake:
-    """Stands in for `baton_pregled`: no key, no network, no spend."""
+    """Stands in for `baton_review`: no key, no network, no spend."""
 
     def __init__(self, scores, confidential=()):
         self.scores, self.confidential, self.asked = scores, set(confidential), []

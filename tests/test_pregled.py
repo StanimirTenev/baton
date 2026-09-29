@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_pregled.py"
+TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_review.py"
 spec = importlib.util.spec_from_file_location("bp", TOOL)
 bp = importlib.util.module_from_spec(spec)
 sys.modules["bp"] = bp
@@ -508,7 +508,7 @@ def test_the_barrier_reads_everything_that_is_sent_not_only_the_state(monkeypatc
     also carries `questions`. A confidential term appearing only in a question reached
     the outgoing JSON — 272 bytes of it, verified by replacing `urlopen`.
 
-    It bit because of `baton_otsey`, shipped the night before, which puts the caller's
+    It bit because of `baton_sift`, shipped the night before, which puts the caller's
     own `--vapros` straight into `questions`. A barrier that reads half of what it
     sends is not a barrier, and this is the one function that touches the network.
     """
@@ -600,3 +600,29 @@ def test_dali_sends_the_retrieved_extract(tmp_path, monkeypatch):
     # A word only the deep paragraph has: the pointer itself travels in the state too,
     # so a phrase from the pointer would pass without any retrieval at all.
     assert sent and "Петров" in sent[0]
+
+
+# --- v3.1.0: English names, Bulgarian ones kept -------------------------------------
+
+def test_english_config_keys_are_read(tmp_path, monkeypatch):
+    for var in ("BATON_PREGLED_INDEKS", "BATON_PREGLED_POVERITELNI", "BATON_REVIEW_INDEX",
+                "BATON_REVIEW_CONFIDENTIAL"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("BATON_REVIEW_INDEX", str(tmp_path / "INDEX.md"))
+    monkeypatch.setenv("BATON_REVIEW_CONFIDENTIAL", "acme,акме")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    cfg = bp.config()
+    assert cfg["indeks"] == str(tmp_path / "INDEX.md") and cfg["poveritelni"] == ["acme", "акме"]
+
+
+def test_the_old_file_name_and_flags_still_work(tmp_path):
+    """External scripts load `tools/baton_pregled.py` by path (the corpus labeller does)."""
+    import subprocess
+    old = TOOL.with_name("baton_pregled.py")
+    spec2 = importlib.util.spec_from_file_location("bp_old", old)
+    m = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(m)
+    assert m.pitay and m.poveritelno and m.config, "the old path lost its functions"
+    for flag in ("--dali", "--stale"):
+        out = subprocess.run([sys.executable, str(old), flag, "--help"], capture_output=True, text=True)
+        assert out.returncode == 0 and "--stale" in out.stdout, out.stderr

@@ -448,7 +448,7 @@ Two Stop checks came from that evening, both mechanical:
 
 
 ```
-python3 tools/baton_vpishi.py <logbook> <entry-file> [--sledvashto NEW --staro OLD]
+python3 tools/baton_entry.py <logbook> <entry-file> [--next NEW --old OLD]
 ```
 
 The Stop hook demands an entry at the top of the logbook, and until now nothing here helped
@@ -466,7 +466,7 @@ invisible to any heading-based read, including the author's own `grep "^## "`.
 
 So the tool inserts before the first dated heading and then checks its own output: the front
 matter still parses, no heading is glued anywhere in the file, and the pointer replacement
-either happened or failed loudly. `--sledvashto` requires `--staro`, the old line verbatim: a
+either happened or failed loudly. `--next` requires `--old`, the old line verbatim: a
 pointer that has already moved is a loud failure rather than a silent duplicate.
 
 ⚠️ It **warns** rather than refuses when the entry's own heading runs ahead of the system
@@ -481,7 +481,7 @@ first version falsely rejected a real file while nine unit tests passed — see 
 ## The board
 
 ```
-python3 tools/baton_tablo.py --out tablo.html --open
+python3 tools/baton_board.py --out board.html --open
 ```
 
 One local HTML file: what is on your move, what waits on someone else, what is late, and every
@@ -496,8 +496,8 @@ page: logbooks carry client matter, and a board is not worth sending it anywhere
 ## The review: does the index still match the files?
 
 ```
-python3 tools/baton_pregled.py --dali          # has a pointer gone stale?
-python3 tools/baton_pregled.py --koe <file>    # which claim is unsupported?
+python3 tools/baton_review.py --stale          # has a pointer gone stale?
+python3 tools/baton_review.py --which <file>    # which claim is unsupported?
 ```
 
 **Optional, off by default, and it needs a key.** Without an
@@ -519,17 +519,17 @@ In `hooks/baton.local.json`:
 
 ```json
 {
-  "pregled_indeks": "~/notes/INDEX.md",
-  "pregled_podbor": "~/notes/AT-RISK.md",
-  "pregled_poveritelni": ["client-name", "Client Name", "unreleased-product"]
+  "review_index": "~/notes/INDEX.md",
+  "review_shortlist": "~/notes/AT-RISK.md",
+  "review_confidential": ["client-name", "Client Name", "unreleased-product"]
 }
 ```
 
 | | |
 |---|---|
-| `pregled_indeks` | the index whose pointers get checked — any file with `[title](path.md)` links |
-| `pregled_podbor` | optional shortlist: only the targets it names are checked, so a long index need not be paid for whole |
-| `pregled_poveritelni` | substrings that must never leave the machine |
+| `review_index` | the index whose pointers get checked — any file with `[title](path.md)` links |
+| `review_shortlist` | optional shortlist: only the targets it names are checked, so a long index need not be paid for whole |
+| `review_confidential` | substrings that must never leave the machine |
 
 The guard reads the **whole source file**, not the part that gets sent: the question is
 whether this document is about confidential matter, not whether the bytes that happened to fit
@@ -537,7 +537,7 @@ contained the word. That is deliberately conservative and it costs coverage — 
 here it holds 10 of 19 rows. Holding too much is a list to narrow; holding too little is a
 disclosure.
 
-**`pregled_poveritelni` is required, and absent is not empty.** With the key missing the tool
+**`review_confidential` is required, and absent is not empty.** With the key missing the tool
 stops and tells you to decide; write `[]` if you really mean that nothing is held back. The
 match is on the path *and* the content, because material sits in an innocent folder and still
 recounts a client's business.
@@ -551,10 +551,10 @@ A held row stops *itself*, not the run — otherwise the only way to get a revie
 the barrier. Every run appends to `$BATON_HOME/.pregled-dnevnik.tsv`: what was sent, when,
 what it cost.
 
-### `--zadachi`: the header against its own logbook
+### `--tasks`: the header against its own logbook
 
 ```
-python3 tools/baton_pregled.py --zadachi
+python3 tools/baton_review.py --tasks
 ```
 
 Same shape, different corpus: a header's `sledvashto` and `kriterii_zavarshvane` are pointers,
@@ -582,10 +582,10 @@ Measured, and the easiest thing here to get backwards:
 One reason both ways: a summary judgement is diluted by a long text, while a single claim has
 its evidence *somewhere* in it — and a cut above that evidence fails the claim innocently.
 
-`--koe` caps at 28000 characters and **says so** when it cuts, because below the cut nothing
+`--which` caps at 28000 characters and **says so** when it cuts, because below the cut nothing
 can support anything and a low score there means "don't know", not "no".
 
-Until v2.16.0 the extract was the first 2600 characters, and that cut is why `--dali` kept
+Until v2.16.0 the extract was the first 2600 characters, and that cut is why `--stale` kept
 flagging a pointer whose correction was recorded deep in the file: the fix was real, the
 extract could not see it. Now the first 1000 characters always go -- these files put what is
 true now at the top -- and the rest is filled with the paragraphs sharing the most words with
@@ -603,9 +603,9 @@ versions with the right paragraph in the extract -- that miss is the model's, no
 retrieval's. On the live index the three rows sent moved by at most 0.04. Fourteen rows is a
 control, not a calibration: the threshold is still an ordering.
 
-### `--koe` takes a task name
+### `--which` takes a task name
 
-`--koe` cuts a pointer into separate claims and asks the source about each. Its corpus was
+`--which` cuts a pointer into separate claims and asks the source about each. Its corpus was
 index lines. Measured 2026-09-23 on the index this was built against:
 
 | | before | after |
@@ -615,21 +615,21 @@ index lines. Measured 2026-09-23 on the index this was built against:
 | most claims on one row | 4 | 2 |
 
 The index had been compressed on purpose, so that a pointer carries no state. That was
-right, and it left this mode without input: **an index that cannot rot is an index `--koe`
+right, and it left this mode without input: **an index that cannot rot is an index `--which`
 cannot check.** The two rules are in tension by design, and the tension is worth naming.
 
-Task headers rot by design — that is what `sledvashto` is for — and `--zadachi` already asks
-the whole-header version of this question against the same logbooks. So `--koe <task-name>`
+Task headers rot by design — that is what `sledvashto` is for — and `--tasks` already asks
+the whole-header version of this question against the same logbooks. So `--which <task-name>`
 asks it per claim:
 
 ```
-$ baton_pregled.py --koe qrp-benchmark
+$ baton_review.py --which qrp-benchmark
 🔴 NOT SUPPORTED 0.14  sastoyanie: priklyuchila
 🔴 NOT SUPPORTED 0.28  na_hod: nie
 🟡 unclear       0.50  kriterii_zavarshvane: benchmark against the paper — done (14/30)
 ```
 
-`--zadachi` had flagged that task at 0.66; this says **which part**. A bare task name that
+`--tasks` had flagged that task at 0.66; this says **which part**. A bare task name that
 holds a logbook wins over an index target; an index path still reaches the old mode.
 
 **`sastoyanie` and `na_hod` are not claims here.** Measured by running the mode over all 19
@@ -639,7 +639,7 @@ scored 0.95, 0.97 and 0.97 — and whose own logbook "does not support" `postoya
 never writes `sastoyanie: postoyanna`: it is the word that names where the work stands, not
 something the entries assert. Twelve of that run's 25 claims were these two fields and every
 one was a false positive — the majority of the output, and its most visible part. They stay in
-`--zadachi`, which reads the whole header together; judging where the work stands is that
+`--tasks`, which reads the whole header together; judging where the work stands is that
 mode's job, and naming which claim broke is this one's.
 
 ⚠️ `na_hod` sometimes carries a name rather than an enum. That case was not measured
@@ -682,12 +682,12 @@ decision is made**. The mean hides it: 0.02 sounds calm. One row of the 45 chang
 the threshold between identical runs — 0.41 / 0.47 / 0.38 — so it was flagged in one run of
 three.
 
-So `--dali` and `--zadachi` draw **three times and average** when the first draw lands in
+So `--stale` and `--tasks` draw **three times and average** when the first draw lands in
 `SIVA = (0.35, 0.60)`, and print the draws next to the mean, because a mean shown alone is
 indistinguishable from one draw. Outside the band a second draw buys a hundredth of a point
 and is not paid for. On a 45-row index this cost **$0.0040 instead of $0.0034**.
 
-⚠️ `--koe` is deliberately left alone: it asks a different question, one claim at a time
+⚠️ `--which` is deliberately left alone: it asks a different question, one claim at a time
 against the whole file, and its spread has **not** been measured. Averaging it would carry a
 number from one corpus to another — the mistake this feature exists to correct.
 
@@ -785,9 +785,9 @@ The Stop hook also names the newest unrecorded file, so you can see at a glance 
 ## Where else does this live — and is that place still claiming it?
 
 ```
-python3 tools/baton_kade.py "2500"           # where else does this number appear
-python3 tools/baton_kade.py "0\.4[0-9]" --regex
-python3 tools/baton_kade.py --duplicates     # find them without being asked
+python3 tools/baton_where.py "2500"           # where else does this number appear
+python3 tools/baton_where.py "0\.4[0-9]" --regex
+python3 tools/baton_where.py --duplicates     # find them without being asked
 ```
 
 `grep -r` answers *where a string occurs*. The question that actually comes up is a different
@@ -799,7 +799,7 @@ Baton already draws that line for a person to read; this reads it. A logbook hea
 a memory file are **live**. An entry, a file whose name carries a date, and a row in a claims
 register are not — they repeat old values legitimately, and the first version counted them,
 which took one query from four live places to seven. The kinds come from
-[`baton_korpus`](#the-corpus-and-saying-what-is-in-it), so the two tools cannot drift apart
+[`baton_corpus`](#the-corpus-and-saying-what-is-in-it), so the two tools cannot drift apart
 about what a place is.
 
 ### ⚠️ It does not find contradictions. It finds duplicated state.
@@ -840,14 +840,14 @@ touched, which is the part that says how long they have disagreed.
 ## Reading order for a long list
 
 ```
-baton_otsey.py --vapros "Does this repository ship a CBOM generator?" < candidates.tsv
-baton_otsey.py --vapros "..." --prag 0.5 --izhod scores.tsv < candidates.tsv
+baton_sift.py --question "Does this repository ship a CBOM generator?" < candidates.tsv
+baton_sift.py --question "..." --threshold 0.5 --out scores.tsv < candidates.tsv
 ```
 
 A research pass reads hundreds of candidates and judges each one expensively. Measured here
 on 2026-09-26: one run paged 300 code-search hits and de-duplicated them by hand, another
-filtered 935 + 576 arXiv entries with a title regex. `tools/baton_otsey.py` scores the same
-list once with the calibrated classifier `baton_pregled` already talks to, and puts the
+filtered 935 + 576 arXiv entries with a title regex. `tools/baton_sift.py` scores the same
+list once with the calibrated classifier `baton_review` already talks to, and puts the
 worthwhile ones first. Input is TSV on stdin — an id in column one, everything else is what
 gets judged.
 
@@ -868,7 +868,7 @@ that.
 
 ### ⛔ Reading order, not a right of exclusion
 
-Nothing is dropped, ever. `--prag` splits the list into **read first** and **read after**,
+Nothing is dropped, ever. `--threshold` splits the list into **read first** and **read after**,
 and prints both with counts. The threshold travels in the output for the same reason a
 coverage figure travels with its denominator, and the report says in as many words that a
 candidate below the line is one nobody has read yet.
@@ -893,11 +893,11 @@ on arXiv rows or code hits, the same way `baton-pregled` says.
 
 Two questions come up in every tool that reads a whole tree of task folders: **which files
 are part of the corpus**, and **what kind of place is this passage** — something that claims
-a thing now, or a record of what was once true. `tools/baton_korpus.py` is the one owner of
+a thing now, or a record of what was once true. `tools/baton_corpus.py` is the one owner of
 both.
 
 ```python
-from baton_korpus import Scope, chunks, kind, walk
+from baton_corpus import Scope, chunks, kind, walk
 
 scope = Scope(["docs", "sdks", "*/vendor/*"])      # what is OUTSIDE the corpus
 for text, source, what in chunks([home], scope, "LOGBOOK.md"):
@@ -906,7 +906,7 @@ for text, source, what in chunks([home], scope, "LOGBOOK.md"):
 
 A logbook arrives as its header plus one chunk per entry; a claims register as one chunk per
 row; anything else split on its headings, with a dated filename marking the whole file a
-snapshot. `--duplicates` in `tools/baton_kade.py` uses the same `kind()`, so the two cannot
+snapshot. `--duplicates` in `tools/baton_where.py` uses the same `kind()`, so the two cannot
 drift apart about what a place is.
 
 ### `Scope(None)` raises, and that is the feature
@@ -947,7 +947,30 @@ and you get a file that is too long to load every session and too disordered to 
 [`docs/memory-layout.md`](docs/memory-layout.md) covers the other half: index, one folder
 per project, a short state file under 150 lines, chronology in a separate history file.
 
+**Names before v3.1.0.** The tools, their flags and the review's settings had Bulgarian names.
+They all still work: `baton_pregled` → `baton_review`, `baton_kade` → `baton_where`,
+`baton_tablo` → `baton_board`, `baton_vpishi` → `baton_entry`, `baton_otsey` → `baton_sift`,
+`baton_korpus` → `baton_corpus` (the old files run the new ones); `--dali`/`--koe`/`--zadachi` →
+`--stale`/`--which`/`--tasks`; `pregled_indeks`/`pregled_podbor`/`pregled_poveritelni` →
+`review_index`/`review_shortlist`/`review_confidential`.
+
 ## Versions
+
+**v3.1.0** — the tools and their flags speak English; the old names still run
+
+- `baton_review` (was `baton_pregled`), `baton_where` (`baton_kade`), `baton_board`
+  (`baton_tablo`), `baton_entry` (`baton_vpishi`), `baton_sift` (`baton_otsey`), `baton_corpus`
+  (`baton_korpus`). The old files remain and run the new ones in their own namespace, so a
+  script that loads them by path -- as a corpus labeller on the author's machine does -- or a
+  test that monkeypatches them behaves exactly as before.
+- Flags: `--stale` `--which` `--tasks` (review), `--next` `--old` (entry), `--question`
+  `--threshold` `--out` (sift); the Bulgarian ones are aliases.
+- Settings: `review_index`, `review_shortlist`, `review_confidential` and `BATON_REVIEW_*`;
+  the `pregled_*` keys and `BATON_PREGLED_*` are still read.
+- The documentation test knows a shim from a tool: each old name must run a tool that exists
+  and be named in the README.
+- Checked: 271 -> 274 tests x3; three scripts outside the repository that load the old files
+  by path were run and work.
 
 **v3.0.0** — the header speaks English; every Bulgarian header still works
 

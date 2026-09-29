@@ -1,6 +1,6 @@
 """A changelog is not documentation.
 
-`tools/baton_kade.py` shipped in v2.12.0 and was described only under `## Versions`.
+`tools/baton_where.py` shipped in v2.12.0 and was described only under `## Versions`.
 `umeniya` shipped the same way. The unclosed-plan check — a thing SessionStart prints a
 whole section about — had no body section at all, and the header fields `srok` and
 `rezultat` were read by the hook and named nowhere a reader would look.
@@ -26,17 +26,34 @@ def _body() -> str:
     return text.split("## Versions", 1)[0]
 
 
+def _is_shim(path):
+    """An old name kept from before v3.1.0: it only runs the renamed tool."""
+    return "_new = _pathlib.Path(__file__).with_name(" in path.read_text(encoding="utf-8")
+
+
+def test_every_old_tool_name_runs_a_tool_that_exists_and_is_documented():
+    """The shims are not features, so they are not documented one by one -- but each must
+    point at a real tool, or an external script loading the old path gets an ImportError."""
+    import re as _re
+    shims = [p for p in sorted(ROOT.glob("tools/baton_*.py")) if _is_shim(p)]
+    assert len(shims) == 6, [p.name for p in shims]
+    for shim in shims:
+        target = _re.search(r'with_name\("(baton_\w+\.py)"\)', shim.read_text(encoding="utf-8")).group(1)
+        assert (shim.parent / target).is_file(), f"{shim.name} runs {target}, which is gone"
+        assert shim.stem in _body(), f"{shim.name} is not named anywhere in the README body"
+
+
 def test_every_tool_is_shown_being_used_in_the_body():
     """Not "the name occurs" — the body has to show how to run it.
 
     ⚠️ The first version asked whether the stem appeared anywhere in the body, and a
-    mutation deleting `baton_kade`'s whole section still passed, because another section
+    mutation deleting `baton_where`'s whole section still passed, because another section
     mentions the file in passing. A name in a sentence is not documentation either.
     """
     body = _body()
     blocks = "\n".join(re.findall(r'```.*?```', body, re.S))
     undocumented = [p.name for p in sorted(ROOT.glob("tools/baton_*.py"))
-                    if p.stem not in blocks]
+                    if p.stem not in blocks and not _is_shim(p)]
     assert not undocumented, (
         f"never shown being used in the body: {undocumented}. A feature the README does "
         "not describe is a feature nobody can find, and a changelog is read once.")

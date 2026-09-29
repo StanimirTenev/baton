@@ -30,8 +30,8 @@ def _load(name):
     return module
 
 
-bkorpus = _load("baton_korpus")
-bkade = _load("baton_kade")
+bkorpus = _load("baton_corpus")
+bkade = _load("baton_where")
 
 HEADER = '---\nsastoyanie: aktivna\nsledvashto: "the price is €2 500"\n---\n\n'
 ENTRY = "## 2026-09-20 10:00 — an entry\n\nthe price was €650 back then\n"
@@ -108,7 +108,7 @@ def test_a_pattern_with_a_slash_is_matched_against_the_relative_path(tmp_path):
 
 
 def test_the_scope_is_actually_applied_not_merely_defined(tmp_path):
-    """Mutation caught this class of bug once already in `baton_kade`.
+    """Mutation caught this class of bug once already in `baton_where`.
 
     Testing `Scope.holds` and testing that `chunks` calls it are different things.
     """
@@ -208,7 +208,7 @@ def test_the_kinds_of_a_real_shaped_tree_are_plausible(tmp_path):
 # --- one reader of the config -----------------------------------------------
 
 def test_the_installed_config_wins_over_the_repository_copy(tmp_path, monkeypatch):
-    """`baton_tablo` printed "no tasks under ~/tasks" on a configured machine.
+    """`baton_board` printed "no tasks under ~/tasks" on a configured machine.
 
     Three readers existed for one file, in three different orders: pregled tried the
     repository copy first, kade the installed one first, and the SessionStart hook only
@@ -260,20 +260,20 @@ def test_with_no_file_and_no_environment_the_default_is_tasks(tmp_path, monkeypa
 
 def test_every_tool_reads_the_same_config_object(tmp_path):
     """Not "they agree" — the same function. Agreement is the part that decays."""
-    bkade_cfg = _load("baton_kade")
+    bkade_cfg = _load("baton_where")
     assert bkade_cfg.korpus.config is bkorpus.config
 
 
 def test_the_board_finds_the_tasks_the_config_points_at(tmp_path, monkeypatch):
     """The call site, not only the function.
 
-    A mutation reverting `baton_tablo` to `hook.config()` broke the board and failed no
+    A mutation reverting `baton_board` to `hook.config()` broke the board and failed no
     test: the hook reads the file beside its own `__file__`, which is the repository, and
     the config is not there. Nothing here sets `BATON_HOME`, because the hook reads that
     too — the environment would hide the defect instead of exposing it.
     """
     import json as _json
-    tablo = _load("baton_tablo")
+    tablo = _load("baton_board")
     installed = tmp_path / ".claude/baton/hooks"
     installed.mkdir(parents=True)
     tasks = tmp_path / "tasks-real" / "a-task"

@@ -22,7 +22,7 @@ import pytest
 # `python -O`, so every barrier in `vpishi` disappeared under a flag nobody would think
 # to mention. An external review of v2.14.0 named it; the tests moved with the code.
 
-TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_vpishi.py"
+TOOL = Path(__file__).resolve().parent.parent / "tools" / "baton_entry.py"
 spec = importlib.util.spec_from_file_location("bv", TOOL)
 bv = importlib.util.module_from_spec(spec)
 sys.modules["bv"] = bv
