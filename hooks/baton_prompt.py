@@ -19,6 +19,7 @@ silent when nothing is named: a reminder that fires on every message is not read
 
 It must never block or break a prompt: it always exits 0, and any failure is silence.
 """
+import importlib.util
 import json
 import os
 import re
@@ -148,7 +149,21 @@ def _state(session: str) -> Path:
     return base / f"baton-prompt-{safe}.json"
 
 
+def _stands_down() -> bool:
+    """Installed twice (see installed_twice in SessionStart): this plugin copy stays quiet."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return bool(mod.installed_twice())
+    except Exception:
+        return False
+
+
 def main() -> int:
+    if _stands_down():
+        return 0
     # Bytes, decoded as UTF-8 -- not `sys.stdin.read()`. On Windows a redirected stdin is
     # decoded in the locale code page (cp1251), so "за скенера" arrived as mojibake and
     # matched nothing: 0 bytes out on the Windows machine, 2026-09-28.

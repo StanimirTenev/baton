@@ -78,6 +78,37 @@ def plugin() -> bool:
     return bool(os.environ.get("CLAUDE_PLUGIN_ROOT"))
 
 
+def installed_twice() -> bool:
+    """Running as a plugin while install.sh's hooks are also in ~/.claude/settings.json.
+
+    Every hook would then run twice -- two boards, two hand-backs, two reminders. The
+    plugin's copy is the one that stands down: the installed copy keeps working, and
+    SessionStart says once which of the two to remove."""
+    if not plugin():
+        return False
+    try:
+        settings = json.loads((Path.home() / ".claude" / "settings.json").read_text("utf-8-sig"))
+    except Exception:
+        return False
+    # A plugin's own hooks come from its hooks.json, never from settings.json: any Baton
+    # entry there is the installer's.
+    for groups in (settings.get("hooks") or {}).values():
+        for group in groups or []:
+            for h in group.get("hooks", []) or []:
+                blob = str(h.get("command", "")) + " " + " ".join(map(str, h.get("args") or []))
+                if "baton_" in blob:
+                    return True
+    return False
+
+
+TWICE = ("⚠️ Baton is installed twice on this machine: by its installer (three hooks in "
+         "~/.claude/settings.json) and as a plugin. Every hook would run twice, so the plugin's "
+         "copy has stood down and the installed one is doing the work. Tell the human, in their "
+         "language, and ask which to keep. To keep the plugin: remove Baton's three entries from "
+         "~/.claude/settings.json (the README's Uninstall section lists them). To keep the "
+         "installer: `claude plugin uninstall baton`.")
+
+
 def command(skill: str) -> str:
     """How the human invokes a Baton skill. A plugin's skills are namespaced by the plugin."""
     return f"/baton:{skill}" if plugin() else f"/{skill}"
@@ -913,6 +944,11 @@ def _notices_only(notices: list[str]) -> int:
 
 
 def main() -> int:
+    if installed_twice():
+        # Not _emit(): the rules already come from the installer's CLAUDE.md.
+        json.dump({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                          "additionalContext": TWICE}}, sys.stdout)
+        return 0
     root, name = config()
     notices = [n for n in (update_notice(date.today()),) if n]
     folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \

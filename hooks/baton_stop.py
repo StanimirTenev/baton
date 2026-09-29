@@ -13,6 +13,7 @@ never trap a session in a loop.
 """
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -266,7 +267,21 @@ def _remember(session: str, asked: set) -> None:
         pass          # state is a courtesy; never a reason to fail the session
 
 
+def _stands_down() -> bool:
+    """Installed twice (see installed_twice in SessionStart): this plugin copy stays quiet."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return bool(mod.installed_twice())
+    except Exception:
+        return False
+
+
 def main() -> int:
+    if _stands_down():
+        return 0
     try:
         payload = json.load(sys.stdin)
     except Exception:
