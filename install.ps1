@@ -36,11 +36,19 @@ function Say($m) { Write-Host "  $m" }
 # Order: one on PATH, else the copy bundled next to this script (a flash stick carries it),
 # else tell the user the one-line, no-administrator winget command.
 $PyLauncher = $null   # something runnable now, to run the merge step
+$Seen = @()
 foreach ($cand in @("py", "python", "python3")) {
     $cmd = Get-Command $cand -ErrorAction SilentlyContinue
     if ($cmd) {
-        # `py` with no args can hang waiting for input on some setups; probe with -V.
-        try { & $cand -V *> $null; if ($LASTEXITCODE -eq 0) { $PyLauncher = $cand; break } } catch {}
+        # A candidate counts only if it answers. The exit code is not enough: `python3` is
+        # often the Microsoft Store stand-in, which prints "Python" and exits 0 without
+        # running anything, and a Python older than 3.8 runs but cannot run Baton.
+        $said = ""
+        try {
+            $said = (& $cand -c "import sys; print('baton-ok' if sys.version_info >= (3, 8) else 'old %d.%d' % sys.version_info[:2])" 2>$null | Out-String).Trim()
+        } catch {}
+        if ($said -eq "baton-ok") { $PyLauncher = $cand; break }
+        $Seen += "    $($cmd.Source) -> $(if ($said) { $said } else { 'did not run' })"
     }
 }
 
@@ -64,7 +72,8 @@ if (-not $PyLauncher -and (Test-Path -LiteralPath $Bundled)) {
 }
 
 if (-not $PyLauncher) {
-    Write-Host "baton: Python was not found, and no bundled copy is next to this script." -ForegroundColor Yellow
+    Write-Host "baton: no usable Python 3.8 or later, and no bundled copy is next to this script. Nothing has been installed." -ForegroundColor Yellow
+    if ($Seen.Count) { Write-Host "  found, not usable:"; $Seen | ForEach-Object { Write-Host $_ } }
     Write-Host "Install it once, for your user only (no administrator):"
     Write-Host "    winget install -e --id Python.Python.3.12 --scope user"
     Write-Host "Open a new terminal so PATH refreshes, then run this installer again."

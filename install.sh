@@ -20,9 +20,30 @@ LOGBOOK="${BATON_LOGBOOK:-LOGBOOK.md}"
 DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
-PY="$(command -v python3 || command -v python || true)"
+# A real Python 3.8 or later, checked before anything is written. Not just the first
+# `python3` on PATH: on a Mac without the developer tools that is a stand-in which opens an
+# "install" dialog instead of running, and a Mac's own 3.9 once took the hooks down in
+# silence because the code needed 3.10 (2026-09-30). A candidate counts only if it answers.
+PY=""
+SEEN=""
+for cand in python3 python; do
+  exe="$(command -v "$cand" 2>/dev/null || true)"
+  [ -n "$exe" ] || continue
+  said="$("$exe" -c 'import sys; print("baton-ok" if sys.version_info >= (3, 8) else "old %d.%d" % sys.version_info[:2])' 2>/dev/null || true)"
+  if [ "$said" = "baton-ok" ]; then PY="$exe"; break; fi
+  SEEN="$SEEN
+    $exe -> ${said:-did not run}"
+done
 if [ -z "$PY" ]; then
-  echo "baton: needs python3 on PATH (the hooks are Python, one implementation for every OS)" >&2
+  echo "baton: needs Python 3.8 or later -- the hooks are Python. Nothing has been installed." >&2
+  [ -n "$SEEN" ] && echo "  found, not usable:$SEEN" >&2
+  case "$(uname -s)" in
+    Darwin) echo "  On this Mac: install Python from https://www.python.org/downloads/macos/" >&2
+            echo "  (or run: xcode-select --install -- Apple's developer tools include python3)." >&2 ;;
+    *)      echo "  Install it with the system's package manager, e.g.: sudo apt install python3" >&2
+            echo "  (Fedora: sudo dnf install python3; Alpine: apk add python3)." >&2 ;;
+  esac
+  echo "  Then run this installer again." >&2
   exit 1
 fi
 # absolute interpreter path — baked into the hook so it never depends on PATH at run time

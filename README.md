@@ -16,6 +16,33 @@ written at the end. The hooks are executed by the harness, not by the agent's ju
 
 ## Install
 
+### Before installing -- for the agent doing it
+
+An agent asked to install Baton checks the machine first and tells the human what it found. It
+installs nothing else on its own: when something is missing it gives the human the command for
+their system and waits for a yes.
+
+1. **A Python 3.8 or later that really runs.** Try `python3`, then `python`, then `py` (Windows):
+   `python3 -c "import sys; print(sys.version)"` must print a version. A stand-in does not count:
+   on Windows `python3` is often the Microsoft Store's, which prints `Python` and nothing else;
+   on a Mac without Apple's developer tools, `/usr/bin/python3` opens an "install" dialog instead
+   of running -- if a dialog appears, do not accept it on the human's behalf. If none qualifies,
+   ask the human to install one:
+   - Windows: `winget install -e --id Python.Python.3.12 --scope user` (no administrator)
+   - Mac: from https://www.python.org/downloads/macos/, or `xcode-select --install`
+   - Linux: the package manager, e.g. `sudo apt install python3`
+2. **On Windows, for the plugin: Git for Windows.** `where bash` or `git --version`. If it is
+   missing, ask the human to install it (`winget install -e --id Git.Git`), or use the install
+   script instead, which does not need it.
+3. **Is Baton already here?** A folder `~/.claude/baton/`, or entries in `~/.claude/settings.json`
+   whose command runs a `baton_` script, mean the script install; `claude plugin list` showing
+   `baton@baton` means the plugin. Do not add the second one -- ask which to keep.
+4. **Say which route you will take** -- the plugin, or the install script -- and why, before you
+   start. The script also needs `git` for the clone, unless it comes from a folder or a stick.
+
+Both installers check Python themselves as well: with no usable Python they stop before
+writing anything, say what they found, and print the command to get one.
+
 ### As a Claude Code plugin
 
 ```bash
@@ -113,7 +140,9 @@ or a USB stick — can be removed afterwards. Run it twice and the second run re
 everything is already in place. Add `--dry-run` (or `-DryRun` on Windows) to see the
 changes without making them.
 
-Requires Python — the hooks are Python, one implementation for Linux, macOS and Windows.
+Requires Python 3.8 or later — the hooks are Python, one implementation for Linux, macOS and
+Windows. The installer takes the first candidate that really answers as 3.8 or later (a stand-in
+or an older Python is named and passed over); with none, it stops before writing anything.
 The interpreter's absolute path is baked into the hook, so a hook never depends on `PATH`
 at run time. On Windows without Python, the installer uses a bundled copy if one sits in
 `python-win\` (the USB build carries it), otherwise it prints the one-line,
@@ -1040,6 +1069,22 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.8.2** — check the machine before installing, and ask
+
+- **"Before installing -- for the agent doing it"**, at the top of Install: a real Python 3.8 or
+  later (a stand-in does not count), Git for Windows for the plugin on Windows, whether Baton is
+  already installed, and which route -- and when something is missing, the agent gives the human
+  the command for their system and waits for a yes. Asked for by the author after the Mac test.
+- **Both installers check Python the way `run.sh` does**: a candidate counts only if it answers
+  as 3.8 or later. `install.sh` took the first `python3` on PATH -- on a Mac without the developer
+  tools, the stand-in that opens a dialog; `install.ps1` accepted anything whose `-V` exited 0 --
+  the Windows Store stand-in does. With none usable they now stop **before writing anything**,
+  name what they found and why it was passed over, and print the command to get Python.
+  Checked on Windows with only a stand-in on PATH: exit 1, nothing written.
+- Tests: the Python-floor check now asks each interpreter its version (the Mac's 3.9 is plain
+  `python3`, so the check had been skipped exactly there), and one review test no longer reads
+  the machine's own settings -- both found by the agent on the Mac.
 
 **v3.8.1** — Python 3.8 and 3.9, as the README promised
 
