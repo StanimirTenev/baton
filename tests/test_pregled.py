@@ -615,9 +615,14 @@ def test_english_config_keys_are_read(tmp_path, monkeypatch):
     assert cfg["index"] == str(tmp_path / "INDEX.md") and cfg["confidential"] == ["acme", "акме"]
 
 
-def test_the_old_file_name_and_flags_still_work(tmp_path):
+def test_the_old_file_name_and_flags_still_work(tmp_path, monkeypatch):
     """External scripts load `tools/baton_pregled.py` by path (the corpus labeller does)."""
     import subprocess
+    # config() reads the machine's own baton.local.json; a fresh install has no review_index
+    # and config() exits. Found on the Mac, 2026-09-30 -- it passed here only because this
+    # machine's file had one.
+    monkeypatch.setenv("BATON_REVIEW_INDEX", str(tmp_path / "MEMORY.md"))
+    monkeypatch.setenv("BATON_REVIEW_CONFIDENTIAL", "")
     old = TOOL.with_name("baton_pregled.py")
     spec2 = importlib.util.spec_from_file_location("bp_old", old)
     m = importlib.util.module_from_spec(spec2)

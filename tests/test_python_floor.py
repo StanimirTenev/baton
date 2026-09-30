@@ -19,17 +19,32 @@ FILES = sorted([*(ROOT / "hooks").glob("*.py"), *(ROOT / "tools").glob("*.py")])
 NEW_FORMS = re.compile(r"(:|->)\s*[^=\n]*(\b(list|dict|tuple|set|type)\[|\|\s*None|None\s*\|)")
 
 
+def _version(exe):
+    out = subprocess.run([exe, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+                         capture_output=True, text=True)
+    try:
+        return tuple(int(n) for n in out.stdout.split())
+    except ValueError:
+        return None
+
+
 def _oldest_python():
     """A real 3.8 or 3.9, if this machine has one. `ast.parse(feature_version=(3, 8))` on a
     newer Python does NOT reject a backslash inside an f-string expression (PEP 701 grammar):
-    the check written that way passed with the 3.12-only line put back."""
-    for v in ("3.8", "3.9"):
-        exe = shutil.which(f"python{v}")
-        if not exe and shutil.which("uv"):
-            found = subprocess.run(["uv", "python", "find", "--no-python-downloads", v],
-                                   capture_output=True, text=True)
-            exe = found.stdout.strip() if found.returncode == 0 else None
-        if exe:
+    the check written that way passed with the 3.12-only line put back.
+
+    Asked for its version, not found by name: on a Mac the system 3.9 is plain `python3`, and
+    a search for `python3.9` skipped this check exactly where it matters (2026-09-30)."""
+    names = ["python3.8", "python3.9", "python3", "python"]
+    found = [shutil.which(n) for n in names]
+    if shutil.which("uv"):
+        for v in ("3.8", "3.9"):
+            r = subprocess.run(["uv", "python", "find", "--no-python-downloads", v],
+                               capture_output=True, text=True)
+            found.append(r.stdout.strip() if r.returncode == 0 else None)
+    for exe in filter(None, found):
+        v = _version(exe)
+        if v and (3, 8) <= v < (3, 10):
             return exe
     return None
 
