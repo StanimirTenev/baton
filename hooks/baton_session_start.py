@@ -153,7 +153,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.8.2"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.8.3"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -913,11 +913,31 @@ def inventory_notice(today: date) -> str | None:
 
 
 SHOW_BOARD = (
-    "The human has not seen this board. Open your first reply with the WHOLE board, translated "
-    "into the human's language: every group and every line, nothing shortened or left out -- "
-    "no summary, no merged lines, no \"...and the rest\", and the notes in parentheses too. "
-    "Task names, file names, commands, fields in backticks and identifiers stay as they are."
+    "The human has not seen this board -- only one line saying Baton is on. Whatever the "
+    "human's first message is -- a greeting, a question or a task -- the first thing in your "
+    "first reply is the WHOLE board, translated into the human's language; then answer them. "
+    "Show every group and every line, nothing shortened or left out -- no summary, no merged lines, "
+    "no \"...and the rest\", and the notes in parentheses too. Task names, file names, "
+    "commands, fields in backticks and identifiers stay as they are."
 )
+
+
+def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
+               root: Path | None = None, twice: bool = False) -> str:
+    """The one line the human sees in the terminal at session start. English, because the hook
+    cannot know the human's language; the agent shows the board itself in that language.
+    Without it, a session where the agent did not show the board looked like a session without
+    Baton (a Mac, 2026-09-30)."""
+    if twice:
+        return ("🧭 Baton is installed twice here -- write anything and the agent will say "
+                "which one to remove.")
+    if root is not None:
+        return (f"🧭 Baton is on -- no task folders yet in {root}. Write anything and the "
+                "agent will help you start one.")
+    parts = [f"{n} {label}" for n, label in ((on_move, "on your move"), (ongoing, "ongoing"),
+                                             (outside, "waiting on others")) if n]
+    return ("🧭 Baton: " + (", ".join(parts) or "nothing waiting") +
+            ". Write anything and the agent opens its reply with the full board.")
 
 
 def plugin_rules() -> str | None:
@@ -952,24 +972,30 @@ def plugin_rules() -> str | None:
             + re.sub(r"`/(baton-[a-z-]+)`", lambda m: f"`{command(m.group(1))}`", text))
 
 
-def _emit(context: str | None) -> int:
-    """The one way out: whatever the hook has to say, plus the rules in plugin mode."""
+def _emit(context: str | None, line: str | None = None) -> int:
+    """The one way out: the agent's context (plus the rules in plugin mode) and the one line
+    the human sees."""
     text = "\n\n".join(t for t in (context, plugin_rules()) if t)
+    out: dict = {}
+    if line:
+        out["systemMessage"] = line
     if text:
-        json.dump({"hookSpecificOutput": {
-            "hookEventName": "SessionStart", "additionalContext": text}}, sys.stdout)
+        out["hookSpecificOutput"] = {"hookEventName": "SessionStart", "additionalContext": text}
+    if out:
+        json.dump(out, sys.stdout)
     return 0
 
 
-def _notices_only(notices: list[str]) -> int:
+def _notices_only(notices: list[str], line: str | None = None) -> int:
     """A board with no tasks still carries what the agent must say to the human."""
-    return _emit("\n\n".join(notices) if notices else None)
+    return _emit("\n\n".join(notices) if notices else None, line)
 
 
 def main() -> int:
     if installed_twice():
         # Not _emit(): the rules already come from the installer's CLAUDE.md.
-        json.dump({"hookSpecificOutput": {"hookEventName": "SessionStart",
+        json.dump({"systemMessage": start_line(twice=True),
+                   "hookSpecificOutput": {"hookEventName": "SessionStart",
                                           "additionalContext": twice_message()}}, sys.stdout)
         return 0
     root, name = config()
@@ -977,7 +1003,8 @@ def main() -> int:
     folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \
         if root.is_dir() else []
     if not folders:
-        return _notices_only(notices + [n for n in (inventory_notice(date.today()),) if n])
+        return _notices_only(notices + [n for n in (inventory_notice(date.today()),) if n],
+                             start_line(root=root))
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
     stale: list[str] = []
@@ -1103,7 +1130,7 @@ def main() -> int:
         blocks.append(block)
 
     if not blocks and not frozen and not finished and not stale:
-        return _notices_only(notices)
+        return _notices_only(notices, start_line())
 
     if unfinished:
         # Its own block, above the shelf-life notes: an unclosed plan is not a
@@ -1138,7 +1165,7 @@ def main() -> int:
 
     # No systemMessage: that one reaches the human as it is, in English. The agent knows the
     # human's language and the hook does not, so the agent shows the board -- translated.
-    return _emit(context)
+    return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external)))
 
 
 if __name__ == "__main__":

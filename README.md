@@ -266,8 +266,9 @@ the shape of the product and caught a factual error left over from round one.
 
 **SessionStart** tells the session which task comes first, so it never opens blind.
 Tasks with a header (see below) are grouped by who holds the next move and sorted by
-priority. The list goes to the agent, which opens its first reply with it, translated into
-your language, every group and every line. The hook does not know your language; the agent does.
+priority. You see one English line at once (`🧭 Baton: 8 on your move, ...`); the list itself
+goes to the agent, which opens its first reply with it -- whatever you write first -- translated
+into your language, every group and every line. The hook does not know your language; the agent does.
 What the agent gets:
 
 ```
@@ -1069,6 +1070,21 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.8.3** — one line on the screen at start: Baton is on
+
+- On the Mac the agent did not show the board in its first reply, and nothing on the screen said
+  Baton had loaded -- so it looked as if it had not. The session-start hook now prints **one
+  English line** the human sees at once: `🧭 Baton: 8 on your move, 6 ongoing, 8 waiting on
+  others. Write anything and the agent opens its reply with the full board.` With no task
+  folders yet it says Baton is on and where the folders go; installed twice, it says so.
+  English because the hook cannot know the human's language; the board itself still reaches
+  only the agent, which shows it in that language.
+- The instruction to the agent is stricter: whatever the first message is -- a greeting, a
+  question or a task -- the first thing in the first reply is the whole board, then the answer.
+- The agent cannot speak first in an interactive session: the hooks' `initialUserMessage`
+  applies to `claude -p` only (code.claude.com/docs/en/hooks). So "without being asked" means
+  "whatever the human writes first".
 
 **v3.8.2** — check the machine before installing, and ask
 

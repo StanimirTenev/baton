@@ -71,8 +71,10 @@ def test_a_bloated_pointer_reaches_the_report(tmp_path):
     assert "`next`" in _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
 
 
-def test_an_empty_root_says_nothing_rather_than_failing(tmp_path):
-    assert _run(tmp_path) == {}
+def test_an_empty_root_says_only_that_baton_is_on(tmp_path):
+    """Since 3.8.3 a new user with no task folders sees one line, and the agent gets nothing."""
+    out = _run(tmp_path)
+    assert set(out) == {"systemMessage"} and "no task folders yet" in out["systemMessage"]
 
 
 def test_the_board_goes_to_the_agent_to_show_in_the_humans_language(tmp_path):
@@ -82,7 +84,8 @@ def test_the_board_goes_to_the_agent_to_show_in_the_humans_language(tmp_path):
     _task(tmp_path, "zadacha", "нещо")
     out = _run(tmp_path)
     context = out["hookSpecificOutput"]["additionalContext"]
-    assert "systemMessage" not in out
+    # Since 3.8.3 the human sees one English line; the board itself is never in it.
+    assert "нещо" not in out["systemMessage"] and "zadacha" not in out["systemMessage"]
     assert "zadacha" in context
     assert "translated into the human's language" in context
     assert "every group and every line" in context

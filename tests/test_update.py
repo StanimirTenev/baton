@@ -148,12 +148,13 @@ def test_months_of_earlier_work_and_no_tasks_offers_the_inventory_once_a_day(tmp
     assert not out.stderr, out.stderr
     context = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
     assert "/baton-inventory" in context and "3 earlier" in context
-    assert run().stdout == "", "offered twice in one day"
+    assert "hookSpecificOutput" not in run().stdout, "offered twice in one day"
 
 
 def test_a_machine_with_no_earlier_conversations_hears_nothing(tmp_path):
     out = _hook_with_empty_root(tmp_path, talks=0)()
-    assert out.returncode == 0 and out.stdout == "" and not out.stderr
+    # The human sees the one start line; the agent hears nothing (since 3.8.3).
+    assert out.returncode == 0 and "hookSpecificOutput" not in out.stdout and not out.stderr
 
 
 def test_the_ask_names_the_repository_the_installer_recorded(tmp_path, monkeypatch):
