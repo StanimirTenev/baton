@@ -9,6 +9,7 @@ alias, and nothing matches "скенера" against "скенер" without meeti
 It is a reminder, not a verdict: it names the task, the date of its last entry and its next
 step, once per session, and says nothing at all when no task is named.
 """
+from __future__ import annotations
 import importlib.util
 import json
 import subprocess

@@ -1041,6 +1041,24 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.8.1** — Python 3.8 and 3.9, as the README promised
+
+- **Found on a Mac by its own agent, installing Baton unaided from this repository:** the
+  Mac's system Python is 3.9.6, and the SessionStart hook used `str | None` in signatures,
+  which Python evaluates at definition time before 3.10. The hook died with a TypeError and
+  printed nothing -- Baton was silently absent, the worst way to fail. On 3.8 all three hooks
+  died (`list[str]`). Every test and every real session so far had run on 3.12 and 3.14.
+- `from __future__ import annotations` in the three hooks (the tools already had it), and
+  `tools/baton_review.py` no longer uses a backslash inside an f-string expression, which did
+  not even parse before Python 3.12.
+- The suite (350 tests) passes under Python 3.8, 3.9 and 3.12. A new test compiles every hook
+  and tool with a real 3.8 or 3.9 when the machine has one, and says so when it has not;
+  `ast.parse(feature_version=(3, 8))` on a newer Python was tried first and does not catch the
+  f-string case.
+- The plugin, with 3.9 as the only Python on the path: board, rules and reminder, through
+  `run.sh`. 3.8.0's note that the 3.8 check in `run.sh` was not pinned -- this is what it was
+  not catching: the check passed a Python the code could not run on.
+
 **v3.8.0** — Baton as a Claude Code plugin
 
 - **Install with one command**: `claude plugin marketplace add StanimirTenev/baton`, then

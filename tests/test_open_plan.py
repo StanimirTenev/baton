@@ -10,6 +10,7 @@ a guess about whether something aged: the plan either says it is closed or it do
 not. And closing requires saying what came of it — a state with no result is a
 tick, which is how a check gets satisfied without the thing behind it being true.
 """
+from __future__ import annotations
 
 import importlib.util
 import os

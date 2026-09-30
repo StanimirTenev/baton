@@ -13,6 +13,7 @@ starts blind. Two modes, chosen per folder:
 
 Prints nothing when there are no task folders, so a fresh machine stays quiet.
 """
+from __future__ import annotations   # `str | None`, `list[str]`: Python 3.8 and 3.9 too
 import json
 import os
 import re
@@ -152,7 +153,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.8.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.8.1"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 

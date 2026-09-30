@@ -11,6 +11,7 @@ When something is unrecorded the turn is handed back to the agent with a note na
 folder. `stop_hook_active` is honoured, so this can block at most once per turn and can
 never trap a session in a loop.
 """
+from __future__ import annotations   # `str | None`, `list[str]`: Python 3.8 and 3.9 too
 import fnmatch
 import hashlib
 import importlib.util

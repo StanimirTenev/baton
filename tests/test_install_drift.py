@@ -3,6 +3,7 @@
 v2.2.0 shipped a shelf-life layer that never ran for two days: written, tested,
 tagged, and never copied into the directory the harness actually executes.
 """
+from __future__ import annotations
 
 import importlib.util
 import json

@@ -19,6 +19,7 @@ silent when nothing is named: a reminder that fires on every message is not read
 
 It must never block or break a prompt: it always exits 0, and any failure is silence.
 """
+from __future__ import annotations   # `str | None`, `list[str]`: Python 3.8 and 3.9 too
 import importlib.util
 import json
 import os

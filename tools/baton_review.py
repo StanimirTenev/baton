@@ -639,8 +639,11 @@ def which_task(api_key: str, cfg: dict, name: str, book: Path) -> None:
     # finding: one says the header is wrong, the other says the logbook is thin.
     print("⚠️ \"Not supported\" means BOTH \"contradicted\" AND \"never mentioned\". "
           "The two are not the same.")
-    print(f"   The logbook here is {len(body)} characters, {entries} entries — "
-          f"{'thin, so a low score means \"not written\" rather than \"not true\"' if len(body) < 2000 else 'enough to carry a contradiction'}.\n")
+    # Built outside the f-string: a backslash inside an f-string expression is Python 3.12+,
+    # and this file would not even load on the 3.9 a Mac ships with (found 2026-09-30).
+    weight = ('thin, so a low score means "not written" rather than "not true"'
+              if len(body) < 2000 else 'enough to carry a contradiction')
+    print(f"   The logbook here is {len(body)} characters, {entries} entries — {weight}.\n")
     if len(body) > WHOLE_CHARS:
         print(f"⚠️ THE LOGBOOK IS CUT at {WHOLE_CHARS} of {len(body)} characters. A logbook is "
               f"newest first, so what is cut are the OLDEST entries — the opposite "
