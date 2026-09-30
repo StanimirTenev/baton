@@ -14,6 +14,15 @@ Task root and logbook name: the session-start board names the task root in its f
 the install script they are also in `~/.claude/baton/hooks/baton.local.json` (`home`,
 `logbook`; defaults `~/tasks`, `LOGBOOK.md`).
 
+## 0. Start from the survey
+
+Run the read-only survey first — `python3 <repo>/tools/baton_survey.py`, or
+`python3 "${CLAUDE_PLUGIN_ROOT}/tools/baton_survey.py"` in plugin mode. It names every memory
+folder, the places memory and instructions point at (other drives included), dated logbook
+files and folders that already keep a logbook. Hand those to the agents below: agent 3 reads
+**every** memory folder it lists, agent 4 also covers its places outside the home directory,
+and the dated logbook files are the record to reconstruct from, grouped by their topic prefix.
+
 ## 1. Scan — four read-only agents in parallel
 
 Launch four read-only (Explore) agents in one message. Each returns one table row per

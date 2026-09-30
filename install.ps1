@@ -82,6 +82,12 @@ if (-not $PyLauncher) {
 }
 # absolute interpreter path — baked into the hook so it never depends on PATH at run time
 $PyExe = (& $PyLauncher -c "import sys; print(sys.executable)").Trim()
+# The merge steps print paths in Python. Through a pipe (an agent's shell, ssh) PowerShell reads
+# them in the console's code page and Python writes the ANSI one, so Cyrillic came out garbled:
+# both sides agree on UTF-8 for this run, and the console gets its own back at the end.
+$OldOutEnc = [Console]::OutputEncoding
+$env:PYTHONIOENCODING = "utf-8"
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
 
 Write-Host "Baton"
 Say "repo:     $Repo"
@@ -101,22 +107,9 @@ if (Test-Path -LiteralPath $Tasks -PathType Container) {
 }
 
 # 2. instructions
-$ClaudeMd = Join-Path $ClaudeDir "CLAUDE.md"
-$alreadyThere = (Test-Path -LiteralPath $ClaudeMd) -and (Select-String -LiteralPath $ClaudeMd -Pattern "Installed by Baton" -Quiet)
-if ($alreadyThere) {
-    Say "instructions already present - left as they are"
-} elseif ($DryRun) {
-    Say "would append Baton section to $ClaudeMd"
-} else {
-    if (-not (Test-Path -LiteralPath $ClaudeDir)) { New-Item -ItemType Directory -Force -Path $ClaudeDir | Out-Null }
-    $body = Get-Content -LiteralPath (Join-Path $Repo "templates\CLAUDE.md") -Raw -Encoding UTF8
-    if (Test-Path -LiteralPath $ClaudeMd) { $body = "`n`n---`n`n" + $body }
-    # UTF-8 without BOM, so the file reads cleanly everywhere.
-    $enc = New-Object System.Text.UTF8Encoding($false)
-    $existing = if (Test-Path -LiteralPath $ClaudeMd) { [IO.File]::ReadAllText($ClaudeMd, $enc) } else { "" }
-    [IO.File]::WriteAllText($ClaudeMd, $existing + $body, $enc)
-    Say "instructions appended to $ClaudeMd"
-}
+# with this machine's task root and logbook written in; a copy of the old file is kept
+$dryFlag = if ($DryRun) { "1" } else { "0" }
+& $PyLauncher (Join-Path $Repo "hooks\_install_rules.py") (Join-Path $Repo "templates\CLAUDE.md") (Join-Path $ClaudeDir "CLAUDE.md") $Tasks $Logbook $dryFlag
 
 # 3. copy the runtime hooks to a permanent location, so the flash drive can be removed
 if ($DryRun) {
@@ -144,6 +137,7 @@ foreach ($skill in Get-ChildItem -Directory (Join-Path $Repo "skills")) {
 # 4. local config + hooks, merged into settings.json without disturbing anything else
 $dryArg = if ($DryRun) { "1" } else { "0" }
 & $PyLauncher (Join-Path $Repo "hooks\_install_hooks.py") $Settings $HookDir $PyExe $dryArg $Tasks $Logbook $Repo
+try { [Console]::OutputEncoding = $OldOutEnc } catch { }
 
 Write-Host ""
 Write-Host "Done. Open /hooks once in Claude Code (or restart) so it reloads settings.json."

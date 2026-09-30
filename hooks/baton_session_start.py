@@ -153,7 +153,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.8.3"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.9.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -966,6 +966,10 @@ def plugin_rules() -> str | None:
     except (OSError, ValueError):
         return None
     tasks, logbook = config()
+    # The same filling the installers do (hooks/_install_rules.py): the template's
+    # "`$BATON_HOME` (default `~/tasks`)" read as a second, empty task root.
+    text = text.replace("`$BATON_HOME` (default `~/tasks`)", f"`{tasks}`")
+    text = text.replace("$BATON_HOME", str(tasks)).replace("LOGBOOK.md", logbook)
     return (f"Baton's working rules. Baton is installed as a plugin, so they arrive here rather "
             f"than from CLAUDE.md. On this machine the task root is {tasks} and the logbook "
             f"file in each task folder is {logbook}.\n\n"

@@ -22,6 +22,25 @@ An agent asked to install Baton checks the machine first and tells the human wha
 installs nothing else on its own: when something is missing it gives the human the command for
 their system and waits for a yes.
 
+0. **What is already here -- before anything is written.** From the clone (or the download):
+
+   ```bash
+   python3 tools/baton_survey.py          # read-only; --json for the same as data
+   ```
+
+   It reads what an earlier Claude setup left: every `CLAUDE.md` rule about keeping a record,
+   every memory folder under `~/.claude/projects/`, the hooks already in `settings.json`, the
+   folders memory and instructions name (on any drive), dated logbook files, and folders that
+   already keep a logbook. It ends with a proposed task root and logbook name, and the questions
+   to ask. **Show the human the report and agree three things before installing:** the task
+   root, the logbook name, and whether Baton's rules replace an older rule or sit next to it.
+   Then install with those (`BATON_HOME=… BATON_LOGBOOK=… ./install.sh`, or the plugin's two
+   questions). Nothing is moved; the work stays where it is and `/baton-inventory` maps it into
+   task folders afterwards. The task root is never a drive root.
+
+   The installers keep a copy of `CLAUDE.md` and `settings.json` as they were
+   (`*.before-baton-<time>`) before writing to either, and write the chosen task root and
+   logbook name into the rules they add.
 1. **A Python 3.8 or later that really runs.** Try `python3`, then `python`, then `py` (Windows):
    `python3 -c "import sys; print(sys.version)"` must print a version. A stand-in does not count:
    on Windows `python3` is often the Microsoft Store's, which prints `Python` and nothing else;
@@ -1070,6 +1089,33 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.9.0** — look at what is already here before installing, and keep a copy of what is changed
+
+- **`tools/baton_survey.py`**, read-only, run before installing (step 0 of "Before installing").
+  It reads what an earlier Claude setup left: `CLAUDE.md` rules about keeping a record, every
+  memory folder under `~/.claude/projects/`, the hooks in `settings.json`, the folders sessions
+  started in, the folders memory and instructions name -- on any drive -- dated logbook files,
+  and folders that already keep a logbook (marking one older than the work beside it). It
+  proposes a task root and a logbook name and lists what to ask the human.
+  Found on a Windows machine that had worked with Claude for months: dated logbook files in the
+  profile folder, memory under `projects/C--Windows-System32/`, work on three drives, an
+  older rule for the record and two hooks of its own. **Its first run there proposed the drive
+  root `D:\` as the task root** (two of its many folders kept a logbook); a drive root is now never
+  proposed, and a folder is proposed only when most of its folders keep the same logbook.
+- **The rules the installers add name this machine's task root and logbook.** They said
+  "`$BATON_HOME` (default `~/tasks`)" -- a variable set only in the installer's window -- so the
+  next session could read `~/tasks` as the task root while the tasks were elsewhere. The same
+  filling now happens for the rules a plugin install carries.
+- **Both installers keep a copy** of `CLAUDE.md` and `settings.json` as they were
+  (`*.before-baton-<time>`) before writing to either. Nothing else changed in what they write:
+  the older rules stay, other hooks stay.
+- `/baton-inventory` starts from the survey, so it reads every memory folder and the places
+  outside the home folder.
+- `install.ps1`: Python's messages were garbled through a pipe (an agent's shell, ssh) when a
+  path held Cyrillic; both sides use UTF-8 for the run now.
+- Not claimed: the survey finds what Claude's own files point at. Work that nothing names is
+  not found by it; `/baton-inventory` still walks the home folder for that.
 
 **v3.8.3** — one line on the screen at start: Baton is on
 

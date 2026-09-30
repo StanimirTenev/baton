@@ -13,7 +13,7 @@ HOOK = ROOT / "hooks" / "baton_session_start.py"
 RULE = "Before starting work on a task"
 
 
-def _run(tmp_path, *, plugin=True, claude_md=None, task=True):
+def _run(tmp_path, *, plugin=True, claude_md=None, task=True, logbook="LOGBOOK.md"):
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
     if claude_md is not None:
@@ -27,7 +27,7 @@ def _run(tmp_path, *, plugin=True, claude_md=None, task=True):
     data.mkdir()
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(home), BATON_HOME=str(tasks), BATON_LOGBOOK="LOGBOOK.md")
+    env.update(HOME=str(home), BATON_HOME=str(tasks), BATON_LOGBOOK=logbook)
     if plugin:
         env.update(CLAUDE_PLUGIN_ROOT=str(ROOT), CLAUDE_PLUGIN_DATA=str(data))
     out = subprocess.run([sys.executable, str(HOOK)], input="{}", capture_output=True,
@@ -42,6 +42,13 @@ def test_as_a_plugin_the_rules_reach_the_agent(tmp_path):
     context = _run(tmp_path)
     assert RULE in context
     assert str(tmp_path / "tasks") in context, "the real task folder is named"
+
+
+def test_the_rules_name_this_machines_root_and_logbook(tmp_path):
+    """The template says `$BATON_HOME` (default `~/tasks`) -- read as a second, empty root."""
+    context = _run(tmp_path, logbook="ДНЕВНИК.md")
+    assert "$BATON_HOME" not in context and "~/tasks" not in context
+    assert "ДНЕВНИК.md" in context and "LOGBOOK.md" not in context
 
 
 def test_a_new_user_with_an_empty_folder_gets_the_rules_too(tmp_path):

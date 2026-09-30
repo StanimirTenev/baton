@@ -83,16 +83,9 @@ else
 fi
 
 # 2. instructions
-if [ -f "$CLAUDE_DIR/CLAUDE.md" ] && grep -q 'Installed by Baton' "$CLAUDE_DIR/CLAUDE.md"; then
-  say "instructions already present — left as they are"
-elif [ "$DRY_RUN" = 1 ]; then
-  say "would append Baton section to $CLAUDE_DIR/CLAUDE.md"
-else
-  mkdir -p "$CLAUDE_DIR"
-  [ -f "$CLAUDE_DIR/CLAUDE.md" ] && printf '\n\n---\n\n' >> "$CLAUDE_DIR/CLAUDE.md"
-  cat "$REPO/templates/CLAUDE.md" >> "$CLAUDE_DIR/CLAUDE.md"
-  say "instructions appended to $CLAUDE_DIR/CLAUDE.md"
-fi
+# with this machine's task root and logbook written in; a copy of the old file is kept
+"$PY" "$REPO/hooks/_install_rules.py" "$REPO/templates/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" \
+  "$TASKS" "$LOGBOOK" "$DRY_RUN"
 
 # 3. copy the runtime hooks to a permanent location, so the source can be removed
 if [ "$DRY_RUN" = 1 ]; then

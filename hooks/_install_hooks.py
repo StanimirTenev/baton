@@ -14,7 +14,9 @@ quoting, no space-in-path breakage, no PowerShell-vs-bash difference.
 """
 import json
 import os
+import shutil
 import sys
+import time
 
 
 def main() -> int:
@@ -114,6 +116,11 @@ def main() -> int:
         print("  (dry run - settings.json not written)")
     elif changed:
         os.makedirs(os.path.dirname(settings_path) or ".", exist_ok=True)
+        if os.path.isfile(settings_path):
+            # the settings as they were, before Baton's hooks went in next to the others
+            copy = settings_path + ".before-baton-" + time.strftime("%Y%m%d-%H%M%S")
+            shutil.copy2(settings_path, copy)
+            print(f"  copy of settings.json as it was: {copy}")
         tmp = settings_path + ".baton-tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
