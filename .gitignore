@@ -4,3 +4,4 @@ hooks/baton.local.json
 python-win/
 hooks/baton.bodies.json
 hooks/baton.state.json
+hooks/baton.lessons.json

@@ -17,3 +17,5 @@ def _baton_state_outside_the_repo(tmp_path, monkeypatch):
     today = date.today().isoformat()
     state.write_text(json.dumps({"asked": today, "inventory_offered": today}), "utf-8")
     monkeypatch.setenv("BATON_SESSION_STATE", str(state))
+    # Lesson counters (L1, L2) the same way: a test must not count into the real register.
+    monkeypatch.setenv("BATON_LESSONS_STATE", str(tmp_path / ".baton.lessons.json"))

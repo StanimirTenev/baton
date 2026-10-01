@@ -169,6 +169,85 @@ def _state_file() -> Path:
                 or _local_file("baton.state.json"))
 
 
+# -- Lessons: a mistake caught once is counted, so a lesson that does not hold shows itself --
+#
+# A lesson written down as a note did not stop the mistake it was about: the hour of an
+# entry typed by hand was recorded as a lesson on 2026-09-23 and came back on 26.09, 28.09
+# and twice on 30.09 -- caught every time by a hook, prevented never. The one mistake that
+# did stop (files copied to the wrong Windows profile, three times despite a memory note)
+# stopped the day the note became a command that does the copy correctly.
+#
+# So nothing here is loaded into every session. A lesson speaks only where its trigger
+# fires, the hooks count how often it fired and how often it caught the mistake, and
+# SessionStart says something only when a lesson has earned it: caught twice in two weeks
+# (it is not holding -- propose the next rung), or not fired in 60 days (retire it?).
+LESSONS = {
+    "L1": "The hour in a logbook heading is read from the clock, never typed: write entries "
+          "with tools/baton_entry.py --title, which stamps the time itself.",
+    "L2": "An empty result is a failed read until a second check shows otherwise: before "
+          "saying something is absent, name the check that would have found it.",
+}
+RECUR_DAYS, RECUR_MIN, RETIRE_DAYS = 14, 2, 60
+
+
+def _lessons_file() -> Path:
+    return Path(os.environ.get("BATON_LESSONS_STATE") or _local_file("baton.lessons.json"))
+
+
+def lessons_load() -> dict:
+    try:
+        return json.loads(_lessons_file().read_text("utf-8"))
+    except Exception:
+        return {}
+
+
+def lessons_save(state: dict) -> None:
+    try:
+        path = _lessons_file()
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), "utf-8")
+        tmp.replace(path)
+    except Exception:
+        pass          # counting is a courtesy; never a reason to fail a hook
+
+
+def lesson_event(state: dict, lesson: str, kind: str, now: datetime | None = None) -> dict:
+    """Count one `fired` (the trigger arose) or `caught` (the mistake was made and seen).
+    Dates are kept for the last RETIRE_DAYS so a fortnight can be counted."""
+    now = now or datetime.now()
+    rec = state.setdefault(lesson, {})
+    rec.setdefault("since", now.isoformat(timespec="minutes"))
+    rec[kind] = rec.get(kind, 0) + 1
+    rec[f"last_{kind}"] = now.isoformat(timespec="minutes")
+    cutoff = (now - timedelta(days=RETIRE_DAYS)).isoformat(timespec="minutes")
+    rec[f"{kind}_dates"] = [d for d in rec.get(f"{kind}_dates", []) if d >= cutoff] + \
+        [now.isoformat(timespec="minutes")]
+    return rec
+
+
+def lessons_notice(now: datetime | None = None) -> str | None:
+    """At most one line per lesson, and only when it has earned one."""
+    now = now or datetime.now()
+    state, lines = lessons_load(), []
+    recent = (now - timedelta(days=RECUR_DAYS)).isoformat(timespec="minutes")
+    old = (now - timedelta(days=RETIRE_DAYS)).isoformat(timespec="minutes")
+    for lid, text in LESSONS.items():
+        rec = state.get(lid) or {}
+        caught = [d for d in rec.get("caught_dates", []) if d >= recent]
+        fired = [d for d in rec.get("fired_dates", []) if d >= recent]
+        if len(caught) >= RECUR_MIN:
+            lines.append(f"- {lid} recurred {len(caught)} times in {RECUR_DAYS} days "
+                         f"({len(fired)} times the situation arose): \"{text}\" -- it is not "
+                         "holding. Propose to the human the next rung: a check that catches it "
+                         "by its result, or a tool that makes the mistake impossible.")
+        elif rec.get("since", now.isoformat()) < old and rec.get("last_fired", "") < old:
+            lines.append(f"- {lid} has not come up in {RETIRE_DAYS} days: \"{text}\" -- ask the "
+                         "human whether to retire it.")
+    if not lines:
+        return None
+    return "Baton -- lessons (each counted by the hook that watches for it):\n" + "\n".join(lines)
+
+
 def _version(tag: str) -> tuple:
     return tuple(int(x) for x in re.findall(r"\d+", tag)[:3])
 
@@ -280,7 +359,7 @@ def install_drift() -> list[str]:
     if src is None or not src.is_dir():
         return []
     out = []
-    for name in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py"):
+    for name in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py", "baton_batch.py"):
         here, there = Path(__file__).with_name(name), src / name
         try:
             if there.is_file() and not here.is_file():
@@ -1003,7 +1082,7 @@ def main() -> int:
                                           "additionalContext": twice_message()}}, sys.stdout)
         return 0
     root, name = config()
-    notices = [n for n in (update_notice(date.today()),) if n]
+    notices = [n for n in (update_notice(date.today()), lessons_notice()) if n]
     folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \
         if root.is_dir() else []
     if not folders:

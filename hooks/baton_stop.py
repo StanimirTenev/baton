@@ -252,6 +252,62 @@ def future_dated(root: Path, name: str) -> list[str]:
     return out
 
 
+# Lesson L1 (see LESSONS in baton_session_start.py). `future_dated` above sees only an hour
+# AHEAD of the clock, so an hour typed by hand that happens to lie in the past went through
+# unseen. This one counts every new top entry (the trigger arose) and catches a heading more
+# than L1_SLACK_MINUTES off the clock either way -- and says which tool makes it impossible.
+L1_SLACK_MINUTES = 20
+_SS = None
+
+
+def _ss():
+    """SessionStart's module: the lessons register and its counters live there."""
+    global _SS
+    if _SS is None:
+        spec = importlib.util.spec_from_file_location(
+            "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
+        _SS = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_SS)
+    return _SS
+
+
+def hand_typed_hours(root: Path, name: str, now: datetime | None = None) -> list[str]:
+    """Folders whose newest entry is NEW since the last look and headed off the clock.
+    The first look at a folder only remembers its top entry: an old heading is history."""
+    now = now or datetime.now()
+    ss = _ss()
+    state = ss.lessons_load()
+    tops = state.setdefault("tops", {})
+    out = []
+    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        try:
+            text = (folder / name).read_text("utf-8-sig")
+        except OSError:
+            continue
+        line = next((ln for ln in text.splitlines() if _HEADING.match(ln)), None)
+        if line is None:
+            continue
+        key = str(folder)
+        seen, tops[key] = tops.get(key), line
+        if seen is None or seen == line:
+            continue
+        ss.lesson_event(state, "L1", "fired", now)
+        m = _HEADING.match(line)
+        if not m.group(2):
+            continue                          # a date without an hour: nothing to compare
+        try:
+            when = datetime.strptime(f"{m.group(1)} {m.group(2)}:{m.group(3)}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+        off = (when - now).total_seconds() / 60
+        if abs(off) > L1_SLACK_MINUTES:
+            ss.lesson_event(state, "L1", "caught", now)
+            out.append(f"{folder.name}: \"{line[3:40].strip()}\" is {abs(off):.0f} min "
+                       f"{'ahead of' if off > 0 else 'behind'} the clock")
+    ss.lessons_save(state)
+    return out
+
+
 def _state(session: str) -> Path:
     base = Path(os.environ.get("BATON_STATE_DIR") or tempfile.gettempdir())
     safe = "".join(ch for ch in session if ch.isalnum() or ch in "-_")[:80] or "nosession"
@@ -307,7 +363,12 @@ def main() -> int:
     asked = _already_asked(session)
     open_ended = [f for f in undefined(root, name) if f not in asked]
     ahead = [f for f in future_dated(root, name) if f"future:{f}" not in asked]
-    if not stale and not open_ended and not ahead:
+    try:
+        typed = hand_typed_hours(root, name)
+    except Exception:
+        typed = []            # a lesson that cannot count must not cost the session
+    typed = [t for t in typed if not any(t.startswith(f.split(" (")[0] + ":") for f in ahead)]
+    if not stale and not open_ended and not ahead and not typed:
         return 0
 
     parts = []
@@ -338,6 +399,14 @@ def main() -> int:
             "Read the time from the clock (`date`) and correct the heading -- a record whose "
             "date is wrong is wrong about the one thing a record is for. (Asked once per session.)")
         _remember(session, _already_asked(session) | {f"future:{f}" for f in ahead})
+    if typed:
+        rec = _ss().lessons_load().get("L1", {})
+        listed = "\n".join(f"  - {t}" for t in typed)
+        parts.append(
+            f"Baton, lesson L1 -- a new entry's hour does not match the clock "
+            f"({datetime.now():%Y-%m-%d %H:%M}):\n{listed}\n\n"
+            f"{_ss().LESSONS['L1']} Correct the heading. "
+            f"(Counted: caught {rec.get('caught', 0)} of {rec.get('fired', 0)} new entries.)")
     json.dump({"decision": "block", "reason": "\n\n".join(parts)}, sys.stdout)
     return 0
 

@@ -82,12 +82,20 @@ def _hours_ahead(entry: str) -> str | None:
 
 
 def write_entry(path, entry: str, next_line: str | None = None,
-                old_line: str | None = None) -> None:
+                old_line: str | None = None, title: str | None = None) -> None:
     """Prepend `entry`, optionally replacing the header's pointer line.
 
     `old_line` is the old line verbatim, so a pointer that has already moved is a
     loud failure rather than a silent duplicate.
+
+    With `title`, the heading is built here, from the clock: `## <now> — <title>`, and
+    `entry` is only the body. Lesson L1: the hour typed by hand was caught four times and
+    prevented never; the hour a tool writes cannot be typed wrong.
     """
+    if title:
+        if re.match(r"\s*## ", entry):
+            raise ValueError("with a title the entry is the body only -- it already has a heading")
+        entry = f"## {datetime.now():%Y-%m-%d %H:%M} — {title.strip()}\n\n{entry.strip()}\n"
     file = Path(path)
     text = file.read_text(encoding="utf-8")
 
@@ -156,9 +164,11 @@ def main() -> None:
     parser.add_argument("entry", help="file holding the entry, or - for stdin")
     parser.add_argument("--next", "--sledvashto", dest="next_line", help="the new pointer line, in full")
     parser.add_argument("--old", "--staro", dest="old_line", help="the old pointer line, verbatim")
+    parser.add_argument("--title", help="build the heading from the clock: '## <now> — TITLE'; "
+                                        "the entry is then the body only")
     args = parser.parse_args()
     entry = sys.stdin.read() if args.entry == "-" else Path(args.entry).read_text(encoding="utf-8")
-    write_entry(args.logbook, entry, args.next_line, args.old_line)
+    write_entry(args.logbook, entry, args.next_line, args.old_line, title=args.title)
 
 
 if __name__ == "__main__":

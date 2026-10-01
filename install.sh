@@ -92,7 +92,7 @@ if [ "$DRY_RUN" = 1 ]; then
   say "would copy hooks to $HOOKDIR"
 else
   mkdir -p "$HOOKDIR"
-  cp "$REPO/hooks/baton_session_start.py" "$REPO/hooks/baton_stop.py" "$REPO/hooks/baton_prompt.py" "$HOOKDIR/"
+  cp "$REPO/hooks/baton_session_start.py" "$REPO/hooks/baton_stop.py" "$REPO/hooks/baton_prompt.py" "$REPO/hooks/baton_batch.py" "$HOOKDIR/"
   say "hooks copied to $HOOKDIR"
 fi
 
