@@ -59,9 +59,12 @@ def test_without_a_terminal_it_asks_for_one_instead_of_reading_stdin(tmp_path, m
     assert "own terminal" in capsys.readouterr().out
 
 
-def test_the_review_reads_the_stored_key_first(tmp_path, monkeypatch):
+def test_the_review_reads_only_the_key_given_to_baton(tmp_path, monkeypatch):
+    """v3.10.2: a key that is merely on the machine -- in the environment, or in another
+    tool's file -- was not given to Baton to send. The plugin directory holds a plugin that
+    reads one; and it is right to."""
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "from-the-environment")
     (tmp_path / ".config/baton").mkdir(parents=True)
     (tmp_path / ".config/typesafe").mkdir(parents=True)
     (tmp_path / ".config/baton/env").write_text(f"OPENROUTER_API_KEY={KEY}\n", encoding="utf-8")
@@ -69,4 +72,6 @@ def test_the_review_reads_the_stored_key_first(tmp_path, monkeypatch):
     br = _load("baton_review")
     assert br.get_api_key() == KEY
     (tmp_path / ".config/baton/env").unlink()
-    assert br.get_api_key() == "older", "the older file stopped being read"
+    import pytest
+    with pytest.raises(SystemExit):
+        br.get_api_key()

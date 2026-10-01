@@ -12,7 +12,10 @@ note-taking.
 
 Baton makes the note-taking structural instead of voluntary. Every task gets a folder, the
 folder holds a `LOGBOOK.md`, and two hooks make sure the logbook is read at the start and
-written at the end. The hooks are executed by the harness, not by the agent's judgement.
+written at the end. Two more help in between: one brings up a task's record when a message
+names it (and suggests a restart when the session grows long), one flags an empty read result
+before it turns into "it is not there". The hooks are executed by the harness, not by the
+agent's judgement, and they make no network requests (see *What Baton sends over the network*).
 
 ## Install
 
@@ -1128,6 +1131,16 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.10.2** — before the plugin directory: say what runs, read only the key given to Baton
+
+- The review tools read the OpenRouter key only from `~/.config/baton/env`, where
+  `tools/baton_key.py` stores it. `OPENROUTER_API_KEY` in the environment and another tool's
+  key file are no longer read: a key that is merely on the machine was not given to Baton to
+  send. **If you set the key only in the environment, run `tools/baton_key.py` once.**
+- The plugin's description names all four hooks and says they make no network requests;
+  the README says what the hooks read (task folders, the session transcript, tool results).
+- A test no longer carries real names.
+
 **v3.10.1** — three findings of an external review of v3.10.0, each reproduced first
 
 - **A reinstall with a new task root left `CLAUDE.md` naming the old one** — the marker alone
@@ -1835,7 +1848,6 @@ having been done.
 | `BATON_HOME` | where task folders live (default `~/tasks`) |
 | `CLAUDE_CONFIG_DIR` | config directory to install into (default `~/.claude`) |
 | `BATON_LOGBOOK` | name of the logbook file (default `LOGBOOK.md`) — set it to a word in your own language if you prefer |
-| `OPENROUTER_API_KEY` | only for the review tools; overrides the key stored by `tools/baton_key.py`. Nothing else reads it |
 
 `BATON_HOME=~/work ./install.sh` bakes that path into the installed hooks.
 
@@ -1865,6 +1877,13 @@ without any of this, which is the point.
 
 `tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
 schedule except the opt-in update check above.
+
+What the hooks read, all on this machine: the task folders and their logbooks; the session's
+transcript (`transcript_path`) — its first timestamp, for when the session began, and its
+last answer's token count, for the restart reminder; and the text of tool results, for an
+empty read (lesson L2). Nothing of it leaves the machine. The review tools send only with the
+key given to Baton by `tools/baton_key.py` — never a key found in the environment or in
+another tool's files.
 
 ## Not solved here
 

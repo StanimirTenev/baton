@@ -46,4 +46,4 @@ use the pasted one.
   (through the agent, or with piped input). Step 4 again, in a real terminal window.
 - *"OpenRouter refused the key (HTTP 401)"* — copied incompletely, or deleted. Create a new one.
 - *"could not reach OpenRouter"* — network or proxy; nothing was stored. Try again later.
-- A key in `OPENROUTER_API_KEY` in the environment takes precedence over the stored one.
+- Only the stored key is read. `OPENROUTER_API_KEY` in the environment is ignored (since v3.10.2).

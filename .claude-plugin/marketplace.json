@@ -4,7 +4,7 @@
     "name": "Stanimir Tenev",
     "url": "https://github.com/StanimirTenev"
   },
-  "description": "Baton: every task a folder with a logbook, kept that way by three hooks.",
+  "description": "Baton: every task a folder with a logbook, kept that way by four local hooks.",
   "plugins": [
     {
       "name": "baton",

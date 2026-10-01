@@ -189,20 +189,19 @@ def config() -> dict:
 
 
 def get_api_key() -> str:
-    value = os.environ.get("OPENROUTER_API_KEY", "")
-    # ~/.config/baton/env is where `baton_key.py` stores it; the typesafe file is where the
-    # author's key lived before that tool existed, and is still read.
-    for path in (Path.home() / ".config/baton/env", Path.home() / ".config/typesafe/env"):
-        if value:
-            break
-        if path.is_file():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if line.startswith("OPENROUTER_API_KEY="):
-                    value = line.split("=", 1)[1].strip()
+    """Only the key given to Baton: the one `baton_key.py` stored in ~/.config/baton/env.
+    Not the environment, not another tool's file -- a key that is merely present on the
+    machine was not given to Baton to send anywhere (v3.10.2, before the plugin directory's
+    review: "don't read a credential already set in the user's environment")."""
+    value = ""
+    path = Path.home() / ".config/baton/env"
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("OPENROUTER_API_KEY="):
+                value = line.split("=", 1)[1].strip()
     if not value:
         sys.exit("NO key. This review needs an OpenRouter key. Ask the agent for /baton-key, or\n"
-                 "run in your own terminal:  python3 tools/baton_key.py\n"
-                 "(or export OPENROUTER_API_KEY=...).\n\n"
+                 "run in your own terminal:  python3 tools/baton_key.py\n\n"
                  "Without a key the review does not run. The rest of Baton does not need one.")
     return value
 

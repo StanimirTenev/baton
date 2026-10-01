@@ -16,7 +16,7 @@ spec.loader.exec_module(bss)
 
 
 def test_a_short_pointer_is_not_drift():
-    assert bss.pointer_drift({"next": "Да се пусне коментарът под поста на Campbell."}) is None
+    assert bss.pointer_drift({"next": "Да се пусне коментарът под поста на Б."}) is None
 
 
 def test_an_empty_pointer_is_not_drift():
@@ -37,10 +37,10 @@ def test_the_real_case_that_motivated_it():
     """The shape the field actually took on 19.09: three findings and a date in a
     field meant to hold the next move."""
     bloated = (
-        "✅ ПУСНАТИ СА ТРИ НЕЩА НА 19.09: коментар под поста на Marin Ivezic; GitHub issue #1 "
-        "в appliedquantum/cyclonedx-property-taxonomy; коментар под поста на Dr. Robert "
-        "Campbell (IBM Quantum-Safe Executive). ⏳ И ТРИТЕ ЧАКАТ ОТГОВОР — следи ги, особено "
-        "Campbell. Чакат още за коментар: Olewinski и студентският ECDAT."
+        "✅ ПУСНАТИ СА ТРИ НЕЩА НА 19.09: коментар под поста на А.; GitHub issue #1 "
+        "в едно чуждо хранилище за таксономия; коментар под поста на Б. (от голяма "
+        "компания). ⏳ И ТРИТЕ ЧАКАТ ОТГОВОР — следи ги, особено Б. Чакат още за "
+        "коментар: В. и една студентска статия."
     )
     assert bss.pointer_drift({"next": bloated}) is not None
 
