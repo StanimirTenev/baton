@@ -1131,6 +1131,10 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.10.4** — links for the plugin directory listing in `plugin.json`: documentation, support
+(issues), privacy (what Baton sends over the network) and terms (the MIT license). Nothing else
+changed.
+
 **v3.10.3** — an icon for the plugin directory listing (`icon.svg`, a baton passed between
 two hands). Nothing else changed.
 

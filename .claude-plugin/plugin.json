@@ -1,7 +1,7 @@
 {
   "name": "baton",
   "displayName": "Baton",
-  "version": "3.10.3",
+  "version": "3.10.4",
   "description": "Every task is a folder with a logbook, and four local hooks keep it that way: a session opens on the board of what is whose move, a turn that leaves this session's work unrecorded is handed back, a message that names a task brings up its record (and a long session is told to restart, from its transcript's token count), and an empty read result is flagged before it becomes \"it is not there\". The hooks make no network requests.",
   "icon": "./icon.svg",
   "author": {
@@ -10,6 +10,10 @@
   },
   "homepage": "https://github.com/StanimirTenev/baton",
   "repository": "https://github.com/StanimirTenev/baton",
+  "documentationUrl": "https://github.com/StanimirTenev/baton#readme",
+  "supportUrl": "https://github.com/StanimirTenev/baton/issues",
+  "privacyPolicyUrl": "https://github.com/StanimirTenev/baton#what-baton-sends-over-the-network",
+  "termsOfServiceUrl": "https://github.com/StanimirTenev/baton/blob/main/LICENSE",
   "license": "MIT",
   "keywords": [
     "logbook",
