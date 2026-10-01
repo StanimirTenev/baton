@@ -1131,6 +1131,9 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.10.3** — an icon for the plugin directory listing (`icon.svg`, a baton passed between
+two hands). Nothing else changed.
+
 **v3.10.2** — before the plugin directory: say what runs, read only the key given to Baton
 
 - The review tools read the OpenRouter key only from `~/.config/baton/env`, where
