@@ -98,3 +98,5 @@ A task parked on purpose gets `state: frozen` in its header. SessionStart lists
 it but never offers it as work.
 
 The rule is the fallback. The hooks are what actually holds.
+
+<!-- End of Baton section -->

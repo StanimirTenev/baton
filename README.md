@@ -156,7 +156,12 @@ skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`, 
 `~/.claude/CLAUDE.md`, merges three entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
 or a USB stick — can be removed afterwards. Run it twice and the second run reports that
-everything is already in place. Add `--dry-run` (or `-DryRun` on Windows) to see the
+everything is already in place. Run it again with another task root or logbook
+(`BATON_HOME`, `BATON_LOGBOOK`) and the Baton section in `CLAUDE.md` is rewritten to match —
+only the text between `<!-- Installed by Baton. ... -->` and `<!-- End of Baton section -->`,
+after a copy of the file. A section without the end marker (installed before v3.10.1, or
+rewritten by hand) is never written to; if it names another task root or logbook, the
+installer says so and leaves the edit to you. Add `--dry-run` (or `-DryRun` on Windows) to see the
 changes without making them.
 
 Requires Python 3.8 or later — the hooks are Python, one implementation for Linux, macOS and
@@ -322,9 +327,13 @@ of its last entry, and that entry's title.
 > (see *The same header in Bulgarian* below).
 
 **Stop** checks whether any task folder holds a file newer than its `LOGBOOK.md`. If one
-does, the turn is handed back with a note naming it. The test is deliberately narrow: a
-session that touched no task folder is never interrupted, and `stop_hook_active` is honoured
-so it can block at most once per turn.
+does, and that file was saved during this session (after the first timestamp of its
+transcript), the turn is handed back with a note naming it. The test is deliberately narrow:
+a session that touched no task folder is never interrupted, and `stop_hook_active` is honoured
+so it can block at most once per turn. Older unrecorded work — from a session that ended
+without its entry — is listed on the board under 📝 instead of stopping every session after
+it. Without a readable transcript Stop falls back to every folder, as before v3.10.1; a resumed
+session counts from its original start.
 
 ## The task header
 
@@ -614,7 +623,9 @@ the situation arose, `caught` when the mistake happened. The counters are in
   an hour more than 20 minutes off the clock, either way, is caught, and the agent is told
   which tool makes it impossible: `tools/baton_entry.py --title`, which stamps the time itself.
 - **L2 — an empty result is a failed read** (`baton_batch.py`, PostToolBatch). After a read —
-  web, MCP, or a shell command that searches or fetches — returns nothing, one line reaches
+  web, a shell command that searches or fetches, or an MCP tool whose name says it reads
+  (`search`, `query`, `get`, `list`, `read`, `fetch`…, and no `create`/`update`/`delete`…;
+  a name that says neither is left alone) — returns nothing, one line reaches
   the agent before its next sentence: name the check that would have found it before saying
   something is absent. At most once every 30 minutes; counted every time.
 
@@ -1116,6 +1127,22 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.10.1** — three findings of an external review of v3.10.0, each reproduced first
+
+- **A reinstall with a new task root left `CLAUDE.md` naming the old one** — the marker alone
+  ended the run, so hooks and instructions pointed at different folders. The section now has
+  an end marker, and the text between the two is rewritten when the task root or logbook
+  changes (after a copy). A section without the end marker — every install before this one,
+  and rules rewritten by hand — is never written to; the installer warns when it names
+  another root or logbook. Existing installs therefore get the warning, not the fix: edit the
+  section, or delete it and run the installer again.
+- **Stop blocked every turn for an old unrecorded file in a task the session never touched.**
+  It now asks only about work saved during this session; the older debt is on the board
+  (📝). Not changed: new unrecorded work still hands the turn back.
+- **L2 counted MCP writes**: every `mcp__*` was a read, so a delete answering `{}` raised the
+  lesson and counted it. Now only names that say they read. L2 counts gathered under v3.10.0
+  are not comparable with those after it.
 
 **v3.10.0** — lessons that are counted, and a reminder to restart a long session
 

@@ -140,7 +140,27 @@ def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
     return mtime
 
 
-def unrecorded(root: Path, name: str) -> list[str]:
+def session_started(transcript: str) -> float | None:
+    """When this session began: the first `timestamp` in its transcript. None when it cannot
+    be read -- and then Stop behaves as before, so a missing field never turns it off."""
+    try:
+        with open(transcript, encoding="utf-8", errors="replace") as fh:
+            for _, line in zip(range(500), fh):
+                if '"timestamp"' not in line:
+                    continue
+                stamp = json.loads(line).get("timestamp")
+                if isinstance(stamp, str) and stamp:
+                    return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
+    """Folders whose work is newer than their logbook. With `since`, only work saved after
+    it: 2026-10-01, external review of v3.10.0 -- an old unrecorded file in an unrelated task
+    blocked every turn of a session that never touched it. Stop asks about this session's
+    work; the older debt is listed on the board instead."""
     out = []
     path = _bodies_path()
     try:
@@ -154,6 +174,8 @@ def unrecorded(root: Path, name: str) -> list[str]:
             continue
         logged = recorded_time(folder, logbook, bodies) if logbook.is_file() else 0.0
         # Newer than the logbook at all -- but leave alone what is being written now.
+        if since is not None and work < since:
+            continue
         if work > logged and (time.time() - work) > GRACE_SECONDS:
             if logbook.is_file():
                 out.append(f"{folder.name} (newest: {newest_name})")
@@ -358,7 +380,7 @@ def main() -> int:
     if not root.is_dir():
         return 0
 
-    stale = unrecorded(root, name)
+    stale = unrecorded(root, name, session_started(str(payload.get("transcript_path") or "")))
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     open_ended = [f for f in undefined(root, name) if f not in asked]

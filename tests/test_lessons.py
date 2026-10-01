@@ -167,3 +167,22 @@ def test_entry_title_takes_the_hour_from_the_clock(tmp_path):
     refused = subprocess.run([sys.executable, str(ENTRY), str(book), "-", "--title", "x"],
                              input="## 2026-01-01 09:00 — typed\n", text=True, capture_output=True)
     assert refused.returncode != 0, "a typed heading next to --title is refused, not merged"
+
+
+def test_l2_an_mcp_write_that_answers_empty_is_not_a_failed_read(tmp_path):
+    """External review of v3.10.0: `mcp__files__delete` answering `{}` raised L2 and counted.
+    Each call in its own state -- the half-hour throttle would otherwise hide the answer."""
+    for tool in ("mcp__files__delete", "mcp__claude_ai_Gmail__label_message",
+                 "mcp__claude_ai_Google_Drive__create_file", "mcp__x__frobnicate"):
+        env = _env(tmp_path / tool, tmp_path / tool / "tasks")
+        env["BATON_LESSONS_STATE"] = str(tmp_path / tool / "lessons.json")
+        assert _batch(env, [_call(tool, "{}")]) == {}, tool
+        assert not (_state(env).get("L2") or {}).get("fired_dates"), f"{tool} was counted"
+
+
+def test_l2_an_mcp_read_that_answers_empty_still_speaks(tmp_path):
+    for tool in ("mcp__x__search", "mcp__claude_ai_Gmail__search_threads",
+                 "mcp__claude_ai_Google_Drive__read_file_content", "mcp__x__list_events"):
+        env = _env(tmp_path / tool, tmp_path / tool / "tasks")
+        env["BATON_LESSONS_STATE"] = str(tmp_path / tool / "lessons.json")
+        assert "L2" in json.dumps(_batch(env, [_call(tool, "[]")]), ensure_ascii=False), tool

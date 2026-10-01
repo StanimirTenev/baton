@@ -14,6 +14,7 @@ starts blind. Two modes, chosen per folder:
 Prints nothing when there are no task folders, so a fresh machine stays quiet.
 """
 from __future__ import annotations   # `str | None`, `list[str]`: Python 3.8 and 3.9 too
+import importlib.util
 import json
 import os
 import re
@@ -153,7 +154,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.10.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.10.1"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -1074,6 +1075,19 @@ def _notices_only(notices: list[str], line: str | None = None) -> int:
     return _emit("\n\n".join(notices) if notices else None, line)
 
 
+def unlogged_work(root: Path, name: str) -> list[str]:
+    """Folders holding work newer than their logbook -- the Stop hook's own check, without its
+    session limit. Never a reason to lose the board."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "baton_stop", Path(__file__).with_name("baton_stop.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.unrecorded(root, name)
+    except Exception:
+        return []
+
+
 def main() -> int:
     if installed_twice():
         # Not _emit(): the rules already come from the installer's CLAUDE.md.
@@ -1212,7 +1226,8 @@ def main() -> int:
             block += f"\n- ...and {more} more"
         blocks.append(block)
 
-    if not blocks and not frozen and not finished and not stale:
+    unlogged = unlogged_work(root, name)
+    if not blocks and not frozen and not finished and not stale and not unlogged:
         return _notices_only(notices, start_line())
 
     if unfinished:
@@ -1229,6 +1244,12 @@ def main() -> int:
             + "\n".join(sorted(stale))
             + "\n(A claim with status I or A is not a fact — it is a debt. Either it gets checked, "
               "or it is dropped.)")
+    if unlogged:
+        # Stop asks only about this session's work (v3.10.1); the older debt is shown here.
+        blocks.append(
+            "📝 Work newer than its logbook, from before this session:\n"
+            + "\n".join(f"- {u}" for u in unlogged)
+            + "\n(Write the entry it is missing, or add the file to the folder's .batonignore.)")
     if frozen:
         blocks.append(f"❄️ Frozen (not offered): {', '.join(sorted(frozen))}")
     if finished:

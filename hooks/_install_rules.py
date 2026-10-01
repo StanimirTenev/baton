@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 MARKER = "Installed by Baton"
+END = "<!-- End of Baton section -->"
 
 
 def fill(text: str, tasks: str, logbook: str) -> str:
@@ -41,13 +42,64 @@ def backup(path: Path) -> Path:
     return copy
 
 
+def section(text: str) -> tuple[int, int] | None:
+    """Where Baton's section is: from its `# Baton` heading (or the marker line) to the end
+    marker. None when there is no end marker -- written before v3.10.1, or by hand."""
+    mark = text.find(MARKER)
+    end = text.find(END, mark)
+    if mark < 0 or end < 0:
+        return None
+    start = text.rfind("\n", 0, mark) + 1
+    heading = text.rfind("# Baton", 0, start)
+    if heading >= 0 and (heading == 0 or text[heading - 1] == "\n") \
+            and not text[heading:start].strip("\n").count("\n"):
+        start = heading
+    return start, end + len(END)
+
+
+def reinstall(existing: str, template: Path, target: Path, tasks: str, logbook: str,
+              dry: bool) -> int:
+    """A second install. 2026-10-01, external review of v3.10.0: a reinstall with a new task
+    root left CLAUDE.md naming the old one, because the marker alone ended the run -- the
+    hooks and the agent's instructions then pointed at different folders.
+
+    Between the two markers the text is Baton's: written fresh when the task root or logbook
+    changed, after a copy of the file. A section without the end marker is somebody's own
+    (an older Baton, or rules rewritten by hand, in another language): never written to, but
+    if it does not name this task root and logbook, said so loudly."""
+    span = section(existing)
+    if span is None:
+        home = str(Path.home())
+        short = "~" + tasks[len(home):] if tasks.startswith(home) else tasks
+        part = existing[existing.find(MARKER):]
+        if (tasks in part or short in part) and logbook in part:
+            print("  instructions already present - left as they are")
+        else:
+            print(f"  WARNING: the Baton section in {target} does not name {tasks} and {logbook}.\n"
+                  "  It was written by an older Baton or edited by hand, so it is left as it is:\n"
+                  "  edit it, or delete the section and run the installer again.")
+        return 0
+    body = fill(template.read_text("utf-8"), tasks, logbook).strip("\n")
+    start, end = span
+    if existing[start:end] == body:
+        print("  instructions already present - left as they are")
+        return 0
+    if dry:
+        print(f"  would update the Baton section in {target} (task root {tasks}, logbook {logbook})")
+        return 0
+    print(f"  copy of CLAUDE.md as it was: {backup(target)}")
+    with target.open("w", encoding="utf-8", newline="") as fh:
+        fh.write(existing[:start] + body + existing[end:])
+    print(f"  Baton section updated in {target}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     sys.stdout.reconfigure(errors="replace")      # a Cyrillic path on a cp866 console
     template, target, tasks, logbook, dry = argv[1], Path(argv[2]), argv[3], argv[4], argv[5] == "1"
     existing = read(target) if target.is_file() else ""
     if MARKER in existing:
-        print("  instructions already present - left as they are")
-        return 0
+        return reinstall(existing, Path(template), target, tasks, logbook, dry)
     if dry:
         print(f"  would append Baton section to {target} (task root {tasks}, logbook {logbook})")
         return 0

@@ -233,3 +233,59 @@ def test_a_date_only_heading_for_tomorrow_is_named(tmp_path):
     from datetime import date, timedelta
     _heading(tmp_path, "delta", f"## {(date.today() + timedelta(days=1)).isoformat()} — tomorrow")
     assert bs.future_dated(tmp_path, "LOGBOOK.md")[0].startswith("delta")
+
+
+# --- only this session's work stops the turn (external review of v3.10.0) ----------------
+# An old unrecorded file in an unrelated task blocked every turn of a session that never
+# touched it. Stop now asks only about work saved after the session began (the first
+# timestamp of its transcript); the older debt is listed on the board.
+
+def _transcript(path: Path, started: float) -> Path:
+    from datetime import datetime, timezone
+    stamp = datetime.fromtimestamp(started, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    path.write_text(json.dumps({"type": "mode", "sessionId": "x"}) + "\n"
+                    + json.dumps({"type": "user", "timestamp": stamp}) + "\n", "utf-8")
+    return path
+
+
+def _stop(tmp_path, transcript=None):
+    env = dict(os.environ, BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
+               BATON_STATE_DIR=str(tmp_path / "state"), BATON_BODY_STATE=str(tmp_path / "b.json"))
+    data = {"session_id": "s"}
+    if transcript:
+        data["transcript_path"] = str(transcript)
+    out = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(data),
+                         capture_output=True, text=True, env=env)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout) if out.stdout.strip() else {}
+
+
+def test_old_unrecorded_work_does_not_stop_a_session_that_never_touched_it(tmp_path):
+    _task(tmp_path / "tasks", "old", log_age=3 * 86400, work_age=2 * 86400)
+    t = _transcript(tmp_path / "t.jsonl", time.time() - 3600)
+    assert _stop(tmp_path, t).get("decision") != "block"
+
+
+def test_work_saved_in_this_session_still_stops_it(tmp_path):
+    _task(tmp_path / "tasks", "now", log_age=7200, work_age=600)
+    t = _transcript(tmp_path / "t.jsonl", time.time() - 3600)
+    out = _stop(tmp_path, t)
+    assert out.get("decision") == "block" and "now" in out.get("reason", "")
+
+
+def test_without_a_transcript_stop_behaves_as_before(tmp_path):
+    _task(tmp_path / "tasks", "old", log_age=3 * 86400, work_age=2 * 86400)
+    assert _stop(tmp_path).get("decision") == "block"
+
+
+def test_the_older_debt_is_on_the_board(tmp_path):
+    _task(tmp_path / "tasks", "old", log_age=3 * 86400, work_age=2 * 86400)
+    start = HOOK.with_name("baton_session_start.py")
+    env = dict(os.environ, BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
+               BATON_STATE_DIR=str(tmp_path / "state"), BATON_BODY_STATE=str(tmp_path / "b.json"),
+               HOME=str(tmp_path / "home"))
+    env.pop("CLAUDE_PLUGIN_ROOT", None)
+    out = subprocess.run([sys.executable, str(start)], input="{}", capture_output=True,
+                         text=True, env=env)
+    assert out.returncode == 0, out.stderr
+    assert "from before this session" in out.stdout and "old (newest: draft.md)" in out.stdout

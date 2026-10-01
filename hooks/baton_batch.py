@@ -41,10 +41,23 @@ def _text(response) -> str:
     return str(response)
 
 
+# An MCP tool is a read only when its own name says so. 2026-10-01, external review of
+# v3.10.0: every `mcp__*` counted as a read, so `mcp__files__delete` answering `{}` raised
+# L2 and counted it. A write, or a name that says neither, is left alone.
+MCP_READ = {"search", "query", "get", "list", "read", "fetch", "find", "lookup", "view",
+            "download", "describe", "show", "scan", "export"}
+MCP_WRITE = {"create", "update", "delete", "set", "send", "label", "unlabel", "trash",
+             "untrash", "mark", "unmark", "share", "copy", "move", "publish", "reply",
+             "forward", "apply", "remove", "add", "write", "edit", "respond"}
+
+
 def is_read(call: dict) -> bool:
     tool = str(call.get("tool_name", ""))
-    if tool in ("WebFetch", "WebSearch", "Grep", "Glob") or tool.startswith("mcp__"):
+    if tool in ("WebFetch", "WebSearch", "Grep", "Glob"):
         return True
+    if tool.startswith("mcp__"):
+        words = set(re.split(r"[_\-]+", tool.rsplit("__", 1)[-1].lower()))
+        return bool(words & MCP_READ) and not words & MCP_WRITE
     if tool in ("Bash", "PowerShell"):
         return bool(READ_VERBS.search(str((call.get("tool_input") or {}).get("command", ""))))
     return False
