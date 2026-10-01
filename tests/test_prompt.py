@@ -108,3 +108,69 @@ def test_a_windows_code_page_does_not_silence_it(tmp_path):
     assert out.returncode == 0, out.stderr
     text = out.stdout.decode("utf-8")          # must be UTF-8, whatever the code page
     assert "qrp-kachestvo" in text and "следващ ход" in text, text
+
+
+# --- a long session: the restart reminder (2026-10-01) -------------------------------------
+# "If the session gets very long the limit goes very fast" -- every message re-sends the whole
+# context; two sessions on this machine had reached ~600k tokens.
+
+def _transcript(path: Path, *turns):
+    """turns: (tokens, sidechain) for each assistant answer, oldest first."""
+    rows = [json.dumps({"type": "user", "message": {"content": "hi"}})]
+    for tokens, side in turns:
+        rows.append(json.dumps({"type": "assistant", "isSidechain": side, "message": {"usage": {
+            "input_tokens": 2, "cache_read_input_tokens": tokens - 1002,
+            "cache_creation_input_tokens": 1000, "output_tokens": 50}}}))
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return path
+
+
+def _say(root: Path, transcript: Path, session: str = "s1", prompt: str = "hello"):
+    return _run(root, "", raw=json.dumps({"prompt": prompt, "session_id": session,
+                                          "transcript_path": str(transcript)}))
+
+
+def test_a_long_session_shows_the_human_a_restart_line(tmp_path):
+    t = _transcript(tmp_path / "t.jsonl", (250_000, False))
+    out = json.loads(_say(tmp_path, t))
+    assert "250k" in out["systemMessage"] and "restart" in out["systemMessage"]
+    assert "logbook" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_a_short_session_is_silent(tmp_path):
+    t = _transcript(tmp_path / "t.jsonl", (120_000, False))
+    assert _say(tmp_path, t) == ""
+
+
+def test_a_subagent_answer_is_not_the_session(tmp_path):
+    t = _transcript(tmp_path / "t.jsonl", (50_000, False), (400_000, True))
+    assert _say(tmp_path, t) == ""
+
+
+def test_no_transcript_is_silence_not_failure(tmp_path):
+    assert _say(tmp_path, tmp_path / "missing.jsonl") == ""
+
+
+def test_once_per_step_then_again_after_the_next_step(tmp_path):
+    t = _transcript(tmp_path / "t.jsonl", (210_000, False))
+    assert _say(tmp_path, t)
+    _transcript(t, (260_000, False))
+    assert _say(tmp_path, t) == ""                      # same step: said already
+    _transcript(t, (310_000, False))
+    assert "310k" in json.loads(_say(tmp_path, t))["systemMessage"]
+
+
+def test_after_compact_the_next_climb_speaks_again(tmp_path):
+    t = _transcript(tmp_path / "t.jsonl", (220_000, False))
+    assert _say(tmp_path, t)
+    _transcript(t, (40_000, False))
+    assert _say(tmp_path, t) == ""
+    _transcript(t, (205_000, False))
+    assert _say(tmp_path, t)
+
+
+def test_a_task_line_rides_along_with_the_restart(tmp_path):
+    _task(tmp_path, "qrp-kachestvo")
+    t = _transcript(tmp_path / "t.jsonl", (230_000, False))
+    out = json.loads(_say(tmp_path, t, prompt="what about qrp-kachestvo?"))
+    assert "qrp-kachestvo" in out["hookSpecificOutput"]["additionalContext"]

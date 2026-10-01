@@ -235,6 +235,12 @@ Two hooks hold the checkable half of it, so it does not depend on the agent reme
   `скенера`) — gets that task's last entry and next step put in front of the agent, with
   "read the logbook first". Once per task per session; silent when nothing is named; never
   blocks a message.
+  The same hook watches the length of the session: every message re-sends the whole context,
+  so a long session eats the usage limit. From ~200k tokens of context (read from the last
+  answer's `usage` in the transcript) it shows the human one line — write the logbook and
+  restart — and again every +100k; after `/compact` it starts over. Set `restart_at` /
+  `restart_step` in `baton.local.json` (or `BATON_RESTART_AT` / `BATON_RESTART_STEP`);
+  `restart_at: 0` turns it off.
 - **Stop**: a task worked on now whose header has no `kriterii_zavarshvane` hands the turn back
   once per session: say when it is done, or ask the human — never invent one.
 

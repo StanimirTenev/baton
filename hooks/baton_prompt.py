@@ -17,6 +17,9 @@ a conversation has become a task is the job of the `baton-task` skill; this only
 sure the record is on the table when a task is named. Once per task per session, and
 silent when nothing is named: a reminder that fires on every message is not read.
 
+It also suggests a restart when the session's context grows past `restart_at` tokens
+(2026-10-01): every message re-sends all of it, which is what eats the usage limit.
+
 It must never block or break a prompt: it always exits 0, and any failure is silence.
 """
 from __future__ import annotations   # `str | None`, `list[str]`: Python 3.8 and 3.9 too
@@ -29,6 +32,9 @@ import tempfile
 from pathlib import Path
 
 MAX_TASKS = 3
+RESTART_AT = 200_000      # tokens of context at which a restart is first suggested
+RESTART_STEP = 100_000    # and again every this many more
+TAIL_BYTES = 4 * 1024 * 1024
 _WORD = re.compile(r"\w+", re.UNICODE)
 
 
@@ -156,6 +162,72 @@ def _state(session: str) -> Path:
     return base / f"baton-prompt-{safe}.json"
 
 
+def context_tokens(transcript: str) -> int:
+    """How much context the last main-thread answer was sent with: input + cache read +
+    cache write of its `usage`. Every message re-sends all of it, which is why a long
+    session eats the limit (2026-10-01: two sessions had reached ~600k tokens). Only the
+    tail is read -- these files reach 70 MB. 0 when nothing can be read."""
+    try:
+        path = Path(transcript)
+        size = path.stat().st_size
+        with path.open("rb") as f:
+            f.seek(max(0, size - TAIL_BYTES))
+            tail = f.read().decode("utf-8", "replace")
+    except (OSError, ValueError):
+        return 0
+    for line in reversed(tail.splitlines()):
+        if '"usage"' not in line:
+            continue
+        try:
+            entry = json.loads(line)
+            if entry.get("isSidechain") or entry.get("type") != "assistant":
+                continue
+            u = entry["message"]["usage"]
+            return int(u.get("input_tokens", 0)) + int(u.get("cache_read_input_tokens", 0)) \
+                + int(u.get("cache_creation_input_tokens", 0))
+        except Exception:
+            continue
+    return 0
+
+
+def restart_limits() -> tuple[int, int]:
+    """`restart_at` / `restart_step` from the environment or baton.local.json; 0 turns it off."""
+    cfg = {}
+    try:
+        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
+    except Exception:
+        cfg = {}
+    def pick(env: str, key: str, default: int) -> int:
+        try:
+            return int(os.environ.get(env) or cfg.get(key, default))
+        except (TypeError, ValueError):
+            return default
+    return pick("BATON_RESTART_AT", "restart_at", RESTART_AT), \
+        max(1, pick("BATON_RESTART_STEP", "restart_step", RESTART_STEP))
+
+
+def restart_due(session: str, tokens: int) -> bool:
+    """Once per step: at 200k, again at 300k, ... After /compact the number drops, and the
+    next climb past a step speaks again."""
+    at, step = restart_limits()
+    if at <= 0 or tokens < at:
+        level = -1
+    else:
+        level = (tokens - at) // step
+    path = _state(session).with_name(_state(session).stem + "-restart.json")
+    try:
+        said = int(json.loads(path.read_text("utf-8")))
+    except Exception:
+        said = -1
+    try:
+        if level != said:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(level), "utf-8")
+    except Exception:
+        pass
+    return level > said
+
+
 def _stands_down() -> bool:
     """Installed twice (see installed_twice in SessionStart): this plugin copy stays quiet."""
     try:
@@ -182,28 +254,48 @@ def main() -> int:
     session = str(payload.get("session_id") or "")
     if not prompt.strip():
         return 0
+    tokens = context_tokens(str(payload.get("transcript_path") or ""))
+    restart = restart_due(session, tokens) if tokens else False
     root, logbook = config()
-    if not root.is_dir():
+    new = []
+    if root.is_dir():
+        try:
+            seen = set(json.loads(_state(session).read_text("utf-8")))
+        except Exception:
+            seen = set()
+        new = [t for t in touched(root, logbook, prompt) if t[0] not in seen][:MAX_TASKS]
+    if not new and not restart:
         return 0
-    try:
-        seen = set(json.loads(_state(session).read_text("utf-8")))
-    except Exception:
-        seen = set()
-    new = [t for t in touched(root, logbook, prompt) if t[0] not in seen][:MAX_TASKS]
-    if not new:
-        return 0
-    lines = ["Baton: this message touches a task with a record. Read its logbook -- the "
-             "entries on this topic, not only the top one -- before proposing or acting:"]
-    for name, entry, nxt in new:
-        lines.append(f"  - {name}: last entry \"{entry}\"" + (f"; next: {nxt}" if nxt else ""))
-    sys.stdout.buffer.write(("\n".join(lines) + "\n").encode("utf-8"))   # same reason, outbound
+    lines = []
+    if new:
+        lines = ["Baton: this message touches a task with a record. Read its logbook -- the "
+                 "entries on this topic, not only the top one -- before proposing or acting:"]
+        for name, entry, nxt in new:
+            lines.append(f"  - {name}: last entry \"{entry}\"" + (f"; next: {nxt}" if nxt else ""))
+    if restart:
+        # Plain stdout reaches only the agent; the human sees `systemMessage`.
+        k = round(tokens / 1000)
+        lines.append(f"Baton: this session is at ~{k}k tokens of context, and every message "
+                     "re-sends all of it -- that is what eats the usage limit. Tell the human so "
+                     "in their language, in one line, and suggest a restart: finish this turn, "
+                     "write the logbook entry of every task touched so nothing is lost, then they "
+                     "start a new session (or /compact).")
+        out = json.dumps({"systemMessage": f"Baton: ~{k}k tokens in this session -- every message "
+                                           "re-sends them. Time to write the logbook and restart.",
+                          "hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                                 "additionalContext": "\n".join(lines)}},
+                         ensure_ascii=False)
+    else:
+        out = "\n".join(lines)
+    sys.stdout.buffer.write((out + "\n").encode("utf-8"))   # same reason, outbound
     sys.stdout.flush()
-    try:
-        path = _state(session)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(sorted(seen | {t[0] for t in new})), "utf-8")
-    except Exception:
-        pass
+    if new:
+        try:
+            path = _state(session)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(sorted(seen | {t[0] for t in new})), "utf-8")
+        except Exception:
+            pass
     return 0
 
 
