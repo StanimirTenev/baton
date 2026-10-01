@@ -601,6 +601,27 @@ fixed.
 string verbatim, so inline code is stripped before the check. Getting that wrong is how the
 first version falsely rejected a real file while nine unit tests passed — see *Versions*.
 
+## Lessons: a mistake caught once is counted
+
+A lesson written down as a note did not stop the mistake it was about. The hour of an entry
+typed by hand was recorded as a lesson on 2026-09-23 and came back on 26.09, 28.09 and twice on
+30.09 — caught by a hook every time, prevented never. So no lesson is loaded into every
+session; each lives in the hook that sees its trigger, and each is **counted**: `fired` when
+the situation arose, `caught` when the mistake happened. The counters are in
+`baton.lessons.json` next to the hooks (in `${CLAUDE_PLUGIN_DATA}` as a plugin).
+
+- **L1 — the hour in a heading comes from the clock** (Stop). Every new top entry is counted;
+  an hour more than 20 minutes off the clock, either way, is caught, and the agent is told
+  which tool makes it impossible: `tools/baton_entry.py --title`, which stamps the time itself.
+- **L2 — an empty result is a failed read** (`baton_batch.py`, PostToolBatch). After a read —
+  web, MCP, or a shell command that searches or fetches — returns nothing, one line reaches
+  the agent before its next sentence: name the check that would have found it before saying
+  something is absent. At most once every 30 minutes; counted every time.
+
+SessionStart says something only when a lesson has earned it: caught twice in 14 days (it is
+not holding — propose the next rung: a check on the result, or a tool that makes the mistake
+impossible), or silent for 60 days (ask whether to retire it).
+
 ## The board
 
 ```
@@ -1095,6 +1116,20 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.10.0** — lessons that are counted, and a reminder to restart a long session
+
+- **Lessons L1 and L2** (section "Lessons"): a mistake caught once is counted, not just noted.
+  L1 in Stop (the hour of a heading against the clock), L2 in a new PostToolBatch hook,
+  `hooks/baton_batch.py` (an empty read result). Both installers and the plugin register it.
+  Released after one day of the two-week pilot on Linux, by the human's decision; the pilot's
+  measurement (`caught/fired` for L1, recurrences for L2) goes on, and nothing here claims the
+  lessons hold yet.
+- **Restart reminder** (UserPromptSubmit): every message re-sends the whole context, so a long
+  session eats the usage limit — two sessions here had reached ~600k tokens. From ~200k
+  (`restart_at`, then every `restart_step` = 100k) the human sees one line and the agent is
+  told to write the logbooks first. Read from the last main-thread answer's `usage` in the
+  transcript's tail; silent when there is no transcript. `restart_at: 0` turns it off.
 
 **v3.9.0** — look at what is already here before installing, and keep a copy of what is changed
 
