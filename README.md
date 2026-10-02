@@ -1131,6 +1131,12 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.10.5** — the offer of `/baton-inventory` no longer counts this session's own transcript as
+earlier work. Found on 2 October 2026 in a Claude Desktop session that ran in a cloud container:
+the container held one transcript, its own, and the hook said "1 earlier conversation" and
+offered an inventory of nothing. The hook now reads `session_id` and `transcript_path` from its
+input and leaves that transcript out; either one alone is enough. Nothing else changed.
+
 **v3.10.4** — links for the plugin directory listing in `plugin.json`: documentation, support
 (issues), privacy (what Baton sends over the network) and terms (the MIT license). Nothing else
 changed.
