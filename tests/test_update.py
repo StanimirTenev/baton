@@ -124,7 +124,7 @@ def test_the_switch_keeps_every_other_setting(tmp_path, monkeypatch):
     assert bu.main(["maybe"]) == 2
 
 
-def _hook_with_empty_root(tmp_path, talks: int):
+def _hook_with_empty_root(tmp_path, talks: int, payload: str = ""):
     hooks = tmp_path / "hooks"
     hooks.mkdir()
     shutil.copy(HOOK, hooks)
@@ -137,7 +137,7 @@ def _hook_with_empty_root(tmp_path, talks: int):
         f.write_text("{}\n", "utf-8")
     env = dict(os.environ, CLAUDE_CONFIG_DIR=str(tmp_path / "claude"))
     env.pop("BATON_HOME", None)
-    run = lambda: subprocess.run([sys.executable, str(hooks / HOOK.name)], input="", env=env,
+    run = lambda: subprocess.run([sys.executable, str(hooks / HOOK.name)], input=payload, env=env,
                                  capture_output=True, text=True, timeout=30)
     return run
 
@@ -155,6 +155,35 @@ def test_a_machine_with_no_earlier_conversations_hears_nothing(tmp_path):
     out = _hook_with_empty_root(tmp_path, talks=0)()
     # The human sees the one start line; the agent hears nothing (since 3.8.3).
     assert out.returncode == 0 and "hookSpecificOutput" not in out.stdout and not out.stderr
+
+
+def _own(tmp_path, i=0):
+    """The payload Claude Code sends: the session's own id and transcript."""
+    return json.dumps({"hook_event_name": "SessionStart", "session_id": str(i),
+                       "transcript_path": str(tmp_path / f"claude/projects/-home-x/{i}.jsonl")})
+
+
+def test_the_sessions_own_transcript_is_not_an_earlier_conversation(tmp_path):
+    """Found 2026-10-02 in a Claude Desktop cloud session: an empty container, one transcript --
+    this session's own -- and the hook said "1 earlier conversation" and offered an inventory
+    of nothing."""
+    out = _hook_with_empty_root(tmp_path, talks=1, payload=_own(tmp_path))()
+    assert out.returncode == 0 and "hookSpecificOutput" not in out.stdout and not out.stderr
+
+
+@pytest.mark.parametrize("keep", ["session_id", "transcript_path"])
+def test_either_half_of_the_payload_is_enough(tmp_path, keep):
+    """On Windows the transcript path may be spelled differently from the glob's; the id alone
+    must do. And a payload without an id must still match on the path."""
+    payload = json.dumps({keep: json.loads(_own(tmp_path))[keep]})
+    out = _hook_with_empty_root(tmp_path, talks=1, payload=payload)()
+    assert out.returncode == 0 and "hookSpecificOutput" not in out.stdout and not out.stderr
+
+
+def test_earlier_conversations_are_counted_without_this_one(tmp_path):
+    out = _hook_with_empty_root(tmp_path, talks=3, payload=_own(tmp_path))()
+    context = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "2 earlier" in context
 
 
 def test_the_ask_names_the_repository_the_installer_recorded(tmp_path, monkeypatch):

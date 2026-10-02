@@ -961,15 +961,33 @@ def line_for(name: str, fm: dict, tail: str = "") -> str:
     return f"- {name}{badge}{body}{tail}{skills}"
 
 
-def inventory_notice(today: date) -> str | None:
+def _own_session() -> dict:
+    """What Claude Code says about this session on stdin: its id and its transcript. Read as
+    bytes and decoded as UTF-8, as baton_prompt.py does; anything unreadable is no answer."""
+    try:
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace") or "{}")
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def inventory_notice(today: date, own: dict | None = None) -> str | None:
     """No task folders yet, but months of Claude Code behind them: offer /baton-inventory.
 
     Found 2026-09-29: the installer printed one line about it, and a line printed once at
     install is a line nobody acts on. Once a day while the root stays empty.
+
+    This session's own transcript is not earlier work. Found 2026-10-02 in a Claude Desktop
+    cloud session: an empty container held one transcript, its own, and the hook offered an
+    inventory of "1 earlier conversation" that did not exist.
     """
     claude = claude_dir()
+    own = own or {}
+    mine = str(own.get("session_id") or "")
+    path = str(own.get("transcript_path") or "")
     try:
-        talks = list((claude / "projects").glob("*/*.jsonl"))
+        talks = [t for t in (claude / "projects").glob("*/*.jsonl")
+                 if not (mine and t.stem == mine) and not (path and str(t) == path)]
     except OSError:
         return None
     if not talks:
@@ -1100,7 +1118,8 @@ def main() -> int:
     folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \
         if root.is_dir() else []
     if not folders:
-        return _notices_only(notices + [n for n in (inventory_notice(date.today()),) if n],
+        return _notices_only(notices + [n for n in (inventory_notice(date.today(),
+                                                                     _own_session()),) if n],
                              start_line(root=root))
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
