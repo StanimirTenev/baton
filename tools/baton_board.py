@@ -77,6 +77,9 @@ h2{font-size:.95rem;text-transform:uppercase;letter-spacing:.06em;color:var(--di
 .badges{float:right;font-size:.75rem;color:var(--dim)}
 .badge{display:inline-block;margin-left:.4rem;padding:.1rem .45rem;border-radius:.25rem;
        background:#f0f2f5}
+.badge.prio-high{color:var(--hot);font-weight:600}
+.badge.prio-medium{color:var(--warm);font-weight:600}
+.badge.prio-low{color:var(--cool);font-weight:600}
 .next{margin-top:.35rem;color:var(--dim);font-size:.9rem}
 .warn{margin-top:.5rem;padding:.5rem .7rem;background:#fdf6ec;border-radius:.35rem;
       font-size:.85rem;color:var(--warm)}
@@ -120,6 +123,7 @@ def collect(root: Path, logbook: str) -> tuple[list[dict], date]:
             "raw_state": state,
             "on_us": hook.is_us(fm) if fm else False,
             "who": str(fm.get("turn", "")).strip(),
+            "raw_priority": str(fm.get("priority", "")).strip().lower(),
             "priority": PRIORITY_LABEL.get(
                 str(fm.get("priority", "")).strip().lower(),
                 str(fm.get("priority", "")).strip()),
@@ -140,17 +144,17 @@ def card(row: dict, today: date) -> str:
         klass += " hot"
     badges = []
     if row["priority"]:
-        badges.append(row["priority"])
+        badges.append((row["priority"], f"prio-{row['raw_priority']}"))
     if row["state"] and row["state"] != "—":
-        badges.append(row["state"])
+        badges.append((row["state"], ""))
     if row["deadline"]:
         left = (row["deadline"] - today).days
-        badges.append(f"deadline {row['deadline']}" + (f" ({left} days)" if left >= 0 else " ⚠ passed"))
+        badges.append((f"deadline {row['deadline']}" + (f" ({left} days)" if left >= 0 else " ⚠ passed"), ""))
     if not row["on_us"] and row["who"]:
-        badges.append(f"waiting on: {html.escape(row['who'])}")
+        badges.append((f"waiting on: {html.escape(row['who'])}", ""))
     out = [f'<div class="{klass}">',
            '<span class="badges">'
-           + "".join(f'<span class="badge">{html.escape(b)}</span>' for b in badges)
+           + "".join(f'<span class="badge {k}">{html.escape(b)}</span>' for b, k in badges)
            + "</span>",
            f'<div class="name">{html.escape(row["name"])}</div>']
     if row["next"]:

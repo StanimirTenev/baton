@@ -113,3 +113,13 @@ def test_a_finished_task_in_either_language_is_not_live(tmp_path):
     rows, _ = tablo.collect(tmp_path, "LOGBOOK.md")
     page = tablo.render(rows, tmp_path, TODAY)
     assert "3 finished" in page and "0 live" in page, page[:400]
+
+
+def test_each_priority_badge_is_coloured(tmp_path):
+    """2026-10-03: the badge itself is red, yellow or green, not the dot of the text board."""
+    for name, p in (("a", "high"), ("b", "medium"), ("c", "low")):
+        task(tmp_path, name, f"state: active\nturn: us\npriority: {p}")
+    page = tablo.render(*tablo.collect(tmp_path, "LOGBOOK.md")[:1], tmp_path, TODAY)
+    for p, var in (("high", "--hot"), ("medium", "--warm"), ("low", "--cool")):
+        assert f'class="badge prio-{p}">{p}<' in page
+        assert f".badge.prio-{p}{{color:var({var})" in page

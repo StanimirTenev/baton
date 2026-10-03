@@ -27,6 +27,8 @@ MAX_PLAIN = 6                 # cap only on the fall-back (header-less) list
 SOON_DAYS = 3                 # a deadline within this many days counts as "near"
 US = {"us", "me", "self", ""}   # nie/ние/нас map to `us` on reading; + `us` names from baton.local.json
 PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
+# The board reaches the human as Markdown, which has no coloured text; the dot is the colour.
+PRIORITY_DOT = {"high": "🔴", "medium": "🟡", "low": "🟢"}
 
 DATED_HEADING = re.compile(
     r"^\d{4}-\d\d-\d\d(?:[ T]\d\d:\d\d)?\s*[\u2014\u2013-]\s*(?P<title>.+)$"
@@ -154,7 +156,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.10.5"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.11.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -951,7 +953,8 @@ def prio(fm: dict) -> int:
 
 def line_for(name: str, fm: dict, tail: str = "") -> str:
     p = str(fm.get("priority", "")).strip()
-    badge = f" [{p}]" if p else ""
+    dot = PRIORITY_DOT.get(p.lower())
+    badge = (f" {dot} [{p}]" if dot else f" [{p}]") if p else ""
     nxt = fm.get("next") or fm.get("done_when") or ""
     body = f" — {nxt}" if nxt else ""
     # Named, not loaded. The agent reads this and invokes what it needs; the hook

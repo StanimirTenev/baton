@@ -1,9 +1,9 @@
 {
   "name": "baton",
   "displayName": "Baton",
-  "version": "3.10.5",
-  "description": "Every task is a folder with a logbook, and four local hooks keep it that way: a session opens on the board of what is whose move, a turn that leaves this session's work unrecorded is handed back, a message that names a task brings up its record (and a long session is told to restart, from its transcript's token count), and an empty read result is flagged before it becomes \"it is not there\". The hooks make no network requests.",
-  "icon": "./icon.svg",
+  "version": "3.11.0",
+  "description": "Persistent memory for long-running work: tasks, decisions and next steps survive between Claude Code sessions. Every task is a folder with a logbook, and four local hooks keep it that way: a session opens on the board of what is whose move, a turn that leaves this session's work unrecorded is handed back, a message that names a task brings up its record (and a long session is told to restart, from its transcript's token count), and an empty read result is flagged before it becomes \"it is not there\". The hooks make no network requests.",
+  "icon": "./icon.png",
   "author": {
     "name": "Stanimir Tenev",
     "url": "https://github.com/StanimirTenev"
@@ -16,12 +16,20 @@
   "termsOfServiceUrl": "https://github.com/StanimirTenev/baton/blob/main/LICENSE",
   "license": "MIT",
   "keywords": [
-    "logbook",
-    "tasks",
     "memory",
+    "persistent-memory",
+    "context",
+    "session",
+    "continuity",
     "handoff",
-    "hooks",
-    "continuity"
+    "resume",
+    "tasks",
+    "task-tracking",
+    "project-management",
+    "logbook",
+    "notes",
+    "workflow",
+    "hooks"
   ],
   "userConfig": {
     "tasks_folder": {

@@ -308,13 +308,13 @@ What the agent gets:
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
-- migrate-billing [high] — decide tax_region before the run
+- migrate-billing 🔴 [high] — decide tax_region before the run
 
 🔁 Ongoing:
-- weekly-report [low] — Monday export
+- weekly-report 🟢 [low] — Monday export
 
 ⛔ Waiting on someone OUTSIDE / blocked (for information):
-- broken-disk [medium] — zpool replace  (waiting on: new disk (delivery))
+- broken-disk 🟡 [medium] — zpool replace  (waiting on: new disk (delivery))
 
 ❄️ Frozen (not offered): old-scraper
 
@@ -1130,6 +1130,18 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.11.0** — priority in colour, an icon the directory shows, a description people can find
+
+- The board marks each priority with its colour: 🔴 high, 🟡 medium, 🟢 low. The board reaches
+  the human as Markdown, which has no coloured text, so the colour is a dot before `[high]`; the
+  HTML board (`tools/baton_board.py`) colours the badge itself. Order and wording are unchanged.
+- The directory listing showed a letter "B" instead of the icon (seen in the developer portal on
+  3 October 2026): the listing did not render `icon.svg`. `plugin.json` now points at `icon.png`,
+  the same drawing at 512×512; the SVG stays in the repository.
+- `description` opens with what Baton is for (work that survives between sessions) before how it
+  works; `keywords` gain the words people search for. The disclosure is unchanged: four local
+  hooks, no network requests.
 
 **v3.10.5** — the offer of `/baton-inventory` no longer counts this session's own transcript as
 earlier work. Found on 2 October 2026 in a Claude Desktop session that ran in a cloud container:

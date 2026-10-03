@@ -140,3 +140,12 @@ def test_the_board_shows_priority_in_english_either_way(tmp_path):
     """Found in the Windows sandbox, 2026-09-29: `priority: high` was shown as `[visok]`."""
     board = _session_start(_tree(tmp_path, ENGLISH).parent)
     assert "[high]" in board and "visok" not in board
+
+
+def test_each_priority_carries_its_colour_on_the_board(tmp_path):
+    """2026-10-03: high red, medium yellow, low green -- the board is Markdown, so a dot."""
+    bss = _load("baton_session_start")
+    assert bss.line_for("a", {"priority": "high"}).startswith("- a 🔴 [high]")
+    assert bss.line_for("b", {"priority": "medium"}).startswith("- b 🟡 [medium]")
+    assert bss.line_for("c", {"priority": "low"}).startswith("- c 🟢 [low]")
+    assert bss.line_for("d", {"priority": "someday"}).startswith("- d [someday]")
