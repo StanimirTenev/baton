@@ -429,12 +429,30 @@ def main() -> int:
             f"({datetime.now():%Y-%m-%d %H:%M}):\n{listed}\n\n"
             f"{_ss().LESSONS['L1']} Correct the heading. "
             f"(Counted: caught {rec.get('caught', 0)} of {rec.get('fired', 0)} new entries.)")
-    json.dump({"decision": "block", "reason": "\n\n".join(parts)}, sys.stdout)
+    # UTF-8, not \\uXXXX, and as bytes: a cp1252 pipe on Windows cannot raise (v3.12.0).
+    sys.stdout.buffer.write(json.dumps({"decision": "block", "reason": "\n\n".join(parts)},
+                                       ensure_ascii=False).encode("utf-8"))
+    sys.stdout.flush()
     return 0
+
+
+def _beat() -> None:
+    """When this hook last ran, for /baton-doctor: a plugin can be installed and enabled and
+    still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
+    One small file per hook, next to the other state. Never raises."""
+    try:
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = Path(data) if data else Path(__file__).resolve().parent
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"baton.beat.{Path(__file__).stem}").write_text(
+            datetime.now().isoformat(timespec="seconds"), "utf-8")
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
     try:
+        _beat()
         sys.exit(main())
     except Exception:
         # A hook must never break the session it is trying to help.

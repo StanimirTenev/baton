@@ -19,6 +19,15 @@ The request in the user's terms, not yours.
 ### Result
 What is true now that was not true before.
 
+### Corrections
+Only when what was done differs from what was asked: what differs, and why. Leave out otherwise.
+
+### Changed: old → new
+Only when a value, setting or decision was replaced: `old` → `new`, one per line. Leave out
+otherwise.
+
 ### Open / notes
 What is still unknown, what the next session should check first, and any mistake already
 made and paid for — so it is not paid for twice.
+
+Never write a secret into an entry: write `[secret removed]` and where the secret lives.

@@ -25,20 +25,28 @@ use the pasted one.
    **$3.39**. A few dollars last a long time.
 3. **Key.** Account menu → *Keys* → *Create Key*. Give it a name (e.g. `baton`) and **a credit
    limit** — the most it may ever spend. Copy the key; OpenRouter shows it only once.
-4. **Store it — in their own terminal, not here.** The repository path is `repo` in
-   `~/.claude/baton/hooks/baton.local.json` (the installer writes it). If that folder is gone,
+4. **Store it — in their own terminal, not here.** Installed as a plugin, the tool is at
+   `${CLAUDE_PLUGIN_ROOT}/tools/baton_key.py` (Claude Code fills in the path). If you see that
+   text literally, this is a script install: the repository path is `repo` in
+   `~/.claude/baton/hooks/baton.local.json` (the installer writes it); if that folder is gone,
    they download Baton again from https://github.com/StanimirTenev/baton. Give them:
 
    ```
-   python3 <repo>/tools/baton_key.py
+   python3 <path>/tools/baton_key.py
    ```
 
    (`python` instead of `python3` on Windows.) It asks for the key without showing it, checks
    it with OpenRouter, and stores it in `~/.config/baton/env`, readable only by them. A refused
    key is not stored.
-5. **Check — you run this one.** `python3 <repo>/tools/baton_key.py --check` prints the limit
+5. **Check — you run this one.** `python3 <path>/tools/baton_key.py --check` prints the limit
    and what has been spent, and never the key. Report both. If the limit says `none`, suggest
    setting one on the *Keys* page.
+6. **Settings for the review.** The review also needs `baton.local.json` (`review_index`,
+   `review_confidential` — see the README, "Configure it before it will run"). As a plugin it
+   lives in `${CLAUDE_PLUGIN_DATA}`, and the review is run with that folder passed in:
+   `CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" python3 "${CLAUDE_PLUGIN_ROOT}/tools/baton_review.py" --stale`.
+   With the install script it is `~/.claude/baton/hooks/baton.local.json`. Do not write the
+   confidential list for them: what stays on the machine is their decision.
 
 ## If something goes wrong
 

@@ -41,9 +41,19 @@ Prepend an entry to `LOGBOOK.md`. Newest first, so the top of the file is the pr
 ### Result
 ...
 
+### Corrections
+(only when what was done differs from what was asked: what, and why)
+
+### Changed: old → new
+(only when a value, setting or decision was replaced: `old` → `new`)
+
 ### Open / notes
 ...
 ```
+
+The two middle sections are left out when there is nothing to put in them. **Never write a
+secret** (key, password, token, private URL with a credential) into an entry: write
+`[secret removed]` and say where the secret actually lives.
 
 Write it for **the next agent**, not for the human. The next session starts with no memory
 of this conversation. It gets this file and nothing else. So record what you would need in

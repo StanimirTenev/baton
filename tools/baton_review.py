@@ -153,7 +153,8 @@ def config() -> dict:
         _k = importlib.util.module_from_spec(spec)
         sys.modules["baton_corpus"] = _k
         spec.loader.exec_module(_k)
-    cfg = _k.config()["raw"]
+    found = _k.config()
+    cfg, where = found["raw"], found["where"]
 
     # English names from v3.1.0; the Bulgarian ones every existing install carries are read too.
     confidential = os.environ.get("BATON_REVIEW_CONFIDENTIAL", os.environ.get("BATON_PREGLED_POVERITELNI"))
@@ -169,7 +170,7 @@ def config() -> dict:
                         cfg.get("review_confidential", cfg.get("pregled_poveritelni"))),
     }
     if not out["index"]:
-        sys.exit("NO index. Put `review_index` in baton.local.json — the file with\n"
+        sys.exit(f"NO index. Put `review_index` in {where} — the file with\n"
                  "the pointers to check (for example, your memory index).")
     if out["confidential"] is None:
         # Fail closed on a decision nobody has made. An absent list is not an empty
@@ -178,7 +179,7 @@ def config() -> dict:
         sys.exit(
             "NO list of confidential words. It is NOT empty by default —\n"
             "what stays on this machine is decided once, on purpose.\n\n"
-            "In baton.local.json:\n"
+            f"In {where}:\n"
             '  "review_confidential": ["client-name", "Client Name", "unreleased-product"]\n\n'
             "If truly nothing is held back, write an explicitly empty list: []\n"
             "⚠️ Write every name in EVERY alphabet you use — matching is by string.")

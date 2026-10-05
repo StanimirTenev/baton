@@ -94,8 +94,13 @@ def config() -> dict:
     repository copy is a working-copy fallback. Environment wins over both.
     """
     cfg, source = {}, None
-    for candidate in (Path.home() / ".claude/baton/hooks",
-                      Path(__file__).resolve().parent.parent / "hooks"):
+    # Installed as a plugin, settings live in ${CLAUDE_PLUGIN_DATA} (the hooks' own folder, kept
+    # across updates); the skills pass it in. Before v3.12.0 it was not read, and a plugin-only
+    # install stopped at "NO index" with nowhere lasting to put the file (2026-10-05).
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    candidates = ([Path(data)] if data else []) + [Path.home() / ".claude/baton/hooks",
+                                                   Path(__file__).resolve().parent.parent / "hooks"]
+    for candidate in candidates:
         try:
             cfg = json.loads((candidate / CONFIG).read_text("utf-8-sig"))
             source = candidate / CONFIG
@@ -105,7 +110,7 @@ def config() -> dict:
     home = os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks")
     logbook = os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"
     return {"home": Path(home).expanduser(), "logbook": logbook,
-            "raw": cfg, "source": source}
+            "raw": cfg, "source": source, "where": source or candidates[0] / CONFIG}
 
 
 def kind(file: Path, position: int, text: str, logbook: str) -> tuple[str, str]:

@@ -91,6 +91,17 @@ def test_the_hook_blocks_through_its_real_entry_point(tmp_path, monkeypatch):
     assert "zeta" in payload.get("reason", "")
 
 
+def test_the_reason_goes_out_as_utf8_not_escaped(tmp_path, monkeypatch):
+    """v3.12.0: a Cyrillic folder name leaves as UTF-8 bytes, not \\uXXXX."""
+    _task(tmp_path, "фактури", log_age=3600, work_age=600)
+    monkeypatch.setenv("BATON_HOME", str(tmp_path))
+    monkeypatch.setenv("BATON_LOGBOOK", "LOGBOOK.md")
+    out = subprocess.run([sys.executable, str(HOOK)], input=b"{}", capture_output=True)
+    assert out.returncode == 0, out.stderr
+    assert "фактури".encode("utf-8") in out.stdout and b"\\u04" not in out.stdout
+    assert "фактури" in json.loads(out.stdout.decode("utf-8"))["reason"]
+
+
 # --- a task with no criterion of done -----------------------------------------
 # 2026-09-28: a conversation that was "only thinking aloud" ended in a decision on
 # priorities and was never recognised as a task. The mechanical half of that: a folder

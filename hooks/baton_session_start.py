@@ -156,7 +156,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.11.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.12.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -1013,6 +1013,37 @@ def inventory_notice(today: date, own: dict | None = None) -> str | None:
             "each one. Ask once; if they decline, leave it.")
 
 
+def review_notice() -> str | None:
+    """The optional review, offered once ever -- never run.
+
+    ZA-OPRAVYANE #2 (2026-10-03): installed fresh, the review appeared nowhere and the agent
+    never mentioned it, so a user could not learn it exists. It costs money and sends text
+    off the machine, so it is offered, with both said plainly, and the human decides. Not when
+    a key is already stored (they know of it); the key file is only checked for, never read."""
+    if (Path.home() / ".config" / "baton" / "env").is_file():
+        return None
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+    if state.get("review_offered"):
+        return None
+    state["review_offered"] = date.today().isoformat()
+    try:
+        _state_file().write_text(json.dumps(state), "utf-8")
+    except OSError:
+        return None                 # cannot remember the offer: better silent than every day
+    return ("💡 Once, and only this once: Baton has an optional review that checks whether the "
+            "lines of an index (a MEMORY.md, a list of pointers) still match the files they "
+            "point to. Mention it to the human in one or two lines, in their language, with "
+            "both of these: it SENDS the pointer and part of the file it points to to "
+            "OpenRouter (TypeSafe's Jev model) -- folders the human lists as confidential are "
+            "held back before anything is sent; and it COSTS money on their own OpenRouter key "
+            "(about $0.0013 for one review of a 19-line index, measured by the author). Setting "
+            f"up the key: {command('baton-key')}. It never runs by itself; do not run it without "
+            "their yes. If they are not interested, drop it -- this note does not come back.")
+
+
 SHOW_BOARD = (
     "The human has not seen this board -- only one line saying Baton is on. Whatever the "
     "human's first message is -- a greeting, a question or a task -- the first thing in your "
@@ -1087,13 +1118,58 @@ def _emit(context: str | None, line: str | None = None) -> int:
     if text:
         out["hookSpecificOutput"] = {"hookEventName": "SessionStart", "additionalContext": text}
     if out:
-        json.dump(out, sys.stdout)
+        _write(out)
     return 0
+
+
+def _write(out: dict) -> None:
+    """UTF-8 on the wire, not \\uXXXX: a Cyrillic board went out as 13,068 characters of JSON
+    for 5,667 of text (2026-10-03). Claude Code's 10,000-character cap is measured on each
+    parsed field, so the escaping never cut anything -- but bytes, not `print`, so a Windows
+    pipe in cp1252 cannot turn the text into an exception."""
+    sys.stdout.buffer.write(json.dumps(out, ensure_ascii=False).encode("utf-8"))
+    sys.stdout.flush()
 
 
 def _notices_only(notices: list[str], line: str | None = None) -> int:
     """A board with no tasks still carries what the agent must say to the human."""
     return _emit("\n\n".join(notices) if notices else None, line)
+
+
+COMPACT_LINE = "🧭 Baton: context compacted -- the agent writes the logbook before going on."
+
+
+def compacted(own: dict) -> str:
+    """What the agent is told right after compaction (SessionStart, `source: "compact"`).
+
+    Promised publicly on 2026-10-03. A PreCompact hook cannot do this: Claude Code discards
+    its `systemMessage` and gives it no `additionalContext`, only the power to block the
+    compaction (code.claude.com/docs/en/hooks#precompact). So the reminder comes right after,
+    while the summary still holds what was done. Not the board: before v3.12.0 this case got
+    the whole board again, with the instruction to open the next reply with it."""
+    root, name = config()
+    folders: list[str] = []
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "baton_stop", Path(__file__).with_name("baton_stop.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if root.is_dir():
+            folders = mod.unrecorded(root, name,
+                                     mod.session_started(str(own.get("transcript_path") or "")))
+    except Exception:
+        folders = []
+    text = ("Baton: the conversation was just compacted. What happened before this point now "
+            "exists only in the summary above, and the next compaction will thin it further. "
+            f"Before going on, write the {name} entry for every task worked on in this session "
+            "that its logbook does not yet record -- what was asked, what was done, the result, "
+            "what is still open -- while the summary still holds it. Decisions and conversations "
+            "count, not only files. Then continue with the human's work; do not show the board "
+            "again.")
+    if folders:
+        text += ("\n\nTask folders holding this session's work, newer than their "
+                 f"{name}:\n" + "\n".join(f"- {f}" for f in folders))
+    return text
 
 
 def unlogged_work(root: Path, name: str) -> list[str]:
@@ -1112,17 +1188,20 @@ def unlogged_work(root: Path, name: str) -> list[str]:
 def main() -> int:
     if installed_twice():
         # Not _emit(): the rules already come from the installer's CLAUDE.md.
-        json.dump({"systemMessage": start_line(twice=True),
-                   "hookSpecificOutput": {"hookEventName": "SessionStart",
-                                          "additionalContext": twice_message()}}, sys.stdout)
+        _write({"systemMessage": start_line(twice=True),
+                "hookSpecificOutput": {"hookEventName": "SessionStart",
+                                       "additionalContext": twice_message()}})
         return 0
+    own = _own_session()          # stdin is read once; everything below gets it from here
+    if own.get("source") == "compact":
+        return _emit(compacted(own), COMPACT_LINE)
     root, name = config()
-    notices = [n for n in (update_notice(date.today()), lessons_notice()) if n]
+    notices = [n for n in (update_notice(date.today()), lessons_notice(), review_notice()) if n]
     folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \
         if root.is_dir() else []
     if not folders:
         return _notices_only(notices + [n for n in (inventory_notice(date.today(),
-                                                                     _own_session()),) if n],
+                                                                     own),) if n],
                              start_line(root=root))
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
@@ -1294,8 +1373,23 @@ def main() -> int:
     return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external)))
 
 
+def _beat() -> None:
+    """When this hook last ran, for /baton-doctor: a plugin can be installed and enabled and
+    still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
+    One small file per hook, next to the other state. Never raises."""
+    try:
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = Path(data) if data else Path(__file__).resolve().parent
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"baton.beat.{Path(__file__).stem}").write_text(
+            datetime.now().isoformat(timespec="seconds"), "utf-8")
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
     try:
+        _beat()
         sys.exit(main())
     except Exception:
         # A hook must never break the session it is trying to help -- but it must not

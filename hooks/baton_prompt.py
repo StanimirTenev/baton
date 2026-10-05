@@ -299,8 +299,24 @@ def main() -> int:
     return 0
 
 
+def _beat() -> None:
+    """When this hook last ran, for /baton-doctor: a plugin can be installed and enabled and
+    still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
+    One small file per hook, next to the other state. Never raises."""
+    try:
+        from datetime import datetime
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = Path(data) if data else Path(__file__).resolve().parent
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"baton.beat.{Path(__file__).stem}").write_text(
+            datetime.now().isoformat(timespec="seconds"), "utf-8")
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
     try:
+        _beat()
         sys.exit(main())
     except Exception:
         # A hook must never break the session it is trying to help -- and exit 2 would

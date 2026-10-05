@@ -86,7 +86,7 @@ which does nothing; the start script recognises it and moves on to `python`.
 As a plugin, Baton behaves as it does when installed by script, with these differences:
 
 - **The skills carry the plugin's name:** `/baton:baton-task`, `/baton:baton-plan`,
-  `/baton:baton-inventory`, `/baton:baton-key`. They take the task root from the session-start
+  `/baton:baton-inventory`, `/baton:baton-key`, `/baton:baton-doctor`. They take the task root from the session-start
   board, which names it in both installs.
 - **The rules** (what `install.sh` appends to `~/.claude/CLAUDE.md`) arrive with the
   session-start board instead, because a plugin's `CLAUDE.md` is never loaded.
@@ -98,9 +98,17 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
 - **Installed both ways** (script and plugin), every hook would run twice. The plugin's copy
   notices the script's entries in `settings.json`, stands down, and at each session start says
   which to remove, until one is.
-- The optional review tools (`baton_review`, `baton_sift`, `baton_corpus`, and the key
-  set-up behind `/baton-key`) keep their settings next to the script-installed hooks; for now,
-  use them with the script install.
+- **The optional review tools** (`baton_review`, `baton_sift`, `baton_corpus`) read their
+  settings from `baton.local.json` in the plugin's data folder -- `~/.claude/plugins/data/`,
+  the folder whose name starts with `baton-` -- when it is passed as `CLAUDE_PLUGIN_DATA`; Claude
+  Code does not set that variable for commands the agent runs, so it goes on the command line:
+  `CLAUDE_PLUGIN_DATA=~/.claude/plugins/data/baton-baton python3 <plugin folder>/tools/baton_review.py --stale`
+  (`/baton:baton-key` prints both paths). Without
+  settings the review stops before sending anything and names the file it wants (since v3.12.0;
+  before, a plugin-only install stopped at "NO index" with nowhere lasting to put them).
+  `/baton:baton-key` works the same in both installs: the key goes to `~/.config/baton/env`.
+- **`/baton:baton-doctor`** says whether the hooks actually run here, not only that the plugin
+  is installed (see [Is it running?](#is-it-running-baton-doctor)).
 
 Uninstall: `claude plugin uninstall baton`. Claude Code deletes the plugin's data folder with
 it unless you add `--keep-data`. Your task folders are not touched.
@@ -155,7 +163,7 @@ per-process scope PowerShell provides for exactly this.
 ### What it does, on every OS
 
 Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
-skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`, `baton-key`), appends to
+skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`, `baton-key`, `baton-doctor`), appends to
 `~/.claude/CLAUDE.md`, merges three entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
 or a USB stick — can be removed afterwards. Run it twice and the second run reports that
@@ -567,6 +575,31 @@ optional: an install from a release configures no source and nothing is reported
 A hook cannot verify that it was installed. It can ask the same question somewhere it can be
 answered.
 
+## Is it running? `/baton-doctor`
+
+```
+python3 tools/baton_doctor.py
+```
+
+Installed is not running. A plugin can be installed and enabled and still never run -- no
+Python 3.8+, or on Windows no Git for Windows -- and nothing on the screen says so. Since
+v3.12.0 every hook leaves a heartbeat when it runs (`baton.beat.<hook>`, in the plugin's data
+folder or next to the script-installed hooks), and `/baton-doctor` (`/baton:baton-doctor` as a
+plugin) shows when each last ran. No heartbeat at all: **installed but not running**. It reads
+only and sends nothing.
+
+## After compaction: the logbook first
+
+When Claude Code compacts a long conversation, everything before that point survives only as a
+summary -- and the next compaction thins it further. Right after a compaction, Baton tells the
+agent to write the logbook entry of every task worked on in this session while the summary
+still holds it (decisions and conversations count, not only files), names the task folders
+holding this session's unrecorded work, and does **not** show the board again.
+
+It happens at SessionStart with `source: "compact"`, not in a PreCompact hook: Claude Code
+gives a PreCompact hook no way to speak to the model -- it can only block the compaction, and
+its `systemMessage` is discarded ([hooks reference](https://code.claude.com/docs/en/hooks#precompact)).
+
 ## Writing the entry
 
 **The time in the heading is read from the clock (`date`), never typed.** On 2026-09-28 the agent
@@ -651,6 +684,18 @@ It is generated, never edited. The logbooks are the record; this is a view of th
 uploaded and nothing leaves the machine, which is the reason it is a file rather than a hosted
 page: logbooks carry client matter, and a board is not worth sending it anywhere.
 
+## A free check of the memory index
+
+```
+python3 tools/baton_memory_lint.py ~/.claude/projects/<project>/memory/MEMORY.md
+```
+
+Two questions, no model, nothing sent: does every link in the index lead to a file that
+exists, and does every Markdown file in the index's folder have a line in it? A memory file
+without a line is invisible -- the index is what a session reads first. It reports and never
+edits; exit 1 when it found something. Without a path it checks `review_index` from the
+settings. Whether a line is still *true* is the paid review below.
+
 ## The review: does the index still match the files?
 
 ```
@@ -687,7 +732,9 @@ the whole reason it is opt-in and separate from the hooks: logbooks carry client
 
 ### Configure it before it will run
 
-In `hooks/baton.local.json`:
+In `baton.local.json` -- next to the installed hooks (`~/.claude/baton/hooks/`) with the
+install script; in the plugin's data folder (`~/.claude/plugins/data/baton-…/`) as a plugin,
+run with `CLAUDE_PLUGIN_DATA` set to that folder:
 
 ```json
 {
@@ -929,10 +976,21 @@ Check whether the new billing schema can take the old rows without loss.
 ### Result
 Migration is safe for 41 columns. The two outliers need a decision before it runs.
 
+### Corrections
+Asked for a dry run on staging; ran it on a copy of production instead — staging had no
+`legacy_ref` rows at all.
+
+### Changed: old → new
+`MIGRATION_BATCH`: `50000` → `10000` (the 50k batch locked the table for 40 s)
+
 ### Open / notes
 `tax_region` has no target column at all — ask before inventing one.
 Do not trust `legacy_ref` being null to mean unused; 300 rows carry an empty string.
 ```
+
+**Corrections** (done versus asked) and **Changed: old → new** appear only when there is
+something to put in them: they are the two things a reader cannot reconstruct from the result
+alone. **A secret never goes into an entry** — write `[secret removed]` and where it lives.
 
 **Write it for the next agent, not for the human.** The next session has your files and
 nothing else. So record what you would need to continue: what was decided and why, what was
@@ -1131,6 +1189,51 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.12.0** — the logbook before the summary thins it, and installed is not running
+
+- **After compaction, the logbook first.** Promised publicly on 3 October: Baton did nothing at
+  compaction. In fact SessionStart fires then (Claude Code's documentation; Baton sets no
+  matcher) -- and v3.11.0, given `source: "compact"`, answers with the whole board and the
+  instruction to open the next reply with it, mid-session (run on 5 October). Now, on `source: "compact"`, the agent
+  is told to write the entry of every task worked on in this session while the summary still
+  holds it, is given the folders holding this session's unrecorded work, and is not shown the
+  board. Not a PreCompact hook: Claude Code discards a PreCompact hook's `systemMessage` and gives
+  it no `additionalContext` -- it can only block the compaction
+  ([hooks reference](https://code.claude.com/docs/en/hooks#precompact)). Tested as Claude Code
+  runs the hook (a subprocess, JSON on stdin); **not yet seen in a live compaction**.
+- **UTF-8 out, not `\uXXXX`.** On the author's machine, the same board: v3.11.0 wrote 13,585
+  characters of JSON for 5,685 of text, because every Cyrillic letter was escaped; v3.12.0
+  writes 5,967 for the same 5,685. All four hooks write UTF-8 bytes. A LinkedIn reader worried this hit Claude Code's
+  10,000-character cap. It did not: the documented cap is measured on each parsed field ("For
+  JSON output, each field is measured separately", [hooks reference](https://code.claude.com/docs/en/hooks#json-output)),
+  so the 5,685 characters were what counted. Not claimed: that the board can never reach the
+  cap -- a machine with many tasks can, and then Claude Code shows a path and the first 2,000
+  characters.
+- **The review tools from a plugin-only install.** They "worked from the plugin" on 3 October
+  only because the same machine also had the script install's settings. Alone, `baton_review`
+  stopped at "NO index" and read no folder a plugin keeps across updates. It now also reads
+  `baton.local.json` from `CLAUDE_PLUGIN_DATA`, and names the file it wants when settings are
+  missing. `/baton-key` gives the plugin path. The v3.8.0 note saying the review tools do not
+  work as a plugin is marked superseded.
+- **The review is offered once.** A new user never learned it existed. The first session-start
+  now asks the agent to mention it once -- that it sends text to OpenRouter, that it costs money
+  on their own key (about $0.0013 per index review, measured), that it never runs by itself --
+  and not again. Not offered when a key is already stored (the key file's presence is checked;
+  it is not read).
+- **`/baton-doctor`: installed is not running.** Every hook leaves a heartbeat when it runs;
+  `tools/baton_doctor.py` shows when each last ran and says "installed but not running" when
+  none has. Heartbeats exist only from this version on.
+- **The entry gains "Corrections" (done versus asked) and "Changed: old → new"**, both left out
+  when empty, and the rule that a secret is written `[secret removed]`. Templates, rules and
+  README.
+- **`tools/baton_memory_lint.py`**: free, no model, nothing sent -- does every link in a memory
+  index lead to a file, and does every memory file have a line. Reports, never edits. On the
+  author's index (78 files, 104 links): nothing found, and a planted unlisted file in a copy was
+  caught.
+- Borrowed ideas, credited: the compaction reminder from claude-memory-compiler
+  (`hooks/pre-compact.py`), the doctor from claude-remember (`/remember:doctor`), the entry
+  sections from active-memory, the index check from claude-memory-compiler's `lint.py`.
+
 **v3.11.0** — priority in colour, an icon the directory shows, a description people can find
 
 - The board marks each priority with its colour: 🔴 high, 🟡 medium, 🟢 low. The board reaches
@@ -1303,6 +1406,8 @@ two hands). Nothing else changed.
   the code), and the Uninstall section, which had listed two hook entries and two of four skills.
 - Not checked: Windows without Git for Windows. Not yet as a plugin: the review tools
   (`baton_review`, `baton_sift`, `baton_corpus`) and `/baton-key` -- use the script install for them.
+  (Superseded in v3.12.0: `/baton-key` works from the plugin, and the review tools read their
+  settings from the plugin's data folder.)
 
 **v3.7.1** — the whole board, said outright
 
@@ -1885,7 +1990,7 @@ having been done.
 delete the Baton section from `~/.claude/CLAUDE.md` (the heading
 `# Baton — task folders and logbooks` and the text under it, marked
 `<!-- Installed by Baton. ... -->`), and remove `~/.claude/baton`, the four skills
-`~/.claude/skills/baton-inventory`, `baton-plan`, `baton-task` and `baton-key`, and the clone
+`~/.claude/skills/baton-inventory`, `baton-plan`, `baton-task`, `baton-key` and `baton-doctor`, and the clone
 (`~/.baton`).
 
 Either way, your task folders are plain directories of plain Markdown -- they keep working
