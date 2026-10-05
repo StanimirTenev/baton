@@ -1013,6 +1013,52 @@ def inventory_notice(today: date, own: dict | None = None) -> str | None:
             "each one. Ask once; if they decline, leave it.")
 
 
+def release_leads(version: str) -> list[str]:
+    """The bold first sentence of each note under this version in the README's Versions."""
+    try:
+        text = (Path(__file__).resolve().parent.parent / "README.md").read_text("utf-8")
+    except OSError:
+        return []
+    start = text.find(f"**v{version}**")
+    if start < 0:
+        return []
+    end = text.find("\n**v", start + 1)
+    section = text[start:end if end > 0 else len(text)]
+    return re.findall(r"^- \*\*(.+?)\*\*", section, re.M)
+
+
+def whats_new_notice() -> str | None:
+    """Once after an update: what is new, from the README that came with it. No network.
+
+    Installed from the directory, Baton updates itself at the next launch and Claude Code says
+    only "Plugins changed" -- nothing tells the human what changed (stenly, 2026-10-05). The
+    last version this machine ran is kept in the state file. A fresh install is not told it was
+    updated; a state file without the version is an install from before v3.12.0, which is."""
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = None
+    seen = (state or {}).get("seen_version")
+    if seen == BATON_VERSION:
+        return None
+    state = state if isinstance(state, dict) else {}
+    upgraded = bool(state) and (seen is None or _version(seen) < _version(BATON_VERSION))
+    state["seen_version"] = BATON_VERSION
+    try:
+        _state_file().write_text(json.dumps(state), "utf-8")
+    except OSError:
+        return None                 # cannot remember it was said: better silent than every day
+    if not upgraded:
+        return None
+    leads = release_leads(BATON_VERSION)
+    since = f"from v{seen} " if seen else ""
+    return (f"⬆️ Baton was updated {since}to v{BATON_VERSION} since this machine last ran it. "
+            "Tell the human once, in their language, in a few short lines, what is new"
+            + (": " + "; ".join(leads) if leads else "")
+            + f". Full notes: https://github.com/StanimirTenev/baton/releases/tag/v{BATON_VERSION} "
+            "-- this note does not come back.")
+
+
 def review_notice() -> str | None:
     """The optional review, offered once ever -- never run.
 
@@ -1196,7 +1242,8 @@ def main() -> int:
     if own.get("source") == "compact":
         return _emit(compacted(own), COMPACT_LINE)
     root, name = config()
-    notices = [n for n in (update_notice(date.today()), lessons_notice(), review_notice()) if n]
+    notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),
+                           review_notice()) if n]
     folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \
         if root.is_dir() else []
     if not folders:

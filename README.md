@@ -1215,6 +1215,13 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   `baton.local.json` from `CLAUDE_PLUGIN_DATA`, and names the file it wants when settings are
   missing. `/baton-key` gives the plugin path. The v3.8.0 note saying the review tools do not
   work as a plugin is marked superseded.
+- **After an update, the agent says what is new -- once.** Installed from the directory, Baton
+  updates itself at the next launch, and Claude Code says only "Plugins changed"
+  ([plugin loading](https://code.claude.com/docs/en/plugins/loading#synced-plugins)). Now
+  SessionStart remembers the last version this machine ran and, when it changes, asks the agent
+  to tell the human in a few lines what is new -- the bold leads of this section -- with the link
+  to the release. No network: the notes come from the README that arrived with the update. A
+  fresh install is not told it was updated; an install from before v3.12.0 is.
 - **The review is offered once.** A new user never learned it existed. The first session-start
   now asks the agent to mention it once -- that it sends text to OpenRouter, that it costs money
   on their own key (about $0.0013 per index review, measured), that it never runs by itself --
