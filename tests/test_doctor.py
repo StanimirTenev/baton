@@ -51,7 +51,11 @@ def test_doctor_says_running_after_sessionstart_ran(tmp_path):
                    input=b"{}", capture_output=True, env=_env(tmp_path, data))
     out = _doctor(tmp_path, data)
     assert out.returncode == 0, out.stdout
-    assert "Running" in out.stdout and "NEVER RAN" in out.stdout   # Stop has not had its turn
+    assert "Running" in out.stdout
+    # Stop and PostToolBatch have not had their moment yet: that is not a failure, and a
+    # fresh install must not be told NEVER RAN (seen live on 05.10, before release).
+    assert "NEVER RAN" not in out.stdout and "❌" not in out.stdout
+    assert "not yet" in out.stdout and "PostToolBatch" in out.stdout
 
 
 def test_doctor_finds_the_plugin_heartbeats_when_the_variable_arrives_empty(tmp_path):

@@ -30,8 +30,8 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
   later) and, on Windows, `where bash`. A hook older than v3.12.0 leaves none either: a new
   session first, then ask again.
 - **🔴 SessionStart has never run** — the board and the rules are not reaching the agent.
-- **✅ Running** — say when SessionStart last ran. A single hook marked NEVER RAN is usually one
-  whose moment has not come yet (Stop needs a finished turn, PostToolBatch a tool call); if it is
-  still never after a turn with tool calls, it is failing.
+- **✅ Running** — say when SessionStart last ran. A hook marked ⏳ not yet is one whose moment
+  has not come yet (Stop needs a finished turn, PostToolBatch a tool call) -- not a failure, so
+  do not report it as one. If it is still ⏳ after a turn with tool calls, it is failing.
 
 Do not change anything to fix it without the human's yes.

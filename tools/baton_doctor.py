@@ -59,12 +59,18 @@ def ago(when: datetime, now: datetime) -> str:
 def main() -> int:
     where, now = folder(), datetime.now()
     print(f"Baton doctor -- heartbeats in {where}\n")
-    seen = {}
+    seen = {stem: last_run(where, stem) for stem, _, _ in HOOKS}
+    started = seen["baton_session_start"] is not None
     for stem, event, when in HOOKS:
-        t = last_run(where, stem)
-        seen[stem] = t
-        state = f"last ran {t:%Y-%m-%d %H:%M} ({ago(t, now)})" if t else "NEVER RAN"
-        print(f"  {'✅' if t else '❌'} {event:<17} {state}   -- runs {when}")
+        t = seen[stem]
+        if t:
+            mark, state = "✅", f"last ran {t:%Y-%m-%d %H:%M} ({ago(t, now)})"
+        elif started:
+            # SessionStart ran, so the hooks work; this one has not had its moment yet.
+            mark, state = "⏳", "not yet"
+        else:
+            mark, state = "❌", "NEVER RAN"
+        print(f"  {mark} {event:<17} {state}   -- runs {when}")
     print()
     if not any(seen.values()):
         print("🔴 Installed but not running: no Baton hook has left a heartbeat here.\n"
@@ -76,8 +82,9 @@ def main() -> int:
         print("🔴 SessionStart has never run here: the board and the rules are not reaching the "
               "agent.")
         return 1
-    print("✅ Running. A hook marked NEVER RAN has not had its moment yet (Stop needs a finished\n"
-          "   turn, PostToolBatch a tool call) -- or it is failing: run a turn and ask again.")
+    print("✅ Running. A hook marked ⏳ has not had its moment yet (Stop needs a finished\n"
+          "   turn, PostToolBatch a tool call). If it is still ⏳ after a turn with a tool call,\n"
+          "   it is failing.")
     return 0
 
 
