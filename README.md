@@ -92,9 +92,20 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   session-start board instead, because a plugin's `CLAUDE.md` is never loaded.
 - **Settings and state** live in Claude Code's plugin data folder
   (`~/.claude/plugins/data/`), which survives plugin updates.
-- **Updates** come through Claude Code: `claude plugin update baton@baton`, or turn on
-  auto-update for the `baton` marketplace under `/plugin` -> *Marketplaces*. The hooks do not
-  check for a newer version themselves, so **as a plugin they make no network request at all.**
+- **Updates** come through Claude Code, and how depends on where you installed from
+  ([plugin loading](https://code.claude.com/docs/en/plugins/loading)):
+  - **From Anthropic's plugin directory** (claude.ai, *Discover*): updated on its own. Each time
+    Claude Code starts it syncs your account's plugins in the background; when Baton changed you
+    see `Plugins changed. Run /reload-plugins to activate.`, and the new version runs from the next
+    start. This sync needs a session signed in with your claude.ai account -- not an API key,
+    `ANTHROPIC_AUTH_TOKEN`, bare mode or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
+  - **From this repository's marketplace** (the two commands above): auto-update is off by
+    default for marketplaces other than Anthropic's. Turn it on under `/plugin` -> *Marketplaces*,
+    or run `claude plugin update baton@baton`.
+  - **After an update, the agent tells you once what is new**, from the notes in this README that
+    came with it -- the bold first line of each note under the new version, and a link to the
+    release. The hooks do not check for a newer version themselves, so **as a plugin they make
+    no network request at all.**
 - **Installed both ways** (script and plugin), every hook would run twice. The plugin's copy
   notices the script's entries in `settings.json`, stands down, and at each session start says
   which to remove, until one is.
@@ -588,7 +599,7 @@ folder or next to the script-installed hooks), and `/baton-doctor` (`/baton:bato
 plugin) shows when each last ran. No heartbeat at all: **installed but not running**. It reads
 only and sends nothing.
 
-## After compaction: the logbook first
+## After compaction: the agent writes the logbook first
 
 When Claude Code compacts a long conversation, everything before that point survives only as a
 summary -- and the next compaction thins it further. Right after a compaction, Baton tells the
@@ -1191,7 +1202,7 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 **v3.12.0** — the logbook before the summary thins it, and installed is not running
 
-- **After compaction, the logbook first.** Promised publicly on 3 October: Baton did nothing at
+- **After compaction, the agent writes the logbook first.** Promised publicly on 3 October: Baton did nothing at
   compaction. In fact SessionStart fires then (Claude Code's documentation; Baton sets no
   matcher) -- and v3.11.0, given `source: "compact"`, answers with the whole board and the
   instruction to open the next reply with it, mid-session (run on 5 October). Now, on `source: "compact"`, the agent
@@ -1201,7 +1212,7 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   it no `additionalContext` -- it can only block the compaction
   ([hooks reference](https://code.claude.com/docs/en/hooks#precompact)). Tested as Claude Code
   runs the hook (a subprocess, JSON on stdin); **not yet seen in a live compaction**.
-- **UTF-8 out, not `\uXXXX`.** On the author's machine, the same board: v3.11.0 wrote 13,585
+- **The hooks write UTF-8, not `\uXXXX`.** On the author's machine, the same board: v3.11.0 wrote 13,585
   characters of JSON for 5,685 of text, because every Cyrillic letter was escaped; v3.12.0
   writes 5,967 for the same 5,685. All four hooks write UTF-8 bytes. A LinkedIn reader worried this hit Claude Code's
   10,000-character cap. It did not: the documented cap is measured on each parsed field ("For
@@ -1209,7 +1220,7 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   so the 5,685 characters were what counted. Not claimed: that the board can never reach the
   cap -- a machine with many tasks can, and then Claude Code shows a path and the first 2,000
   characters.
-- **The review tools from a plugin-only install.** They "worked from the plugin" on 3 October
+- **The review tools now work from a plugin-only install.** They "worked from the plugin" on 3 October
   only because the same machine also had the script install's settings. Alone, `baton_review`
   stopped at "NO index" and read no folder a plugin keeps across updates. It now also reads
   `baton.local.json` from `CLAUDE_PLUGIN_DATA`, and names the file it wants when settings are
@@ -1227,13 +1238,14 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   on their own key (about $0.0013 per index review, measured), that it never runs by itself --
   and not again. Not offered when a key is already stored (the key file's presence is checked;
   it is not read).
-- **`/baton-doctor`: installed is not running.** Every hook leaves a heartbeat when it runs;
+- **`/baton-doctor` shows whether the hooks really run.** Every hook leaves a heartbeat when it runs;
   `tools/baton_doctor.py` shows when each last ran and says "installed but not running" when
-  none has. Heartbeats exist only from this version on.
-- **The entry gains "Corrections" (done versus asked) and "Changed: old → new"**, both left out
+  none has. A hook that has not had its moment yet in a new session (Stop needs a finished turn,
+  PostToolBatch a tool call) is shown as ⏳ not yet, not as a failure -- seen live before release. Heartbeats exist only from this version on.
+- **The logbook entry gains "Corrections" (done versus asked) and "Changed: old → new".** Both left out
   when empty, and the rule that a secret is written `[secret removed]`. Templates, rules and
   README.
-- **`tools/baton_memory_lint.py`**: free, no model, nothing sent -- does every link in a memory
+- **A free check of the memory index** (`tools/baton_memory_lint.py`): free, no model, nothing sent -- does every link in a memory
   index lead to a file, and does every memory file have a line. Reports, never edits. On the
   author's index (78 files, 104 links): nothing found, and a planted unlisted file in a copy was
   caught.
