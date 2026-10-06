@@ -88,6 +88,21 @@ def test_l1_within_the_slack_is_quiet(tmp_path):
     assert "L1" not in _stop(env, tmp_path, 2)
 
 
+def test_l1_compares_with_the_save_time_not_the_stop_time(tmp_path):
+    """2026-10-06: an entry headed 11:08 and saved at 11:08 by another session was first
+    seen by a Stop at 13:08 and called 120 min behind. The heading was right."""
+    tasks = tmp_path / "tasks"
+    env = _env(tmp_path, tasks)
+    now = datetime.now()
+    _book(tasks, f"## {now - timedelta(days=1):%Y-%m-%d %H:%M} — old")
+    _stop(env, tmp_path, 1)
+    earlier = now - timedelta(hours=2)
+    _book(tasks, f"## {earlier:%Y-%m-%d %H:%M} — written two hours ago, on time")
+    for book in tasks.rglob("*.md"):
+        os.utime(book, (earlier.timestamp(), earlier.timestamp()))
+    assert "L1" not in _stop(env, tmp_path, 2)
+
+
 # -- L2: an empty result from a read, once per half hour, counted every time --------------
 
 def _batch(env, calls):
