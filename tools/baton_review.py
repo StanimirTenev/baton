@@ -69,6 +69,7 @@ hand, and move the numbers to where they separate yours.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import math
@@ -186,7 +187,40 @@ def config() -> dict:
     # The Bulgarian keys, for scripts outside this repository that read them (a corpus
     # labeller on the author's machine reads `config()["poveritelni"]`).
     out["indeks"], out["podbor"], out["poveritelni"] = out["index"], out["shortlist"], out["confidential"]
+    out["source"] = found["source"]
     return out
+
+
+def config_line(cfg: dict) -> str:
+    """Which file this run was configured from, and a fingerprint of its bytes.
+
+    The hooks' copy is compared with its source; the configuration was not, and a
+    run that read the wrong baton.local.json looked exactly like a run that read the
+    right one (2026-10-07). Printing the file and its hash makes two runs that
+    disagree traceable to the file that produced them.
+    """
+    source = cfg.get("source")
+    if not source:
+        return "config: no config file -- environment and defaults only"
+    try:
+        digest = hashlib.sha256(Path(source).read_bytes()).hexdigest()[:12]
+    except OSError:
+        digest = "unreadable"
+    return f"config: {source} sha256:{digest}"
+
+
+def blocked_if_empty(examined: int, held: int, what: str, cfg: dict) -> None:
+    """Zero items examined is not a clean review. It exits non-zero and says why.
+
+    The defect this exists for: `tasks` read a config that named no logbook, found
+    none, printed an empty list and "cost: $0", and exited 0. Nothing failed -- an
+    empty set was verified and reported as done.
+    """
+    if examined or held:
+        return
+    sys.exit(f"\nBLOCKED: 0 {what} examined. An empty review is not a clean one.\n"
+             f"Check where it looked -- {config_line(cfg)}\n"
+             f"home: {cfg.get('home')}  logbook: {cfg.get('logbook')}  index: {cfg.get('index')}")
 
 
 def get_api_key() -> str:
@@ -426,6 +460,7 @@ def stale(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     shortlist = Path(cfg["shortlist"]).expanduser() if cfg.get("shortlist") else None
     words, root = cfg["confidential"], index_file.parent
     results, spent, held, sent = [], 0.0, [], 0
+    print(config_line(cfg))
     try:
         for pointer, target in pointers(index_file, shortlist):
             if izbrani and not any(part in target for part in izbrani):
@@ -478,6 +513,7 @@ def stale(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     if not flagged:
         print("  (none)")
     print(f"\ncost: ${spent:.6f}")
+    blocked_if_empty(len(results), len(held), "pointers", cfg)
 
 
 def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
@@ -490,6 +526,7 @@ def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     logbook_name = cfg["logbook"]
     words = cfg["confidential"]
     results, spent, held, sent = [], 0.0, [], 0
+    print(config_line(cfg))
     try:
         for folder in sorted(p for p in root.iterdir() if p.is_dir()
                              and not p.name.startswith(".")):
@@ -541,6 +578,7 @@ def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     for value, name in sorted(results, reverse=True):
         print(f"  {'🔴' if value >= THRESHOLD else '  '} {value:.2f}  {name}")
     print(f"\ncost: ${spent:.6f}")
+    blocked_if_empty(len(results), len(held), f"task logbooks ({logbook_name})", cfg)
 
 
 def claims(line: str) -> list[str]:

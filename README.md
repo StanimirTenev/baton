@@ -117,6 +117,10 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   (`/baton:baton-key` prints both paths). Without
   settings the review stops before sending anything and names the file it wants (since v3.12.0;
   before, a plugin-only install stopped at "NO index" with nowhere lasting to put them).
+  Every run prints the settings file it used and a fingerprint of its bytes
+  (`config: <path> sha256:<12 hex>`, or `no config file` when only the environment set it), and a
+  run that examined nothing ends with `BLOCKED` and a non-zero exit instead of an empty list
+  (since v3.12.1).
   `/baton:baton-key` works the same in both installs: the key goes to `~/.config/baton/env`.
 - **`/baton:baton-doctor`** says whether the hooks actually run here, not only that the plugin
   is installed (see [Is it running?](#is-it-running-baton-doctor)).
@@ -1199,6 +1203,21 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.12.1** — an empty review is not a clean one
+
+- **A review that examined nothing now says BLOCKED and exits non-zero.** `baton_review --tasks`
+  once read a different `baton.local.json` than the hooks did -- the repository copy, which names
+  no logbook -- found no logbooks, printed an empty list and `cost: $0.000000`, and exited 0.
+  Nothing failed: an empty set was checked and looked like a clean result. Now `--tasks` and
+  `--stale` stop with `BLOCKED: 0 … examined`, the file they read, and where they looked. A run
+  where every item was held back as confidential is not blocked; it already lists what it held.
+- **Every review run names its settings file and a fingerprint of it.** Asked publicly on 7 October
+  whether Baton compares the configuration too, or only the hook code: only the code. The
+  session-start check compares the bytes of the four hooks with their source, and only when
+  `source` is set. Now the review prints `config: <path> sha256:<12 hex>`, so two runs that
+  disagree can be traced to the file that produced them. Not claimed: that the hooks' own
+  configuration is compared with anything at session start. It is still not.
 
 **v3.12.0** — the logbook before the summary thins it, and installed is not running
 
