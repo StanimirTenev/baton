@@ -17,6 +17,13 @@ names it (and suggests a restart when the session grows long), one flags an empt
 before it turns into "it is not there". The hooks are executed by the harness, not by the
 agent's judgement, and they make no network requests (see *What Baton sends over the network*).
 
+**Where it works.** Baton is hooks, so it works where plugin hooks run: Claude Code -- the
+terminal, the IDE extensions, and the Code tab of the Claude desktop app. In a claude.ai chat
+(web, desktop or mobile) only the skills load and the hooks are ignored
+([platform support](https://claude.com/docs/plugins/platform-support)), so nothing is enforced
+there. A plugin added from the directory on claude.ai reaches Claude Code on its own at the next
+session start; use it from there. Cowork loads hooks too, but Baton has not been tested in it.
+
 ## Install
 
 ### Before installing -- for the agent doing it
@@ -1204,6 +1211,27 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.12.2** — says where it works
+
+- **Baton works only where plugin hooks run, and now says so before install.** On 7 October a
+  Claude Desktop chat, given Baton, found only the skills: no hooks, no tools. The directory's
+  usage page shows 150 installs, all from claude.ai, and 10 active accounts. Anthropic's
+  [platform support](https://claude.com/docs/plugins/platform-support) table says why: in a
+  claude.ai chat (web, desktop or mobile) hooks are ignored; in Claude Code -- the terminal, the IDE
+  extensions and the desktop app's Code tab -- they load. The README now has *Where it works*
+  above Install, and the plugin's description carries one sentence of it. No code changed.
+  Not claimed: that the installs which never became active were all in the chat -- what the
+  directory counts as active is not documented; and Baton has not been tested in Cowork, which
+  loads hooks too.
+- **The directory's checks, from the review of v3.12.1.** The README named the icon files in
+  code formatting, which the pre-submission checklist asks not to do; it now describes them in
+  words. The other warnings stay as they are, each for a reason: `plugin.json` names its icon
+  because the listing reads it; `install.sh` is flagged, as far as can be seen, for the `bin/` in
+  its `#!/usr/bin/env bash` line; the two test files copy the environment to give a test its own
+  home folder and read no key; `setup-windows.cmd` downloads Claude Code's own installer from
+  claude.ai when Claude Code is missing; and the hook that flags an empty read result lists
+  `curl` and `wget` as words to recognise, not commands it runs.
+
 **v3.12.1** — an empty review is not a clean one
 
 - **A review that examined nothing now says BLOCKED and exits non-zero.** `baton_review --tasks`
@@ -1278,7 +1306,7 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   the human as Markdown, which has no coloured text, so the colour is a dot before `[high]`; the
   HTML board (`tools/baton_board.py`) colours the badge itself. Order and wording are unchanged.
 - The directory listing showed a letter "B" instead of the icon (seen in the developer portal on
-  3 October 2026): the listing did not render `icon.svg`. `plugin.json` now points at `icon.png`,
+  3 October 2026): the listing did not render the SVG icon. `plugin.json` now points at a PNG of
   the same drawing at 512×512; the SVG stays in the repository.
 - `description` opens with what Baton is for (work that survives between sessions) before how it
   works; `keywords` gain the words people search for. The disclosure is unchanged: four local
@@ -1294,8 +1322,8 @@ input and leaves that transcript out; either one alone is enough. Nothing else c
 (issues), privacy (what Baton sends over the network) and terms (the MIT license). Nothing else
 changed.
 
-**v3.10.3** — an icon for the plugin directory listing (`icon.svg`, a baton passed between
-two hands). Nothing else changed.
+**v3.10.3** — an icon for the plugin directory listing (an SVG drawing of a baton passed
+between two hands). Nothing else changed.
 
 **v3.10.2** — before the plugin directory: say what runs, read only the key given to Baton
 
