@@ -278,6 +278,9 @@ def future_dated(root: Path, name: str) -> list[str]:
 # AHEAD of the clock, so an hour typed by hand that happens to lie in the past went through
 # unseen. This one counts every new top entry (the trigger arose) and catches a heading more
 # than L1_SLACK_MINUTES off the clock either way -- and says which tool makes it impossible.
+# "The clock" is the logbook's mtime, not the time this hook runs: an entry another session
+# headed correctly at 11:08 and first seen here at 13:08 was flagged 120 min behind
+# (2026-10-06, prismfield-mac-ipad). The save time is when the heading should have been read.
 L1_SLACK_MINUTES = 20
 _SS = None
 
@@ -304,6 +307,7 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None) -> list
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
         try:
             text = (folder / name).read_text("utf-8-sig")
+            saved = datetime.fromtimestamp((folder / name).stat().st_mtime)
         except OSError:
             continue
         line = next((ln for ln in text.splitlines() if _HEADING.match(ln)), None)
@@ -321,11 +325,12 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None) -> list
             when = datetime.strptime(f"{m.group(1)} {m.group(2)}:{m.group(3)}", "%Y-%m-%d %H:%M")
         except ValueError:
             continue
-        off = (when - now).total_seconds() / 60
+        off = (when - saved).total_seconds() / 60
         if abs(off) > L1_SLACK_MINUTES:
             ss.lesson_event(state, "L1", "caught", now)
             out.append(f"{folder.name}: \"{line[3:40].strip()}\" is {abs(off):.0f} min "
-                       f"{'ahead of' if off > 0 else 'behind'} the clock")
+                       f"{'ahead of' if off > 0 else 'behind'} the clock when it was saved "
+                       f"({saved:%H:%M})")
     ss.lessons_save(state)
     return out
 
