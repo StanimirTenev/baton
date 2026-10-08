@@ -678,7 +678,9 @@ the situation arose, `caught` when the mistake happened. The counters are in
 `baton.lessons.json` next to the hooks (in `${CLAUDE_PLUGIN_DATA}` as a plugin).
 
 - **L1 — the hour in a heading comes from the clock** (Stop). Every new top entry is counted;
-  an hour more than 20 minutes off the clock, either way, is caught, and the agent is told
+  an hour more than 20 minutes off the moment the logbook was saved, either way, is caught (the
+  save time, not the time Stop runs: an entry written by another session and seen hours later is
+  not late), and the agent is told
   which tool makes it impossible: `tools/baton_entry.py --title`, which stamps the time itself.
 - **L2 — an empty result is a failed read** (`baton_batch.py`, PostToolBatch). After a read —
   web, a shell command that searches or fetches, or an MCP tool whose name says it reads
@@ -1210,6 +1212,18 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.12.3** — L1 compares a heading with the save time
+
+- **A correct heading was called late when another session saw it first.** On 6 October an entry
+  headed 11:08 and saved at 11:08 was reported by a Stop at 13:08 as "120 min behind the clock":
+  L1 measured the heading against the moment the hook ran. It now measures it against the
+  logbook's save time, and the message names that time. Found, reproduced and fixed by
+  [Shane Grindle](https://github.com/TheMedpreneur) in
+  [PR #1](https://github.com/StanimirTenev/baton/pull/1) -- Baton's first outside contribution,
+  with a test that fails on v3.12.2. Not claimed: that every false "behind" is gone -- an edit to
+  the same logbook long after the entry moves the save time, and a correct heading can still read
+  as behind; that case is rarer, and the old check flagged it too.
 
 **v3.12.2** — says where it works
 

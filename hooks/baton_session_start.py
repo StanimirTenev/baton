@@ -156,7 +156,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.12.2"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.12.3"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
