@@ -112,6 +112,19 @@ def test_a_new_session_still_gets_the_board(tmp_path):
     assert "WHOLE board" in ctx and "compacted" not in ctx
 
 
+def test_after_clear_the_board_comes_back_with_a_word_on_why(tmp_path):
+    """/clear replaces the restart Baton used to suggest (2026-10-09): the fresh context gets
+    the whole board, told the logbooks were just written -- not asked what was going on."""
+    root, transcript = _setup(tmp_path)
+    out = json.loads(_run(tmp_path, root, {"source": "clear", "session_id": "s2",
+                                           "transcript_path": str(transcript)}))
+    ctx = out["hookSpecificOutput"]["additionalContext"]
+    assert "/clear" in ctx and "WHOLE board" in ctx and "billing" in ctx
+    startup = json.loads(_run(tmp_path, root, {"source": "startup", "session_id": "s3",
+                                               "transcript_path": str(transcript)}))
+    assert "/clear" not in startup["hookSpecificOutput"]["additionalContext"]
+
+
 def test_sessionstart_fires_on_compaction_in_both_installs():
     """No matcher on SessionStart, in the plugin's hooks.json and in what the installer
     writes: a matcher such as "startup" would silently drop the compact case."""

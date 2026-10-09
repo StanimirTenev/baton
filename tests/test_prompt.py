@@ -130,11 +130,13 @@ def _say(root: Path, transcript: Path, session: str = "s1", prompt: str = "hello
                                           "transcript_path": str(transcript)}))
 
 
-def test_a_long_session_shows_the_human_a_restart_line(tmp_path):
+def test_a_long_session_shows_the_human_a_clear_line(tmp_path):
+    """/clear in the same window, not a restart (2026-10-09)."""
     t = _transcript(tmp_path / "t.jsonl", (250_000, False))
     out = json.loads(_say(tmp_path, t))
-    assert "250k" in out["systemMessage"] and "restart" in out["systemMessage"]
-    assert "logbook" in out["hookSpecificOutput"]["additionalContext"]
+    assert "250k" in out["systemMessage"] and "/clear" in out["systemMessage"]
+    ctx = out["hookSpecificOutput"]["additionalContext"]
+    assert "logbook" in ctx and "/clear" in ctx and "new session" not in out["systemMessage"]
 
 
 def test_a_short_session_is_silent(tmp_path):

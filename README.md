@@ -13,7 +13,7 @@ note-taking.
 Baton makes the note-taking structural instead of voluntary. Every task gets a folder, the
 folder holds a `LOGBOOK.md`, and two hooks make sure the logbook is read at the start and
 written at the end. Two more help in between: one brings up a task's record when a message
-names it (and suggests a restart when the session grows long), one flags an empty read result
+names it (and, when the session grows long, has the logbooks written and suggests `/clear`), one flags an empty read result
 before it turns into "it is not there". The hooks are executed by the harness, not by the
 agent's judgement, and they make no network requests (see *What Baton sends over the network*).
 
@@ -275,8 +275,11 @@ Two hooks hold the checkable half of it, so it does not depend on the agent reme
   blocks a message.
   The same hook watches the length of the session: every message re-sends the whole context,
   so a long session eats the usage limit. From ~200k tokens of context (read from the last
-  answer's `usage` in the transcript) it shows the human one line — write the logbook and
-  restart — and again every +100k; after `/compact` it starts over. Set `restart_at` /
+  answer's `usage` in the transcript) it has the agent write the logbook of every task touched
+  and shows the human one line — type `/clear` — and again every +100k; after `/clear` or
+  `/compact` it starts over. `/clear` keeps the window: SessionStart sees `source: "clear"` and
+  brings the board back, told the logbooks were just written. No hook can run `/clear` itself
+  (Claude Code issues #35150 and #16659, closed as not planned), so it costs one command. Set `restart_at` /
   `restart_step` in `baton.local.json` (or `BATON_RESTART_AT` / `BATON_RESTART_STEP`);
   `restart_at: 0` turns it off.
 - **Stop**: a task worked on now whose header has no `kriterii_zavarshvane` hands the turn back
@@ -1212,6 +1215,18 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.13.0** — `/clear` instead of a restart
+
+- **A long session no longer asks to be restarted.** From ~200k tokens Baton used to say "write
+  the logbook and restart"; with work at that pace it came every hour, and quitting and relaunching
+  Claude Code each time was too much (stenly, 9 October). Now the agent writes the logbook of every
+  task touched in the session first, then asks for `/clear` in the same window. The fresh context
+  gets the board, with a line saying the context was cleared on purpose and the logbooks were just
+  written. Before building it, the tools that already do this were surveyed (Continuous-Claude,
+  cc-sessions and others): all of them stop at the same place, one command typed by the human,
+  because no hook can run `/clear`. Not claimed: that nothing is lost -- what the agent did not put
+  in a logbook is gone after `/clear`, as it was after a restart.
 
 **v3.12.3** — L1 compares a heading with the save time
 

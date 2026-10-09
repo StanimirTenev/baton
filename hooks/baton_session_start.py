@@ -156,7 +156,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.12.3"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.13.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -1184,6 +1184,13 @@ def _notices_only(notices: list[str], line: str | None = None) -> int:
 
 COMPACT_LINE = "🧭 Baton: context compacted -- the agent writes the logbook before going on."
 
+CLEARED = ("Baton: the human typed /clear to continue with a fresh context -- the previous "
+           "conversation is gone from it, and Baton asked for the logbooks to be written just "
+           "before. Do not ask what was being done: the board below and each task's logbook "
+           "hold it. Show the board as usual; the tasks touched most recently are the ones "
+           "they were working on, so read the top entry of those logbooks before the human's "
+           "next request.")
+
 
 def compacted(own: dict) -> str:
     """What the agent is told right after compaction (SessionStart, `source: "compact"`).
@@ -1241,6 +1248,7 @@ def main() -> int:
     own = _own_session()          # stdin is read once; everything below gets it from here
     if own.get("source") == "compact":
         return _emit(compacted(own), COMPACT_LINE)
+    cleared = own.get("source") == "clear"
     root, name = config()
     notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),
                            review_notice()) if n]
@@ -1408,7 +1416,8 @@ def main() -> int:
         + "\n\n".join(blocks + notices)
     )
     context = (
-        SHOW_BOARD
+        (CLEARED + "\n\n" if cleared else "")
+        + SHOW_BOARD
         + "\n\n" + summary
         + f"\n\nBefore working on one, read its {name} (the record of earlier sessions; "
         f"the front-matter header on top carries the current state). After working, add a new entry "

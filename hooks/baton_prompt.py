@@ -275,13 +275,21 @@ def main() -> int:
     if restart:
         # Plain stdout reaches only the agent; the human sees `systemMessage`.
         k = round(tokens / 1000)
+        # /clear, not a restart (2026-10-09): quitting and relaunching every hour was too
+        # much. No hook can run /clear itself (claude-code #35150, #16659: not planned), so
+        # the logbooks are written first and the human types one command in the same window;
+        # SessionStart with `source: "clear"` then hands the fresh context the board.
         lines.append(f"Baton: this session is at ~{k}k tokens of context, and every message "
-                     "re-sends all of it -- that is what eats the usage limit. Tell the human so "
-                     "in their language, in one line, and suggest a restart: finish this turn, "
-                     "write the logbook entry of every task touched so nothing is lost, then they "
-                     "start a new session (or /compact).")
+                     "re-sends all of it -- that is what eats the usage limit. Finish this turn, "
+                     "then, before your reply ends, write the logbook entry of every task "
+                     "touched in this session that its logbook does not yet record -- decisions "
+                     "and conversations count, not only files -- so nothing lives only in this "
+                     "context. Then tell the human in their language, in one line: the logbooks "
+                     "are written; type /clear to continue in this window with a fresh context, "
+                     "Baton brings the tasks back. No need to quit or start a new session.")
         out = json.dumps({"systemMessage": f"Baton: ~{k}k tokens in this session -- every message "
-                                           "re-sends them. Time to write the logbook and restart.",
+                                           "re-sends them. Once the logbooks are written, type "
+                                           "/clear -- Baton brings the tasks back.",
                           "hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                                  "additionalContext": "\n".join(lines)}},
                          ensure_ascii=False)
