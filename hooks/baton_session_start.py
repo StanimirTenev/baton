@@ -156,7 +156,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.13.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.14.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -1154,10 +1154,17 @@ def plugin_rules() -> str | None:
             + re.sub(r"`/(baton-[a-z-]+)`", lambda m: f"`{command(m.group(1))}`", text))
 
 
-def _emit(context: str | None, line: str | None = None) -> int:
+def _marked(block: str, text: str | None) -> str | None:
+    """A fixed first line naming the block, so a tool that attributes context to its source
+    can tell the board (grows with the tasks) from the rules (fixed) -- asked for 2026-10-10."""
+    return f"[baton:{block} v{BATON_VERSION}]\n{text}" if text else None
+
+
+def _emit(context: str | None, line: str | None = None, block: str = "board") -> int:
     """The one way out: the agent's context (plus the rules in plugin mode) and the one line
     the human sees."""
-    text = "\n\n".join(t for t in (context, plugin_rules()) if t)
+    text = "\n\n".join(t for t in (_marked(block, context), _marked("rules", plugin_rules()))
+                       if t)
     out: dict = {}
     if line:
         out["systemMessage"] = line
@@ -1243,11 +1250,11 @@ def main() -> int:
         # Not _emit(): the rules already come from the installer's CLAUDE.md.
         _write({"systemMessage": start_line(twice=True),
                 "hookSpecificOutput": {"hookEventName": "SessionStart",
-                                       "additionalContext": twice_message()}})
+                                       "additionalContext": _marked("twice", twice_message())}})
         return 0
     own = _own_session()          # stdin is read once; everything below gets it from here
     if own.get("source") == "compact":
-        return _emit(compacted(own), COMPACT_LINE)
+        return _emit(compacted(own), COMPACT_LINE, block="compact")
     cleared = own.get("source") == "clear"
     root, name = config()
     notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),

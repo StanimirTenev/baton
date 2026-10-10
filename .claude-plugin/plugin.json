@@ -1,7 +1,7 @@
 {
   "name": "baton",
   "displayName": "Baton",
-  "version": "3.13.0",
+  "version": "3.14.0",
   "description": "Persistent memory for long-running work: tasks, decisions and next steps survive between Claude Code sessions. Runs in Claude Code (terminal, IDE, the desktop app's Code tab); in a claude.ai chat the hooks do not load. Every task is a folder with a logbook, and four local hooks keep it that way: a session opens on the board of what is whose move, a turn that leaves this session's work unrecorded is handed back, a message that names a task brings up its record (and a long session is told to restart, from its transcript's token count), and an empty read result is flagged before it becomes \"it is not there\". The hooks make no network requests.",
   "icon": "./icon.png",
   "author": {

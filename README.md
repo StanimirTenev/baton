@@ -338,6 +338,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
+[baton:board v3.14.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1215,6 +1216,16 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.14.0** — every injected block names itself
+
+- **What Baton puts into the context at session start can be attributed to Baton.** A tool that
+  splits a session's context by source asked for it (10 October): context a hook injects lands in
+  the turn totals with no label. One SessionStart hook injects up to two blocks that behave
+  differently -- the board grows with the tasks, the rules (plugin installs only) stay fixed -- so
+  each now opens with a plain first line: `[baton:board vX]`, `[baton:rules vX]`, and
+  `[baton:compact vX]` after compaction. About 25 characters each. Not changed: what the blocks
+  say, or the UserPromptSubmit and Stop hooks, which carry no marker.
 
 **v3.13.0** — `/clear` instead of a restart
 
