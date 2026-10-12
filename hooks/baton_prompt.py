@@ -134,7 +134,14 @@ def _word_matches(alias_word: str, prompt_words: list) -> bool:
     most three letters (шина -> шината), so `jev` still does not fire on `jewelry` and `rsa` not
     on `rsasomething`. A long word: all of it but its ending (`_stem`: страницата -> страниц),
     then an ending of up to five letters (-овете). 2026-10-12: the first five letters alone let
-    the alias `рестак` fire on `рестартирам` -- 41 of its 43 matches in a replay of real prompts."""
+    the alias `рестак` fire on `рестартирам` -- 41 of its 43 matches in a replay of real prompts.
+    A Latin word is English and takes only -s, -es, -y -> -ies; the prefix let `sec` fire on
+    `second` and `bot` on `both` (every English false match in that replay, read one by one)."""
+    if alias_word.isascii():
+        forms = {alias_word, alias_word + "s", alias_word + "es"}
+        if alias_word.endswith("y"):
+            forms.add(alias_word[:-1] + "ies")
+        return any(w in forms for w in prompt_words)
     if len(alias_word) >= 5:
         stem = _stem(alias_word)
         return any(w.startswith(stem) and len(w) - len(stem) <= 5 for w in prompt_words)

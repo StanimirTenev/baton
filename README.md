@@ -271,7 +271,8 @@ Two hooks hold the checkable half of it, so it does not depend on the agent reme
 - **UserPromptSubmit** (`baton_prompt.py`): a message that names a task — its folder, or one of
   the `aliases` in its header, in any alphabet, meeting endings halfway (`скенер` finds
   `скенера`, `страницата` finds `страници`; a long alias keeps all of itself but its ending, so
-  `рестак` does not find `рестартирам`) — gets that task's last entry and next step put in front of the agent, with
+  `рестак` does not find `рестартирам`; a Latin alias takes only -s, -es, -y -> -ies, so `bot`
+  does not find `both`) — gets that task's last entry and next step put in front of the agent, with
   "read the logbook first". Once per task per session; silent when nothing is named; never
   blocks a message.
   The same hook watches the length of the session: every message re-sends the whole context,
@@ -339,7 +340,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.14.2]
+[baton:board v3.14.3]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1218,6 +1219,19 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.14.3** — a Latin alias matches only itself and its plural
+
+- **"both" stopped opening the trading bots' logbook.** Ilya Gorban suggested deduplicating the
+  fires to distinct triggers and reading those. Over the same 1,784 human prompts: 152 distinct
+  triggers, 83 of which matched only through the prefix. Read one by one, 10 were wrong, and every
+  English one came from the prefix: `sec` on `second`, `sector`, `secure`; `bot` on `both`;
+  `crypto` on `cryptoscan`; `directory` on `director`. A Latin alias word now matches itself or
+  its English plural (-s, -es, -y -> -ies) and nothing else. Over the replay, those 7 triggers
+  went and no other changed. Each word is a pinned test case. **What it costs:** other English
+  forms (`deployed` for `deploy`) and a Bulgarian alias written in Latin letters with an ending
+  no longer match -- add the form as an alias. Cyrillic aliases are unchanged; the 3 wrong
+  Cyrillic triggers of that replay (`пост` on `построй`) are not fixed here.
 
 **v3.14.2** — a task alias no longer matches a different word that starts the same
 

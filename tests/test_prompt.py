@@ -196,3 +196,19 @@ def test_a_long_alias_written_with_its_article_still_meets_the_endings(tmp_path)
     _task(tmp_path, "funding", aliases="финансиране")
     out = _run(tmp_path, "направи страници и после финансираме", session="a")
     assert "free-report" in out and "funding" in out
+
+
+def test_a_latin_alias_matches_only_itself_or_its_plural(tmp_path):
+    """Replay of 1,784 human prompts, 2026-10-12, read trigger by trigger (Ilya Gorban's method):
+    all English false matches came from the prefix -- `sec` on second, `bot` on both, `crypto` on
+    cryptoscan, `directory` on director. English needs only -s, -es or -y -> -ies."""
+    _task(tmp_path, "sec", aliases="sec")
+    _task(tmp_path, "bots", aliases="bot")
+    _task(tmp_path, "crypto", aliases="crypto")
+    _task(tmp_path, "dirs", aliases="directory")
+    for i, text in enumerate(("the second layer", "per sector", "a secure channel", "both sides",
+                              "cryptobom and cryptoscan", "Research Center (Director)")):
+        assert _run(tmp_path, text, session=f"n{i}").strip() == "", text
+    for i, (text, task) in enumerate((("the secs", "sec"), ("two bots", "bots"),
+                                      ("crypto again", "crypto"), ("the directories", "dirs"))):
+        assert task in _run(tmp_path, text, session=f"p{i}"), text
