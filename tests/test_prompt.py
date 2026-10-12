@@ -176,3 +176,23 @@ def test_a_task_line_rides_along_with_the_restart(tmp_path):
     t = _transcript(tmp_path / "t.jsonl", (230_000, False))
     out = json.loads(_say(tmp_path, t, prompt="what about qrp-kachestvo?"))
     assert "qrp-kachestvo" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_a_long_alias_does_not_match_a_different_word_that_starts_the_same(tmp_path):
+    """Replay of 1,784 human prompts, 2026-10-12: the alias `рестак` (a grant called Restack)
+    matched 43 times, 41 of them the Bulgarian for restart -- the first five letters are the
+    same. These are every word that did it; each stays a case."""
+    _task(tmp_path, "nlnet-restack", aliases="nlnet, рестак")
+    for i, word in enumerate(("рестартирам", "рестартираме", "рестартирах", "рестарт",
+                              "рестартиран", "рестартира", "рестартирай")):
+        assert "nlnet-restack" not in _run(tmp_path, f"запиши всичко, {word} сесията", session=f"r{i}"), word
+    assert "nlnet-restack" in _run(tmp_path, "рестака ще го подаваме", session="ok")
+
+
+def test_a_long_alias_written_with_its_article_still_meets_the_endings(tmp_path):
+    """The other side of the stricter rule: an alias is often written with the article or -ане,
+    and the message carries another ending."""
+    _task(tmp_path, "free-report", aliases="страницата")
+    _task(tmp_path, "funding", aliases="финансиране")
+    out = _run(tmp_path, "направи страници и после финансираме", session="a")
+    assert "free-report" in out and "funding" in out

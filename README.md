@@ -270,7 +270,8 @@ outward (large → `/baton-plan`).
 Two hooks hold the checkable half of it, so it does not depend on the agent remembering:
 - **UserPromptSubmit** (`baton_prompt.py`): a message that names a task — its folder, or one of
   the `aliases` in its header, in any alphabet, meeting endings halfway (`скенер` finds
-  `скенера`) — gets that task's last entry and next step put in front of the agent, with
+  `скенера`, `страницата` finds `страници`; a long alias keeps all of itself but its ending, so
+  `рестак` does not find `рестартирам`) — gets that task's last entry and next step put in front of the agent, with
   "read the logbook first". Once per task per session; silent when nothing is named; never
   blocks a message.
   The same hook watches the length of the session: every message re-sends the whole context,
@@ -338,7 +339,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.14.1]
+[baton:board v3.14.2]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1217,6 +1218,21 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.14.2** — a task alias no longer matches a different word that starts the same
+
+- **"I restarted" stopped opening the grant application's logbook.** The prompt hook matched a
+  long alias word on its first five letters, to meet Bulgarian endings halfway. The alias
+  `рестак` (a grant called Restack) and `рестартирам` ("I restart") share five. Replaying 1,784
+  human prompts from 48 transcripts (turns no human typed -- compaction summaries, injected and
+  meta turns -- taken out first, as Ilya Gorban advised): that alias matched 43 times, 41 of
+  them a restart. Now a long alias keeps all of itself but its ending (an article, -ане, a final
+  vowel: `страницата` -> `страниц`) and takes an ending of up to five letters. Every word that
+  made the false match is a pinned test case. Over the same prompts, task matches went from 744
+  to 602 and none was added. Most removed ones were wrong (`quantum` for `quantumreadiness`,
+  `cryptographic` for `crypto`, `financial` for `finansirane`). **What it costs:** a spelling
+  variant (`виндоус` for `виндовс`), a typo, and a verb from a noun alias (`коментираме` for
+  `коментар`) no longer match -- add the variant as an alias.
 
 **v3.14.1** — L2 no longer fires on a logbook written through a heredoc
 

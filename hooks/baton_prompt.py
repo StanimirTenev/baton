@@ -36,6 +36,7 @@ RESTART_AT = 200_000      # tokens of context at which a restart is first sugges
 RESTART_STEP = 100_000    # and again every this many more
 TAIL_BYTES = 4 * 1024 * 1024
 _WORD = re.compile(r"\w+", re.UNICODE)
+_VOWELS = set("аеиоуъюяѝaeiouy")
 
 
 def _local_file(name: str) -> Path:
@@ -114,12 +115,29 @@ def names_of(folder: Path, head: dict) -> list[str]:
     return [folder.name] + [a for a in aliases if a]
 
 
+# Endings an alias is often written with: the article (страницата, паметта) and -ане, whose
+# verb takes another ending (финансиране -> финансираме).
+_ENDINGS = ("ането", "ане", "ене", "ата", "ята", "ото", "ето", "ите", "ете",
+            "та", "то", "те", "ът", "ят")
+
+
+def _stem(word: str) -> str:
+    for ending in _ENDINGS:
+        if word.endswith(ending) and len(word) - len(ending) >= 5:
+            word = word[:-len(ending)]
+            break
+    return word[:-1] if word[-1] in _VOWELS and len(word) > 5 else word
+
+
 def _word_matches(alias_word: str, prompt_words: list) -> bool:
-    """Meet the ending halfway. A long word: the same first five letters. A short one:
-    a prompt word that starts with it and adds at most three letters (шина -> шината),
-    so `jev` still does not fire on `jewelry` and `rsa` not on `rsasomething`."""
+    """Meet the ending halfway. A short word: a prompt word that starts with it and adds at
+    most three letters (шина -> шината), so `jev` still does not fire on `jewelry` and `rsa` not
+    on `rsasomething`. A long word: all of it but its ending (`_stem`: страницата -> страниц),
+    then an ending of up to five letters (-овете). 2026-10-12: the first five letters alone let
+    the alias `рестак` fire on `рестартирам` -- 41 of its 43 matches in a replay of real prompts."""
     if len(alias_word) >= 5:
-        return any(w[:5] == alias_word[:5] for w in prompt_words if len(w) >= 5)
+        stem = _stem(alias_word)
+        return any(w.startswith(stem) and len(w) - len(stem) <= 5 for w in prompt_words)
     return any(w.startswith(alias_word) and len(w) - len(alias_word) <= 3 for w in prompt_words)
 
 
