@@ -338,7 +338,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.14.0]
+[baton:board v3.14.1]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -689,7 +689,8 @@ the situation arose, `caught` when the mistake happened. The counters are in
 - **L2 — an empty result is a failed read** (`baton_batch.py`, PostToolBatch). After a read —
   web, a shell command that searches or fetches, or an MCP tool whose name says it reads
   (`search`, `query`, `get`, `list`, `read`, `fetch`…, and no `create`/`update`/`delete`…;
-  a name that says neither is left alone) — returns nothing, one line reaches
+  a name that says neither is left alone; in a shell command the body of a heredoc is text being
+  written, not the command, and is not searched) — returns nothing, one line reaches
   the agent before its next sentence: name the check that would have found it before saying
   something is absent. At most once every 30 minutes; counted every time.
 
@@ -1216,6 +1217,19 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.14.1** — L2 no longer fires on a logbook written through a heredoc
+
+- **Writes stopped counting as empty reads.** Lesson L2 decided a shell command was a read when a
+  read verb (`grep`, `gh`, `curl`…) appeared anywhere in it, including the body of a heredoc. A
+  logbook entry written with `python3 - <<'EOF'` that mentioned grep printed nothing, and L2 took
+  it for an empty read. Found by replaying 9,908 recorded Bash calls from 48 transcripts through
+  the classifier (method suggested by Ilya Gorban, 12 October), starting with a known positive:
+  **28 of 120 fires** were such writes. With the fix the same replay gives 92, and every removed
+  fire has a heredoc. Not changed: a read verb outside the body (`cat <<'EOF' | grep x`) still
+  counts. Not claimed: that the other 92 are all real reads -- a `sed` script or a quoted string
+  that contains a verb fires the same way and is not handled here. The `fired` counter on
+  existing installs keeps the old fires.
 
 **v3.14.0** — every injected block names itself
 

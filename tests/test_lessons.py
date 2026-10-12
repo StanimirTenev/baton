@@ -201,3 +201,28 @@ def test_l2_an_mcp_read_that_answers_empty_still_speaks(tmp_path):
         env = _env(tmp_path / tool, tmp_path / tool / "tasks")
         env["BATON_LESSONS_STATE"] = str(tmp_path / tool / "lessons.json")
         assert "L2" in json.dumps(_batch(env, [_call(tool, "[]")]), ensure_ascii=False), tool
+
+
+def test_l2_a_read_verb_inside_a_heredoc_body_is_text_not_a_read(tmp_path):
+    """Replay of 9,908 Bash calls from 48 transcripts, 2026-10-12: at least 28 of L2's 120
+    fires were writes -- a logbook entry written through a heredoc that mentions grep or gh.
+    The verb was in the text being written, not in the command."""
+    writes = ("python3 - <<'EOF'\np='DNEVNIK.md'\ns='checked with grep and gh'\nEOF",
+              "cd notes && cat > entry.md <<EOF\nfetched it with curl, found nothing\nEOF",
+              'python3 - <<"END"\nprint("search")\nEND',
+              "cat > a.txt <<-EOF\n\tls showed it\n\tEOF")
+    for i, command in enumerate(writes):
+        env = _env(tmp_path / str(i), tmp_path / str(i) / "tasks")
+        env["BATON_LESSONS_STATE"] = str(tmp_path / str(i) / "lessons.json")
+        assert _batch(env, [_call("Bash", "(Bash completed with no output)", command)]) == {}, command
+        assert not (_state(env).get("L2") or {}).get("fired_dates"), f"counted: {command!r}"
+
+
+def test_l2_a_read_next_to_a_heredoc_still_speaks(tmp_path):
+    """The verb outside the body still makes it a read."""
+    for i, command in enumerate(("cat <<'EOF' | grep -c missing\nabc\nEOF",
+                                 "python3 - <<'EOF'\nprint(1)\nEOF\ngrep -rn Featured page.html")):
+        env = _env(tmp_path / str(i), tmp_path / str(i) / "tasks")
+        env["BATON_LESSONS_STATE"] = str(tmp_path / str(i) / "lessons.json")
+        out = _batch(env, [_call("Bash", "0" if "-c" in command else "", command)])
+        assert "lesson L2" in json.dumps(out), command

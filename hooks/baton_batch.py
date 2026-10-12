@@ -27,6 +27,10 @@ SHOW_EVERY_MINUTES = 30
 READ_VERBS = re.compile(
     r"\b(grep|rg|find|findstr|select-string|curl|wget|jq|gh|search|eval|text|dir|ls|"
     r"get-childitem|test-path)\b", re.I)
+# The body of a heredoc is text the command carries, not the command. 2026-10-12, a replay of
+# 9,908 recorded Bash calls: at least 28 of L2's 120 fires were logbook entries written through
+# a heredoc that mentioned grep or gh.
+HEREDOC_BODY = re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*)\n.*?\n[ \t]*\3[ \t]*(?=\n|$)", re.S)
 EMPTY = {"", "[]", "{}", '""', "''", "0", "null", "none", "(bash completed with no output)",
          "(no output)", "no matches found", "no files found"}
 
@@ -60,7 +64,8 @@ def is_read(call: dict) -> bool:
         words = set(re.split(r"[_\-]+", tool.rsplit("__", 1)[-1].lower()))
         return bool(words & MCP_READ) and not words & MCP_WRITE
     if tool in ("Bash", "PowerShell"):
-        return bool(READ_VERBS.search(str((call.get("tool_input") or {}).get("command", ""))))
+        command = HEREDOC_BODY.sub(r"\1", str((call.get("tool_input") or {}).get("command", "")))
+        return bool(READ_VERBS.search(command))
     return False
 
 
