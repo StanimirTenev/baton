@@ -340,7 +340,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.14.3]
+[baton:board v3.15.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1219,6 +1219,18 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.15.0** — a review says what it did not read
+
+- **Seven of ten no longer looks like ten.** Since v3.12.1 a review that read nothing stops with
+  BLOCKED and names its configuration file with a hash. Abhillash Jadhav pointed out the half that
+  left open: pointed at ten logbooks and reading seven, the hash matches, the input is smaller, and
+  the output looks whole. `--tasks` skipped a folder without the logbook in silence. Both modes now
+  end with an account -- `ACCOUNT: 10 task folders expected -- 7 reviewed, 1 held, 2 not read` --
+  and name each one not read with the reason (`no DNEVNIK.md`, `no header`, `no file`), because a
+  bare count lets a renamed folder and a deleted one look the same. **What it does not do:** a
+  partial run still exits 0; whether seven of ten should be BLOCKED is left open, and a folder that
+  was never meant to hold a logbook is named like one whose logbook went missing.
 
 **v3.14.3** — a Latin alias matches only itself and its plural
 

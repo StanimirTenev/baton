@@ -103,3 +103,33 @@ def test_no_config_file_says_so_instead_of_naming_one(tmp_path):
                 "BATON_REVIEW_CONFIDENTIAL": ""})
     out = _run(env, "--tasks").stdout
     assert "no config file" in out, out
+
+
+def test_a_partial_review_names_what_it_did_not_read(tmp_path):
+    """Seven of ten is not zero, so BLOCKED does not fire -- and the output looked whole
+    (Abhillash Jadhav, 2026-10-17). The run now says how many it was pointed at, how
+    many it read, and names each one it did not, with the reason."""
+    tasks = tmp_path / "tasks"
+    for name, text in (("held", "---\nnext: x\n---\n## entry secretword\n"),
+                       ("bare", "## entry without a header\n")):
+        (tasks / name).mkdir(parents=True)
+        (tasks / name / "DNEVNIK.md").write_text(text, encoding="utf-8")
+    (tasks / "renamed").mkdir()
+    (tasks / "renamed" / "LOGBOOK-old.md").write_text("x", encoding="utf-8")
+    (tmp_path / "INDEX.md").write_text("", encoding="utf-8")
+    env = _home(tmp_path, {"home": str(tasks), "logbook": "DNEVNIK.md",
+                           "review_index": str(tmp_path / "INDEX.md"),
+                           "review_confidential": ["secretword"]})
+    out = _run(env, "--tasks").stdout
+    assert "ACCOUNT: 3 task folders expected -- 0 reviewed, 1 held, 2 not read" in out, out
+    assert "not read: bare (no header)" in out, out
+    assert "not read: renamed (no DNEVNIK.md)" in out, out
+
+
+def test_stale_names_a_pointer_whose_file_is_gone(tmp_path):
+    (tmp_path / "INDEX.md").write_text("- [Row](missing.md) — a claim\n", encoding="utf-8")
+    env = _home(tmp_path, {"review_index": str(tmp_path / "INDEX.md"),
+                           "review_confidential": []})
+    out = _run(env, "--stale").stdout
+    assert "ACCOUNT: 1 pointers expected -- 0 reviewed, 0 held, 1 not read" in out, out
+    assert "not read: missing.md (no file)" in out, out

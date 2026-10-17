@@ -223,6 +223,20 @@ def blocked_if_empty(examined: int, held: int, what: str, cfg: dict) -> None:
              f"home: {cfg.get('home')}  logbook: {cfg.get('logbook')}  index: {cfg.get('index')}")
 
 
+def account(expected: int, examined: int, held: list, missing: list, what: str) -> None:
+    """What the run was pointed at against what it read, the gap named.
+
+    BLOCKED catches zero. It said nothing when ten were expected and seven read: the
+    config hash matches, the input is smaller, and the output looks whole (Abhillash
+    Jadhav, 17.10.2026). A count alone would let a renamed folder and a deleted one look
+    the same, so each one not read is named with the reason.
+    """
+    print(f"\nACCOUNT: {expected} {what} expected -- {examined} reviewed, {len(held)} held, "
+          f"{len(missing)} not read")
+    for name, reason in missing:
+        print(f"  ⚠️ not read: {name} ({reason})")
+
+
 def get_api_key() -> str:
     """Only the key given to Baton: the one `baton_key.py` stored in ~/.config/baton/env.
     Not the environment, not another tool's file -- a key that is merely present on the
@@ -460,14 +474,17 @@ def stale(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     shortlist = Path(cfg["shortlist"]).expanduser() if cfg.get("shortlist") else None
     words, root = cfg["confidential"], index_file.parent
     results, spent, held, sent = [], 0.0, [], 0
+    expected, missing = 0, []
     print(config_line(cfg))
     try:
         for pointer, target in pointers(index_file, shortlist):
             if izbrani and not any(part in target for part in izbrani):
                 continue
+            expected += 1
             body, whole = detail(root, target, EXTRACT_CHARS)
             if not body:
                 print(f"  ⚠️ no file — {target}")
+                missing.append((target, "no file"))
                 continue
             body = extract(whole, pointer)
             state = (f"INDEX LINE (a pointer in an index):\n{pointer}\n\n"
@@ -513,6 +530,7 @@ def stale(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     if not flagged:
         print("  (none)")
     print(f"\ncost: ${spent:.6f}")
+    account(expected, len(results), held, missing, "pointers")
     blocked_if_empty(len(results), len(held), "pointers", cfg)
 
 
@@ -526,20 +544,26 @@ def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     logbook_name = cfg["logbook"]
     words = cfg["confidential"]
     results, spent, held, sent = [], 0.0, [], 0
+    expected, missing = 0, []
     print(config_line(cfg))
     try:
         for folder in sorted(p for p in root.iterdir() if p.is_dir()
                              and not p.name.startswith(".")):
             if izbrani and not any(part in folder.name for part in izbrani):
                 continue
+            expected += 1
             book = folder / logbook_name
             if not book.is_file():
+                # Skipped in silence until 3.15.0: a folder whose logbook was renamed
+                # or deleted simply was not there.
+                missing.append((folder.name, f"no {logbook_name}"))
                 continue
             whole = book.read_text(encoding="utf-8", errors="replace")
             fm = hook.parse_frontmatter(whole)
             claims = {k: v for k, v in fm.items() if k in HEADER_CLAIMS and str(v).strip()}
             if not claims:
                 print(f"  ⚠️ no header — {folder.name}")
+                missing.append((folder.name, "no header"))
                 continue
             body = whole.split("---", 2)[2].strip() if whole.startswith("---") else whole
             pointer = "\n".join(f"{k}: {v}" for k, v in claims.items())
@@ -578,6 +602,7 @@ def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     for value, name in sorted(results, reverse=True):
         print(f"  {'🔴' if value >= THRESHOLD else '  '} {value:.2f}  {name}")
     print(f"\ncost: ${spent:.6f}")
+    account(expected, len(results), held, missing, "task folders")
     blocked_if_empty(len(results), len(held), f"task logbooks ({logbook_name})", cfg)
 
 
