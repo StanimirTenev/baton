@@ -73,6 +73,7 @@ def test_l1_counts_new_entries_and_catches_a_past_hour(tmp_path):
     assert "lesson L1" in reason and "behind the clock" in reason, (
         "an hour typed in the PAST went through the old future-only check unseen")
     assert "baton_entry.py --title" in reason, "the hand-back names the tool, not only the rule"
+    assert str(ENTRY) in reason, "and where it is: an agent's working directory is not the plugin's"
     assert _state(env)["L1"]["fired"] == 2 and _state(env)["L1"]["caught"] == 1
 
     assert "L1" not in _stop(env, tmp_path, 4), "the same entry is not caught twice"
@@ -101,6 +102,30 @@ def test_l1_compares_with_the_save_time_not_the_stop_time(tmp_path):
     for book in tasks.rglob("*.md"):
         os.utime(book, (earlier.timestamp(), earlier.timestamp()))
     assert "L1" not in _stop(env, tmp_path, 2)
+
+
+def test_l1_leaves_an_entry_saved_before_this_session_alone(tmp_path):
+    """2026-10-10 18:58: a session that had touched no task folder was handed two other
+    sessions' entries to correct. An entry saved before this session began is not its
+    entry: remembered as seen, so no later look reports it either, and not counted."""
+    from datetime import timezone
+    tasks = tmp_path / "tasks"
+    env = _env(tmp_path, tasks)
+    now = datetime.now()
+    _book(tasks, f"## {now - timedelta(days=1):%Y-%m-%d %H:%M} — old")
+    _stop(env, tmp_path, 1)
+    book = _book(tasks, f"## {now - timedelta(hours=2):%Y-%m-%d %H:%M} — another session's, typed")
+    saved = (now - timedelta(hours=4)).timestamp()          # two hours off its own save time
+    os.utime(book, (saved, saved))
+    transcript = tmp_path / "t.jsonl"
+    started = datetime.fromtimestamp((now - timedelta(minutes=5)).timestamp(), timezone.utc)
+    transcript.write_text(json.dumps({"type": "user", "timestamp": started.strftime("%Y-%m-%dT%H:%M:%S.000Z")})
+                          + "\n", "utf-8")
+    reason = _run("baton_stop.py", env, {"session_id": "s2", "transcript_path": str(transcript)}
+                  ).get("reason", "")
+    assert "L1" not in reason
+    assert _state(env).get("L1", {}).get("fired", 0) == 0, "not this session's entry: not counted"
+    assert "L1" not in _stop(env, tmp_path, 3), "seen once, it is history for every later look"
 
 
 # -- L2: an empty result from a read, once per half hour, counted every time --------------
