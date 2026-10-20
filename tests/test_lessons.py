@@ -79,6 +79,39 @@ def test_l1_counts_new_entries_and_catches_a_past_hour(tmp_path):
     assert "L1" not in _stop(env, tmp_path, 4), "the same entry is not caught twice"
 
 
+def test_l1_names_the_tool_where_install_sh_left_it(tmp_path):
+    """install.sh copies only the four hooks; tools/ stays in the repository it records as
+    `repo`. The path next to the hooks names a file that is not there (PR #2 follow-up)."""
+    import shutil
+    hookdir = tmp_path / "installed" / "hooks"
+    hookdir.mkdir(parents=True)
+    for name in ("baton_stop.py", "baton_session_start.py"):
+        shutil.copy(HOOKS / name, hookdir / name)
+    tasks = tmp_path / "tasks"
+    env = _env(tmp_path, tasks)
+    now = datetime.now()
+
+    def stop(n):
+        out = subprocess.run([sys.executable, str(hookdir / "baton_stop.py")],
+                             input=json.dumps({"session_id": f"i{n}"}),
+                             capture_output=True, text=True, env=env)
+        assert out.returncode == 0, out.stderr
+        return json.loads(out.stdout).get("reason", "") if out.stdout.strip() else ""
+
+    (hookdir / "baton.local.json").write_text(json.dumps({"repo": str(ROOT)}), "utf-8")
+    _book(tasks, f"## {now - timedelta(days=3):%Y-%m-%d %H:%M} — old")
+    stop(1)
+    _book(tasks, f"## {now - timedelta(hours=2):%Y-%m-%d %H:%M} — typed")
+    reason = stop(2)
+    assert "lesson L1" in reason and str(ENTRY) in reason, "the tool where it actually is"
+    assert str(tmp_path / "installed" / "tools") not in reason, "not a path that does not exist"
+
+    (hookdir / "baton.local.json").write_text("{}", "utf-8")     # repository unknown
+    _book(tasks, f"## {now - timedelta(hours=3):%Y-%m-%d %H:%M} — typed again")
+    reason = stop(3)
+    assert "lesson L1" in reason and str(tmp_path / "installed" / "tools") not in reason
+
+
 def test_l1_within_the_slack_is_quiet(tmp_path):
     tasks = tmp_path / "tasks"
     env = _env(tmp_path, tasks)

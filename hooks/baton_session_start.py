@@ -167,6 +167,17 @@ def _local() -> dict:
         return {}
 
 
+def entry_tool() -> Path | None:
+    """Where tools/baton_entry.py is on this machine, or None. A plugin carries tools/ next
+    to hooks/; install.sh copies only the hooks, and tools/ stays in the repository it
+    recorded as `repo`. An agent's working directory is neither (PR #2)."""
+    repo = _local().get("repo")
+    for base in (Path(__file__).resolve().parent.parent, Path(repo).expanduser() if repo else None):
+        if base is not None and (base / "tools" / "baton_entry.py").is_file():
+            return base / "tools" / "baton_entry.py"
+    return None
+
+
 def _state_file() -> Path:
     return Path(os.environ.get("BATON_SESSION_STATE")
                 or _local_file("baton.state.json"))

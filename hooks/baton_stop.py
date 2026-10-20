@@ -527,7 +527,6 @@ def main() -> int:
     except Exception:
         typed = []            # a lesson that cannot count must not cost the session
     typed = [t for t in typed if not any(t.startswith(f.split(" (")[0] + ":") for f in ahead)]
-    since = session_started(str(payload.get("transcript_path") or ""))
     flagged = {f.split(" (")[0] for f in stale}
     try:
         thin = [h for h in hollow_entries(root, name, since)
@@ -569,14 +568,16 @@ def main() -> int:
         rec = _ss().lessons_load().get("L1", {})
         listed = "\n".join(f"  - {t}" for t in typed)
         # The lesson says "tools/baton_entry.py"; an agent's working directory is not this
-        # plugin's, so the hand-back gives the path that actually runs.
-        tool = Path(__file__).resolve().parent.parent / "tools" / "baton_entry.py"
+        # plugin's, so the hand-back gives the path that actually runs -- when there is one.
+        tool = _ss().entry_tool()
+        where = (f" On this machine that is\n"
+                 f"  python3 \"{tool}\" <logbook> <entry-file> --title \"<title>\"\n"
+                 f"(the entry file holds the body only; the heading is stamped from the clock)."
+                 ) if tool else ""
         parts.append(
             f"Baton, lesson L1 -- a new entry's hour does not match the clock "
             f"({datetime.now():%Y-%m-%d %H:%M}):\n{listed}\n\n"
-            f"{_ss().LESSONS['L1']} On this machine that is\n"
-            f"  python3 \"{tool}\" <logbook> <entry-file> --title \"<title>\"\n"
-            f"(the entry file holds the body only; the heading is stamped from the clock). "
+            f"{_ss().LESSONS['L1']}{where} "
             f"Correct the heading. "
             f"(Counted: caught {rec.get('caught', 0)} of {rec.get('fired', 0)} new entries.)")
     if thin:
