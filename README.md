@@ -340,7 +340,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.15.0]
+[baton:board v3.16.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -373,6 +373,18 @@ so it can block at most once per turn. Older unrecorded work — from a session 
 without its entry — is listed on the board under 📝 instead of stopping every session after
 it. Without a readable transcript Stop falls back to every folder, as before v3.10.1; a resumed
 session counts from its original start.
+
+**An entry that exists is not an entry that says anything.** Since v3.16.0, when this session
+changed a logbook's body, Stop also reads its newest entry and hands the turn back once per entry
+if it looks hollow. It measures two things and judges nothing: the entry has at least three `###`
+sections, each with text, and 200 characters or more; and it names at least one of the files
+saved in the folder this session -- by name, stem, or a folder it sits in -- anywhere in this
+session's entries. A conversation that touched no file is not asked to name one. **What it does
+not catch:** an entry with the right shape that is wrong. A full entry saying a repository was
+public when it was private passes; that one was caught by a person, two hours later. Over the
+logbooks on the author's machine in the ten days before release, seven top entries would have
+been asked about -- short notes without sections; the agent answers in one line when one is
+right as it stands.
 
 ## The task header
 
@@ -1219,6 +1231,18 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.16.0** — an entry written only to pass is asked about
+
+- **One word under a heading passed like a full entry.** Arpana Singh asked under a post about
+  hooks: "How do you handle an agent that writes a low-effort logbook entry just to get past it?"
+  The answer was that nothing did -- Stop compared file times. Now, for a logbook whose body this
+  session changed, Stop reads the newest entry and hands the turn back once per entry when it has
+  fewer than three `###` sections with text, is under 200 characters, or names none of the files
+  saved in the folder this session. Found while building it: a session that wrote three entries
+  named its files in the first, and the third was flagged -- names are now looked for across all
+  of this session's entries. **What it does not do:** judge whether an entry is right. A wrong
+  entry with the right shape passes.
 
 **v3.15.0** — a review says what it did not read
 

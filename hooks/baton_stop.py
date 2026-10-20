@@ -335,6 +335,130 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None) -> list
     return out
 
 
+# An entry that exists is not an entry that says anything. 2026-10-20, a question under a
+# LinkedIn post about hooks: "How do you handle an agent that writes a low-effort logbook
+# entry just to get past it?" Nothing did -- the check above compares file times, so one word
+# under a heading passed exactly like a full entry. Two things a script can measure without
+# judging the text: the entry has its sections, each with something in it, and it names at
+# least one of the files saved in the folder this session. Neither proves it right.
+MIN_SECTIONS = 3
+MIN_ENTRY_CHARS = 200
+MIN_NAME_CHARS = 3
+
+
+def top_entry(text: str) -> tuple[str, str] | None:
+    """The newest dated entry: its heading line and the text up to the next `## `."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if _HEADING.match(line):
+            end = next((k for k in range(i + 1, len(lines)) if lines[k].startswith("## ")),
+                       len(lines))
+            return line, "\n".join(lines[i + 1:end])
+    return None
+
+
+def session_entries(text: str, since: float) -> str:
+    """Every entry at the top headed at or after the session began (an hour of slack: headings
+    are written by people). A session that wrote three entries named its files across all of
+    them -- 2026-10-20, a dry run on real logbooks flagged the third for files the first named."""
+    start = datetime.fromtimestamp(since - 3600)
+    lines, out, keep = text.splitlines(), [], False
+    for line in lines:
+        m = _HEADING.match(line)
+        if m:
+            try:
+                day = datetime.strptime(m.group(1), "%Y-%m-%d")
+            except ValueError:
+                break
+            when = day.replace(hour=int(m.group(2)), minute=int(m.group(3))) if m.group(2) \
+                else day.replace(hour=23, minute=59)
+            if when < start:
+                break
+            keep = True
+        if keep:
+            out.append(line)
+    return "\n".join(out)
+
+
+def touched_since(folder: Path, logbook: str, since: float) -> list[str]:
+    """Work files saved at or after `since` -- the same files `newest_work` looks at."""
+    patterns = ignore_patterns(folder)
+    out = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+        for name in filenames:
+            if name == logbook or name.startswith("."):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), folder)
+            if is_ignored(rel, name, patterns):
+                continue
+            try:
+                if (Path(dirpath) / name).stat().st_mtime >= since:
+                    out.append(rel.replace(os.sep, "/"))
+            except OSError:
+                continue
+    return sorted(out)
+
+
+def _names(rel: str) -> set:
+    """What counts as naming a file: its name, its stem, or a folder it sits in."""
+    p = Path(rel)
+    return {n for n in (p.name, p.stem, *p.parent.parts) if len(n) >= MIN_NAME_CHARS}
+
+
+def hollow(body: str, files: list[str], session_text: str | None = None) -> list[str]:
+    """Why an entry body looks written only to pass. Empty when nothing measurable is wrong.
+    The files may be named anywhere in `session_text` (this session's entries), else in `body`."""
+    reasons = []
+    sections = re.split(r"(?m)^### .*$", body)[1:]
+    filled = sum(1 for s in sections if s.strip())
+    if len(sections) < MIN_SECTIONS or filled < len(sections):
+        reasons.append(f"{filled} section(s) with text, {MIN_SECTIONS} or more expected "
+                       "(what was asked, what was done, the result, what is open)")
+    chars = len("".join(body.split()))
+    if chars < MIN_ENTRY_CHARS:
+        reasons.append(f"{chars} characters, under {MIN_ENTRY_CHARS}")
+    where = session_text if session_text else body
+    if files and not any(n in where for f in files for n in _names(f)):
+        shown = ", ".join(files[:3]) + (", ..." if len(files) > 3 else "")
+        reasons.append(f"names none of the files saved here this session ({shown})")
+    return reasons
+
+
+def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
+    """(folder, heading, reasons) for each logbook whose body this session changed and whose
+    newest entry looks hollow. Without a session start nothing is judged: an old entry is
+    history, and an entry this session did not write is not its debt."""
+    if since is None:
+        return []
+    try:
+        bodies = json.loads(_bodies_path().read_text("utf-8"))
+    except Exception:
+        bodies = {}
+    out = []
+    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        book = folder / name
+        try:
+            saved = book.stat().st_mtime
+            text = book.read_text("utf-8-sig")
+        except OSError:
+            continue
+        if saved < since:
+            continue
+        seen = bodies.get(str(folder))
+        if seen and seen[1] < since and seen[0] == hashlib.sha1(
+                _body(text).encode("utf-8")).hexdigest():
+            continue                          # only the header changed this session
+        top = top_entry(text)
+        if top is None:
+            continue
+        reasons = hollow(top[1], touched_since(folder, name, since),
+                         session_entries(text, since))
+        if reasons:
+            out.append((folder.name, top[0], reasons))
+    return out
+
+
 def _state(session: str) -> Path:
     base = Path(os.environ.get("BATON_STATE_DIR") or tempfile.gettempdir())
     safe = "".join(ch for ch in session if ch.isalnum() or ch in "-_")[:80] or "nosession"
@@ -395,7 +519,14 @@ def main() -> int:
     except Exception:
         typed = []            # a lesson that cannot count must not cost the session
     typed = [t for t in typed if not any(t.startswith(f.split(" (")[0] + ":") for f in ahead)]
-    if not stale and not open_ended and not ahead and not typed:
+    since = session_started(str(payload.get("transcript_path") or ""))
+    flagged = {f.split(" (")[0] for f in stale}
+    try:
+        thin = [h for h in hollow_entries(root, name, since)
+                if h[0] not in flagged and f"hollow:{h[0]}:{h[1]}" not in asked]
+    except Exception:
+        thin = []             # a quality check that cannot read must not cost the session
+    if not stale and not open_ended and not ahead and not typed and not thin:
         return 0
 
     parts = []
@@ -434,6 +565,16 @@ def main() -> int:
             f"({datetime.now():%Y-%m-%d %H:%M}):\n{listed}\n\n"
             f"{_ss().LESSONS['L1']} Correct the heading. "
             f"(Counted: caught {rec.get('caught', 0)} of {rec.get('fired', 0)} new entries.)")
+    if thin:
+        listed = "\n".join(f"  - {f}: \"{h[3:60].strip()}\" -- " + "; ".join(r)
+                           for f, h, r in thin)
+        parts.append(
+            f"Baton: the newest entry in these {name} files looks hollow:\n{listed}\n\n"
+            "A hook can see that an entry exists, not that it is good; these are the two things "
+            "it can measure. Rewrite the entry so the next session can act on it: what was asked, "
+            "what was done (name the files), the result, what is open. If it is right as it "
+            "stands, say so in one line. (Asked once per entry.)")
+        _remember(session, _already_asked(session) | {f"hollow:{f}:{h}" for f, h, _ in thin})
     # UTF-8, not \\uXXXX, and as bytes: a cp1252 pipe on Windows cannot raise (v3.12.0).
     sys.stdout.buffer.write(json.dumps({"decision": "block", "reason": "\n\n".join(parts)},
                                        ensure_ascii=False).encode("utf-8"))
