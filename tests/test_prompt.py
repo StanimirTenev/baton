@@ -212,3 +212,18 @@ def test_a_latin_alias_matches_only_itself_or_its_plural(tmp_path):
     for i, (text, task) in enumerate((("the secs", "sec"), ("two bots", "bots"),
                                       ("crypto again", "crypto"), ("the directories", "dirs"))):
         assert task in _run(tmp_path, text, session=f"p{i}"), text
+
+
+def test_a_short_cyrillic_alias_takes_an_ending_not_any_three_letters(tmp_path):
+    """Replay of the human prompts on the author's machine, 2026-10-20: the alias `пост` (the
+    LinkedIn posts task) matched `построй` twice, `построи` and `пострим` -- a prefix plus up to
+    three letters. Every other short Cyrillic match in that replay was a noun ending (поста 11,
+    постове 7, джефа 22, новата 9, парите, куката, чужди) and each stays a case."""
+    _task(tmp_path, "linkedin-postove", aliases="пост")
+    for i, word in enumerate(("построй", "построи", "пострим")):
+        assert "linkedin-postove" not in _run(tmp_path, f"{word} го отначало", session=f"n{i}"), word
+    for i, word in enumerate(("пост", "поста", "постове", "постът")):
+        assert "linkedin-postove" in _run(tmp_path, f"виж {word} от вчера", session=f"p{i}"), word
+    for alias, word in (("джеф", "джефа"), ("нова", "новата"), ("пари", "парите"),
+                        ("кука", "куката"), ("чужд", "чужди"), ("шина", "шината")):
+        assert bp._word_matches(alias, [word]), (alias, word)

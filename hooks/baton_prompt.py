@@ -121,6 +121,12 @@ _ENDINGS = ("ането", "ане", "ене", "ата", "ята", "ото", "е�
             "та", "то", "те", "ът", "ят")
 
 
+# What a short Cyrillic word may add: a noun's ending, not any three letters. 2026-10-20, a replay
+# of the human prompts here: `пост` matched `построй`, `построи` and `пострим`.
+_SHORT_ENDINGS = ("", "а", "я", "и", "е", "у", "ът", "ят", "та", "то", "те", "ове", "еве",
+                  "ата", "ята", "ите", "овете")
+
+
 def _stem(word: str) -> str:
     for ending in _ENDINGS:
         if word.endswith(ending) and len(word) - len(ending) >= 5:
@@ -130,8 +136,8 @@ def _stem(word: str) -> str:
 
 
 def _word_matches(alias_word: str, prompt_words: list) -> bool:
-    """Meet the ending halfway. A short word: a prompt word that starts with it and adds at
-    most three letters (шина -> шината), so `jev` still does not fire on `jewelry` and `rsa` not
+    """Meet the ending halfway. A short word: a prompt word that starts with it and adds a
+    noun's ending (`_SHORT_ENDINGS`: шина -> шината, not пост -> построй), so `jev` still does not fire on `jewelry` and `rsa` not
     on `rsasomething`. A long word: all of it but its ending (`_stem`: страницата -> страниц),
     then an ending of up to five letters (-овете). 2026-10-12: the first five letters alone let
     the alias `рестак` fire on `рестартирам` -- 41 of its 43 matches in a replay of real prompts.
@@ -145,7 +151,7 @@ def _word_matches(alias_word: str, prompt_words: list) -> bool:
     if len(alias_word) >= 5:
         stem = _stem(alias_word)
         return any(w.startswith(stem) and len(w) - len(stem) <= 5 for w in prompt_words)
-    return any(w.startswith(alias_word) and len(w) - len(alias_word) <= 3 for w in prompt_words)
+    return any(w.startswith(alias_word) and w[len(alias_word):] in _SHORT_ENDINGS for w in prompt_words)
 
 
 def matches(name: str, prompt_text: str, prompt_words: list) -> bool:
