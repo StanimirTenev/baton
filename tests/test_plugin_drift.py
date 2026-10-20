@@ -86,6 +86,18 @@ def test_an_update_this_session_does_not_run_is_said(tmp_path, monkeypatch):
     assert note and "3.17.0" in note and "3.16.0" in note and "restart" in note, note
 
 
+def test_the_same_plugin_from_another_catalog_is_not_an_update(tmp_path, monkeypatch):
+    """Baton recorded under two catalogs (the directory's `baton@synced`, disabled, next to
+    `baton@baton`): the other one is a second install, not an update this session missed."""
+    cfg, run, _ = _machine(tmp_path)
+    other = _copy(cfg / "plugins" / "cache" / "synced" / "baton" / "3.12.0", "3.12.0")
+    records = json.loads((cfg / "plugins" / "installed_plugins.json").read_text("utf-8"))
+    records["plugins"]["baton@synced"] = [{"scope": "user", "installPath": str(other),
+                                           "version": "3.12.0"}]
+    (cfg / "plugins" / "installed_plugins.json").write_text(json.dumps(records), "utf-8")
+    assert _load(run, monkeypatch, cfg, tmp_path).plugin_drift() is None
+
+
 def test_another_catalog_version_is_not_compared_byte_for_byte(tmp_path, monkeypatch):
     """The catalog moved on (3.17.0) and nothing is installed from it yet: different files are
     expected, and whether to update is the human's call, not a drift."""

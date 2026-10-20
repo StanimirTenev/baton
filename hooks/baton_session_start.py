@@ -422,8 +422,8 @@ def plugin_drift() -> str | None:
         paths = [(Path(str(e.get("installPath"))).expanduser().resolve(), e) for e in entries
                  if isinstance(e, dict) and e.get("installPath")]
         if not any(path == root for path, _ in paths):
-            for path, entry in paths:
-                if path.is_dir():
+            for path, entry in paths:       # the same catalog's folder: not a second install
+                if path.parent == root.parent and path.is_dir():
                     return (f"- 🔴 Baton v{entry.get('version')} is installed ({key}), but this "
                             f"session runs v{version} from {root} — the update takes effect "
                             "after a restart of the session")
