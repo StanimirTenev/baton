@@ -386,6 +386,73 @@ def install_drift() -> list[str]:
     return out
 
 
+def _json(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text("utf-8-sig"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def plugin_drift() -> str | None:
+    """As a plugin: the running copy against what Claude Code recorded and the catalog released.
+
+    `install_drift` stood down here, and the plugin is how most people install Baton. Two
+    questions can be answered offline. Did Claude Code install another copy since this session
+    started (installed_plugins.json)? Then `claude plugin update` took effect on disk and not
+    here -- the v2.2.0 failure again. And is the running copy byte-for-byte the catalog's
+    copy (the marketplace clone) of the same version? Whether that clone is the newest
+    release is not answerable without the network, and is not asked.
+    """
+    if not plugin():
+        return None
+    root = Path(os.environ["CLAUDE_PLUGIN_ROOT"]).resolve()
+    plugins = claude_dir() / "plugins"
+    try:
+        root.relative_to((plugins / "cache").resolve())
+    except ValueError:
+        return None                 # not a copy Claude Code installed: nothing recorded to compare
+    own = _json(root / ".claude-plugin" / "plugin.json")
+    name, version = own.get("name") or "baton", str(own.get("version") or "")
+    records = _json(plugins / "installed_plugins.json")
+    records = records.get("plugins", records)
+    for key, entries in records.items():
+        if not key.startswith(name + "@") or not isinstance(entries, list):
+            continue
+        paths = [(Path(str(e.get("installPath"))).expanduser().resolve(), e) for e in entries
+                 if isinstance(e, dict) and e.get("installPath")]
+        if not any(path == root for path, _ in paths):
+            for path, entry in paths:
+                if path.is_dir():
+                    return (f"- 🔴 Baton v{entry.get('version')} is installed ({key}), but this "
+                            f"session runs v{version} from {root} — the update takes effect "
+                            "after a restart of the session")
+            continue
+        place = _json(plugins / "known_marketplaces.json").get(key.split("@", 1)[1]) or {}
+        clone = Path(str(place.get("installLocation") or "")).expanduser()
+        listed = [p for p in _json(clone / ".claude-plugin" / "marketplace.json").get("plugins", [])
+                  if isinstance(p, dict) and p.get("name") == name]
+        source = listed[0].get("source") if listed else None
+        if not place.get("installLocation") or not isinstance(source, str):
+            return None
+        release = (clone / source).resolve()
+        if str(_json(release / ".claude-plugin" / "plugin.json").get("version") or "") != version:
+            return None             # the catalog moved on; whether to update is the human's call
+        differ = []
+        for hook in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py",
+                     "baton_batch.py", "hooks.json"):
+            here, there = root / "hooks" / hook, release / "hooks" / hook
+            try:
+                if here.read_bytes() != there.read_bytes():
+                    differ.append(hook)
+            except OSError:
+                differ.append(f"{hook} (missing)")
+        if differ:
+            return (f"- 🔴 THE RUNNING HOOKS ARE NOT THE RELEASED v{version}: " + ", ".join(differ)
+                    + f" differ from the catalog's copy in {release}")
+    return None
+
+
 def read_head(logbook: Path) -> str:
     try:
         return logbook.read_text(encoding="utf-8-sig", errors="replace")
@@ -1286,6 +1353,9 @@ def main() -> int:
     if drifted:
         stale.append("- 🔴 THE RUNNING HOOKS ARE NOT FROM THE SOURCE: " + ", ".join(drifted)
                      + " — a fix that is not installed does not work, however tagged it is")
+    as_plugin = plugin_drift()
+    if as_plugin:
+        stale.append(as_plugin)
 
     for f in folders:
         lb = f / name

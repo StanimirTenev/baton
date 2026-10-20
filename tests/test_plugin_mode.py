@@ -1,7 +1,8 @@
 """Plugin mode (CLAUDE_PLUGIN_ROOT set): what the installer-era checks must not do there.
 
 - install_drift compares running hooks with a working copy; Claude Code owns the plugin's
-  copy, so there is nothing of ours to drift.
+  copy, so there is nothing of ours to drift. (Since v3.17.0 `plugin_drift` compares that copy
+  with Claude Code's record and the catalog instead -- tests/test_plugin_drift.py.)
 - the weekly GitHub check and its question are the installer's update path; a plugin is
   updated by Claude Code (`claude plugin update`, or auto-update for the marketplace), so
   in plugin mode the hooks make no network request at all.
