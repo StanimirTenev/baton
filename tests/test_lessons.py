@@ -276,6 +276,42 @@ def test_l2_a_read_verb_inside_a_heredoc_body_is_text_not_a_read(tmp_path):
         assert not (_state(env).get("L2") or {}).get("fired_dates"), f"counted: {command!r}"
 
 
+def test_l2_a_read_verb_in_a_script_or_string_the_command_carries_is_text(tmp_path):
+    """Replay of the recorded Bash calls here, 2026-10-20: 9 of L2's 81 fires had their verb only
+    inside quotes. Six were text a command carried -- logbook entries written with `python3 -c`
+    that mention gh, a `printf` of JSON-RPC with a "text" field. The same as a heredoc body."""
+    carried = (
+        "cd ~/zadachi/qrp-mcp; t=$(date '+%Y-%m-%d %H:%M'); python3 -c \"\nimport sys;t=sys.argv[1];"
+        "p='DNEVNIK.md';s=open(p).read()\ne='## '+t+' — PR #58, checked from outside (gh pr diff)'\n"
+        "open(p,'w').write(e+s)\n\" \"$t\"",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"text\":\"x\"}}' "
+        "| timeout 60 qrp-mcp",
+        "sed -i 's/grep -rn/rg -n/' notes.md",
+        "echo \"nothing found by grep\" >> log.txt",
+        "awk '/curl/ {n++} END {print n}' history.txt > count.txt",
+        "python3 -c \"e='\\`gh issue create\\` refused'; open('DNEVNIK.md','a').write(e)\"")
+    for i, command in enumerate(carried):
+        env = _env(tmp_path / str(i), tmp_path / str(i) / "tasks")
+        env["BATON_LESSONS_STATE"] = str(tmp_path / str(i) / "lessons.json")
+        assert _batch(env, [_call("Bash", "(Bash completed with no output)", command)]) == {}, command
+
+
+def test_l2_a_read_handed_to_a_shell_in_quotes_still_speaks(tmp_path):
+    """The other three of those nine were reads: a command in quotes that ssh runs on another
+    machine. A quoted string is text only when the command that carries it does not run it."""
+    reads = (
+        "timeout 25 ssh -o BatchMode=yes stenly@192.168.199.102 'powershell -NoProfile -Command "
+        "\"Get-ChildItem -Path \\\"$env:USERPROFILE\\Desktop\\\" -Directory | Select-Object -ExpandProperty Name\"' 2>&1 | tail -20",
+        "bash -c \"grep -rn Featured page.html\"",
+        "sed -n '1,10p' page.html | grep Featured",
+        "echo \"$(grep -c Featured page.html)\"")
+    for i, command in enumerate(reads):
+        env = _env(tmp_path / str(i), tmp_path / str(i) / "tasks")
+        env["BATON_LESSONS_STATE"] = str(tmp_path / str(i) / "lessons.json")
+        out = _batch(env, [_call("Bash", "(Bash completed with no output)", command)])
+        assert "lesson L2" in json.dumps(out), command
+
+
 def test_l2_a_read_next_to_a_heredoc_still_speaks(tmp_path):
     """The verb outside the body still makes it a read."""
     for i, command in enumerate(("cat <<'EOF' | grep -c missing\nabc\nEOF",

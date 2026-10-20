@@ -31,6 +31,14 @@ READ_VERBS = re.compile(
 # 9,908 recorded Bash calls: at least 28 of L2's 120 fires were logbook entries written through
 # a heredoc that mentioned grep or gh.
 HEREDOC_BODY = re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*)\n.*?\n[ \t]*\3[ \t]*(?=\n|$)", re.S)
+# A quoted script or string handed to a command that only carries it -- a `sed` script, an
+# `echo`, a `python3 -c` body -- is text the same way. 2026-10-20, the same replay: 6 of L2's 81
+# fires had their verb only there. Left alone: quotes another command runs (`ssh host 'ls'`,
+# `bash -c "grep x"`), and a `$( )` inside double quotes, which the shell does run.
+QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"", re.S)
+CARRIER = re.compile(r"(?:^|[|;&(\n])\s*(?:\w+=\S*\s+)*(?:sed|echo|printf|awk|perl|python[\d.]*)\b"
+                     r"[^|;&(\n]*$")
+SUBST = re.compile(r"\$\([^)]*\)|(?<!\\)`[^`]*(?<!\\)`")      # \` is a literal backtick
 EMPTY = {"", "[]", "{}", '""', "''", "0", "null", "none", "(bash completed with no output)",
          "(no output)", "no matches found", "no files found"}
 
@@ -56,6 +64,20 @@ MCP_WRITE = {"create", "update", "delete", "set", "send", "label", "unlabel", "t
              "forward", "apply", "remove", "add", "write", "edit", "respond"}
 
 
+def _carried(command: str) -> str:
+    """The command without the quoted text its sed/echo/printf/awk/perl/python carries."""
+    out, last = [], 0
+    for m in QUOTED.finditer(command):
+        out.append(command[last:m.start()])
+        last = m.end()
+        text = m.group()
+        if CARRIER.search("".join(out)):
+            text = " ".join(SUBST.findall(text)) if text.startswith('"') else ""
+        out.append(text)
+    out.append(command[last:])
+    return "".join(out)
+
+
 def is_read(call: dict) -> bool:
     tool = str(call.get("tool_name", ""))
     if tool in ("WebFetch", "WebSearch", "Grep", "Glob"):
@@ -65,7 +87,7 @@ def is_read(call: dict) -> bool:
         return bool(words & MCP_READ) and not words & MCP_WRITE
     if tool in ("Bash", "PowerShell"):
         command = HEREDOC_BODY.sub(r"\1", str((call.get("tool_input") or {}).get("command", "")))
-        return bool(READ_VERBS.search(command))
+        return bool(READ_VERBS.search(_carried(command)))
     return False
 
 
