@@ -156,7 +156,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.17.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.18.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -200,6 +200,9 @@ LESSONS = {
           "with tools/baton_entry.py --title, which stamps the time itself.",
     "L2": "An empty result is a failed read until a second check shows otherwise: before "
           "saying something is absent, name the check that would have found it.",
+    "L3": "A claim that something is public or private is checked against the source: list it "
+          "under `### Claims to verify` at the top of the entry, and mark it `refuted:` there "
+          "in a later entry if it proves wrong.",
 }
 RECUR_DAYS, RECUR_MIN, RETIRE_DAYS = 14, 2, 60
 

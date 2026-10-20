@@ -467,17 +467,16 @@ def hollow(body: str, files: list[str], session_text: str | None = None) -> list
     return reasons
 
 
-def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
-    """(folder, heading, reasons) for each logbook whose body this session changed and whose
-    newest entry looks hollow. Without a session start nothing is judged: an old entry is
-    history, and an entry this session did not write is not its debt."""
+def _changed_tops(root: Path, name: str, since: float | None):
+    """(folder, text, top entry) for each logbook whose body this session changed. Without a
+    session start nothing: an old entry is history, and one this session did not write is not
+    its debt."""
     if since is None:
-        return []
+        return
     try:
         bodies = json.loads(_bodies_path().read_text("utf-8"))
     except Exception:
         bodies = {}
-    out = []
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
         book = folder / name
         try:
@@ -492,12 +491,138 @@ def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
                 _body(text).encode("utf-8")).hexdigest():
             continue                          # only the header changed this session
         top = top_entry(text)
-        if top is None:
-            continue
+        if top is not None:
+            yield folder, text, top
+
+
+def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
+    """(folder, heading, reasons) for each logbook whose body this session changed and whose
+    newest entry looks hollow."""
+    out = []
+    for folder, text, top in _changed_tops(root, name, since):
         reasons = hollow(top[1], touched_since(folder, name, since),
                          session_entries(text, since))
         if reasons:
             out.append((folder.name, top[0], reasons))
+    return out
+
+
+# Lesson L3: a claim about what is public or private is checked against the source. 2026-10-17
+# 11:20, borsa-analiz: "`gh` says StanimirTenev/market-swarm is PUBLIC" -- private, always had
+# been, and no `gh` output in that session said otherwise; caught by the human two hours later,
+# in an entry the shape check above passes. A reader proposed (20.10) a short "claims to verify"
+# section at the top of an entry, so the human reads the claim, not the prose. Asked for on
+# every entry it would be a form: versions and URLs are in half of all entries, visibility in
+# about one in eight (measured 20.10). So only that. It cannot tell whether the claim is true;
+# it puts the claim where a reader checks it. `caught` is a proven error only: a claim listed
+# in such a section and later marked `refuted:` -- a re-read of a correct claim is not one.
+_VISIBLE = re.compile(r"(?i)(?<![\w-])(public(?:ly)?|private(?:ly)?|публичен|частен|"
+                      r"(?:публичн|частн)(?:о|а|и|ия|ият|ото|ата|ите)?)(?![\w-])")
+# Senses of the word that are not a thing's visibility, and mentions that are not claims:
+# a span of code (`--private-key`, `"visibility":"PRIVATE"` pasted from a tool), a key in
+# cryptography, one word in quotes (the word talked about), and the pair named as a topic
+# (`public/private`). Kept to classes, not phrases: a phrase list is fitted to one machine.
+_CODE = re.compile(r"`[^`\n]*`")
+_KEY = re.compile(r"(?i)(?:public|private)[\s-]+keys?(?![\w-])|(?:публич|част)\w*\s+ключ")
+_QUOTED_WORD = re.compile(r"[„“\"«']\s*\w+\s*[“”\"»']")
+_PAIR = re.compile(r"\w+(?:\s*/\s*\w+)+")
+_CLAIMS = re.compile(r"(?i)^###\s+(?:claims to verify|за проверка)\s*:?\s*$")
+_REFUTED = re.compile(r"(?i)^\s*(?:[-*]\s+)?(?:refuted|оборено)\s*:")
+_SEEN_CAP = 1000
+
+
+def visibility_words(text: str) -> list[str]:
+    """The words in `text` that say something is public or private, as written."""
+    t = _CODE.sub(" ", text)
+    for rx in (_KEY, _QUOTED_WORD):
+        t = rx.sub(lambda m: " " if _VISIBLE.search(m.group(0)) else m.group(0), t)
+    t = _PAIR.sub(lambda m: " " if len(_VISIBLE.findall(m.group(0))) >= 2 else m.group(0), t)
+    return [m.group(1) for m in _VISIBLE.finditer(t)]
+
+
+def _sections(body: str) -> list[tuple[str, list[str]]]:
+    """The `###` sections of an entry body: (heading line, lines under it)."""
+    out = []
+    for line in body.splitlines():
+        if line.startswith("### "):
+            out.append((line.strip(), []))
+        elif out:
+            out[-1][1].append(line)
+    return out
+
+
+def _claims(body: str) -> list[list[str]]:
+    """The lines of each claims section in an entry body."""
+    return [lines for head, lines in _sections(body) if _CLAIMS.match(head)]
+
+
+def claims_first(body: str) -> bool:
+    """The entry opens with a claims section that names something."""
+    secs = _sections(body)
+    return bool(secs) and bool(_CLAIMS.match(secs[0][0])) and any(x.strip() for x in secs[0][1])
+
+
+def visibility_entries(root: Path, name: str, since: float | None) -> list[tuple]:
+    """(folder, heading, words) for each newest entry this session wrote that says something is
+    public or private and does not open with a claims section."""
+    out = []
+    for folder, _text, (heading, body) in _changed_tops(root, name, since):
+        words = visibility_words(heading + "\n" + body)
+        if words and not claims_first(body):
+            out.append((folder.name, heading, list(dict.fromkeys(words))))
+    return out
+
+
+def _all_entries(text: str) -> list[tuple[str, str]]:
+    """Every dated entry, newest first as they stand: (heading, body)."""
+    out = []
+    for part in re.split(r"(?m)^(?=## )", _body(text)):
+        head, _, body = part.partition("\n")
+        if _HEADING.match(head):
+            out.append((head, body))
+    return out
+
+
+def refuted_claims(root: Path, name: str, since: float | None, now: datetime | None = None) -> int:
+    """Count L3 `caught`: a line `refuted: ...` (`оборено: ...`) in a claims section of the
+    newest entry this session wrote, in a logbook where an older entry listed claims. Each line
+    once. Returns how many were new."""
+    ss = _ss()
+    state = ss.lessons_load()
+    seen = state.setdefault("L3_refuted", [])
+    new = 0
+    for folder, text, (heading, body) in _changed_tops(root, name, since):
+        older = _all_entries(text)[1:]
+        if not any(_claims(b) for _h, b in older):
+            continue
+        for lines in _claims(body):
+            for line in lines:
+                key = f"{folder}|{heading}|{line.strip()}"
+                if _REFUTED.match(line) and key not in seen:
+                    seen.append(key)
+                    ss.lesson_event(state, "L3", "caught", now)
+                    new += 1
+    if new:
+        state["L3_refuted"] = seen[-_SEEN_CAP:]
+        ss.lessons_save(state)
+    return new
+
+
+def first_asks(asks: list[tuple], root: Path, now: datetime | None = None) -> list[tuple]:
+    """The entries never asked about before, in any session; each one counts L3 `fired`."""
+    ss = _ss()
+    state = ss.lessons_load()
+    seen = state.setdefault("L3_asked", [])
+    out = []
+    for ask in asks:
+        key = f"{root / ask[0]}|{ask[1]}"
+        if key not in seen:
+            seen.append(key)
+            ss.lesson_event(state, "L3", "fired", now)
+            out.append(ask)
+    if out:
+        state["L3_asked"] = seen[-_SEEN_CAP:]
+        ss.lessons_save(state)
     return out
 
 
@@ -568,8 +693,15 @@ def main() -> int:
                 if h[0] not in flagged and f"hollow:{h[0]}:{h[1]}" not in asked]
     except Exception:
         thin = []             # a quality check that cannot read must not cost the session
+    try:
+        refuted_claims(root, name, since)
+        claims = first_asks([v for v in visibility_entries(root, name, since)
+                             if v[0] not in flagged], root)
+    except Exception:
+        claims = []           # a lesson that cannot count must not cost the session
     rewritten = [f for f in REWRITTEN if f"rewrite:{f}" not in asked]
-    if not stale and not open_ended and not ahead and not typed and not thin and not rewritten:
+    if (not stale and not open_ended and not ahead and not typed and not thin and not claims
+            and not rewritten):
         return 0
 
     parts = []
@@ -626,6 +758,21 @@ def main() -> int:
             "what was done (name the files), the result, what is open. If it is right as it "
             "stands, say so in one line. (Asked once per entry.)")
         _remember(session, _already_asked(session) | {f"hollow:{f}:{h}" for f, h, _ in thin})
+    if claims:
+        rec = _ss().lessons_load().get("L3", {})
+        listed = "\n".join(f"  - {f}: \"{h[3:60].strip()}\" says " + ", ".join(w[:3])
+                           for f, h, w in claims)
+        parts.append(
+            f"Baton, lesson L3 -- the newest entry in these {name} files says something is public "
+            f"or private:\n{listed}\n\n"
+            "Open the entry with a short section, before the others: `### Claims to verify` (or "
+            "`### За проверка`), one line per claim about what is public or private, each checked "
+            "against the source (`gh repo view --json visibility`, the page's own sharing "
+            "setting) -- the human reads that section, not the prose. If a listed claim later "
+            "proves wrong, the new entry's section says `refuted: <the claim>`; only that is "
+            "counted as caught. If the word is not a claim here, say so in one line. "
+            f"(Asked once per entry. Counted: caught {rec.get('caught', 0)} of "
+            f"{rec.get('fired', 0)} asked.)")
     if rewritten:
         parts.append(
             f"Baton: an older entry changed in the {name} of " + ", ".join(rewritten) + " -- "

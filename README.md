@@ -388,6 +388,34 @@ logbooks on the author's machine in the ten days before release, seven top entri
 been asked about -- short notes without sections; the agent answers in one line when one is
 right as it stands.
 
+**A claim about what is public or private is put where it gets read.** Since v3.18.0, when the
+newest entry this session wrote says something is public or private -- `public`, `private`,
+`publicly`, `privately`, and the Bulgarian `публичен`/`публично`/`частен`/`частно` with their
+endings -- and does not open with a section for it, Stop hands the turn back once per entry and
+asks for one: `### Claims to verify` (or `### За проверка`) as the **first** `###` section, one
+line per claim, each checked against the source (`gh repo view --json visibility`, the page's
+own sharing setting). The human reads that section instead of the prose. Adding it to the newest
+entry is completing the top entry, not rewriting an older one. Not counted as a claim: a word
+inside inline code (`--private-key`, `"visibility":"PRIVATE"` pasted from a tool), a key in
+cryptography (`private key`, `публичен ключ`), one word in quotes (the word talked about,
+not used), and the pair named as a topic (`public/private`). "Said publicly" is left in: a
+promise made in a public comment is a claim about where something is, and a list of verbs to
+exclude would be fitted to one machine.
+
+It came from the entry that motivated v3.16.0: "`gh` says StanimirTenev/market-swarm is PUBLIC",
+in an entry with every section, about a repository that was private and always had been. A reader
+proposed a short section of claims to verify at the top of each entry; asked for on every entry
+it would be a form -- a version or a URL is in up to four entries in ten (measured 20 October) --
+while a mention of visibility is in about one in eight. **What it measures:** how often the situation arises
+(`fired`, lesson L3 below) and how often a listed claim proved wrong (`caught`). **What it
+cannot do:** tell whether the claim is true. It puts the claim in front of a reader; a wrong
+claim listed in the section passes until someone checks it. Over copies of the 34 logbooks on
+the author's machine: 21 of the 195 entries since 10 October would have been asked about (165 of
+1,274 in all). Read one by one, 11 of the 21 state what a repository or a page is; 5 are
+borderline (a reply labelled public, an API key said to be public, a project required to be
+public); 5 use the word in another sense -- public sources, public data, public contracting
+authorities -- and are answered in one line.
+
 ## The task header
 
 A logbook can open with a small header. It is optional. With a header, SessionStart knows
@@ -734,6 +762,15 @@ the situation arose, `caught` when the mistake happened. The counters are in
   `bash -c` runs, and a `$( )` inside double quotes, still count) — returns nothing, one line reaches
   the agent before its next sentence: name the check that would have found it before saying
   something is absent. At most once every 30 minutes; counted every time.
+- **L3 — a claim that something is public or private is checked against the source** (Stop,
+  since v3.18.0; see *What you get*). `fired`: Stop asked for the claims section -- once per
+  entry, in whichever session sees it first. `caught`: **only a proven error** -- a line that
+  starts `refuted:` (or `оборено:`, after an optional `- `) inside a `### Claims to verify` /
+  `### За проверка` section of a newer entry, in a logbook where an older entry listed claims.
+  Each such line counts once. A claim re-read and found right is not a catch, nor is "refuted"
+  written anywhere else -- a heading, the prose -- nor a refutation with no listed claim below
+  it. The marker is not matched to the claim's text: the line says which claim, the human
+  reads it.
 
 SessionStart says something only when a lesson has earned it: caught twice in 14 days (it is
 not holding — propose the next rung: a check on the result, or a tool that makes the mistake
@@ -1264,6 +1301,22 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.18.0** — a claim that something is public or private is asked to be listed at the top
+
+- **A claim about what is public or private is put where it gets read.** The entry behind v3.16.0
+  said a private repository was PUBLIC and had every section; the shape check passes it. The idea
+  came from a conversation under the post about that check: a short "claims to verify" section
+  at the top of an entry. Asked for on every entry it would be a form, so Stop asks only when the
+  newest entry this session wrote says something is public or private and does not open with
+  `### Claims to verify` / `### За проверка` -- once per entry. Dry run on copies of the 34
+  logbooks here: 21 of 195 entries since 10 October (165 of 1,274 in all); of the 21, 11 state
+  what a repository or page is, 5 are borderline, 5 use the word in another sense. **What it
+  cannot do:** tell whether the claim is true -- it puts the claim in front of a reader.
+- **Counted as lesson L3.** `fired` when Stop asks; `caught` only for a proven error -- a line
+  `refuted: <the claim>` in the claims section of a later entry, under an entry that listed
+  claims. A claim re-read and found right is not a catch. The counters are in
+  `baton.lessons.json`, with L1 and L2.
 
 **v3.17.0** — a rewritten older entry, a partial review and an update not running say so
 
