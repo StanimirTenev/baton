@@ -165,6 +165,8 @@ def config() -> dict:
         "shortlist": (os.environ.get("BATON_REVIEW_SHORTLIST") or os.environ.get("BATON_PREGLED_PODBOR")
                    or cfg.get("review_shortlist") or cfg.get("pregled_podbor")),
         "home": os.environ.get("BATON_HOME") or cfg.get("home") or str(Path.home() / "tasks"),
+        "required": (os.environ.get("BATON_REVIEW_REQUIRED", "").lower() in ("1", "true", "yes")
+                     or cfg.get("review_required") is True),
         "logbook": (os.environ.get("BATON_LOGBOOK") or cfg.get("logbook") or "LOGBOOK.md"),
         "confidential": ([w.strip() for w in confidential.split(",") if w.strip()]
                         if confidential is not None else
@@ -235,6 +237,24 @@ def account(expected: int, examined: int, held: list, missing: list, what: str) 
           f"{len(missing)} not read")
     for name, reason in missing:
         print(f"  ⚠️ not read: {name} ({reason})")
+
+
+def partial_if_missing(expected: int, missing: list, what: str, cfg: dict) -> None:
+    """Some read, some not: PARTIAL, exit 2. With `review_required`, BLOCKED, exit 1.
+
+    `account` named the gap and the run still exited 0 -- seven of ten looked like a
+    finished review to anything that reads the exit code. Abhillash Jadhav, 17.10.2026:
+    BLOCKED if the ten are required, otherwise the seven shown as a partial result with the
+    three named. Zero read is `blocked_if_empty`'s, called first.
+    """
+    if not missing:
+        return
+    names = ", ".join(name for name, _ in missing)
+    if cfg.get("required"):
+        sys.exit(f"\nBLOCKED: {len(missing)} of {expected} {what} not read ({names}), "
+                 f"and review_required is set.")
+    print(f"\nPARTIAL: {expected - len(missing)} of {expected} {what} read; not read: {names}")
+    sys.exit(2)
 
 
 def get_api_key() -> str:
@@ -532,6 +552,7 @@ def stale(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     print(f"\ncost: ${spent:.6f}")
     account(expected, len(results), held, missing, "pointers")
     blocked_if_empty(len(results), len(held), "pointers", cfg)
+    partial_if_missing(expected, missing, "pointers", cfg)
 
 
 def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
@@ -604,6 +625,7 @@ def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     print(f"\ncost: ${spent:.6f}")
     account(expected, len(results), held, missing, "task folders")
     blocked_if_empty(len(results), len(held), f"task logbooks ({logbook_name})", cfg)
+    partial_if_missing(expected, missing, "task folders", cfg)
 
 
 def claims(line: str) -> list[str]:

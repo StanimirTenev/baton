@@ -272,7 +272,9 @@ def test_zadachi_averages_in_the_band_too(tmp_path, monkeypatch, capsys):
         "## 2026-09-23 — доставчикът отговори и работата продължи\n", encoding="utf-8")
     seq = _Sequence(0.41, 0.47, 0.38)
     monkeypatch.setattr(bp.urllib.request, "urlopen", seq)
-    bp.tasks("k", _cfg(tmp_path, home=str(tmp_path), logbook="DNEVNIK.md"), set())
+    with pytest.raises(SystemExit) as partial:   # the fixture's hooks/ has no logbook (v3.17.0)
+        bp.tasks("k", _cfg(tmp_path, home=str(tmp_path), logbook="DNEVNIK.md"), set())
+    assert partial.value.code == 2
     assert seq.calls == 3, f"--zadachi не усреднява: {seq.calls} тегления"
     assert "0.42" in capsys.readouterr().out
 
@@ -405,7 +407,9 @@ def test_zadachi_still_reads_the_control_words(tmp_path, monkeypatch, capsys):
         return _Reply({"answers": {"stale": {"noul": 0.1}}, "usage": {"cost": 0.0001}})
 
     monkeypatch.setattr(bp.urllib.request, "urlopen", capture)
-    bp.tasks("k", _koe_cfg(tmp_path), set())
+    with pytest.raises(SystemExit) as partial:   # the fixture's hooks/ has no logbook (v3.17.0)
+        bp.tasks("k", _koe_cfg(tmp_path), set())
+    assert partial.value.code == 2
     assert "state: finished" in sent["state"]
     assert "turn: us" in sent["state"]
 

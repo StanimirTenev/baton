@@ -133,3 +133,64 @@ def test_stale_names_a_pointer_whose_file_is_gone(tmp_path):
     out = _run(env, "--stale").stdout
     assert "ACCOUNT: 1 pointers expected -- 0 reviewed, 0 held, 1 not read" in out, out
     assert "not read: missing.md (no file)" in out, out
+
+
+def _partial_home(tmp_path, required=None):
+    """Three folders: one held, one with no header, one whose logbook was renamed."""
+    tasks = tmp_path / "tasks"
+    for name, text in (("held", "---\nnext: x\n---\n## entry secretword\n"),
+                       ("bare", "## entry without a header\n")):
+        (tasks / name).mkdir(parents=True)
+        (tasks / name / "DNEVNIK.md").write_text(text, encoding="utf-8")
+    (tasks / "renamed").mkdir()
+    (tasks / "renamed" / "LOGBOOK-old.md").write_text("x", encoding="utf-8")
+    (tmp_path / "INDEX.md").write_text("", encoding="utf-8")
+    cfg = {"home": str(tasks), "logbook": "DNEVNIK.md", "review_index": str(tmp_path / "INDEX.md"),
+           "review_confidential": ["secretword"]}
+    if required is not None:
+        cfg["review_required"] = required
+    return _home(tmp_path, cfg)
+
+
+def test_a_partial_review_says_partial_and_does_not_exit_clean(tmp_path):
+    """The second half of Jadhav's point (17.10): seven of ten still exited 0, and the output
+    did not say PARTIAL. Through the CLI, the way a human or a skill runs it."""
+    r = _run(_partial_home(tmp_path), "--tasks")
+    out = r.stdout + r.stderr
+    assert r.returncode == 2, f"a partial review exited {r.returncode}:\n{out}"
+    assert "PARTIAL" in out and "bare" in out and "renamed" in out, out
+    assert "BLOCKED" not in out, out
+
+
+def test_required_input_that_is_missing_is_blocked(tmp_path):
+    """`review_required`: every folder it was pointed at must be read, or the run is BLOCKED."""
+    r = _run(_partial_home(tmp_path, required=True), "--tasks")
+    out = r.stdout + r.stderr
+    assert r.returncode == 1 and "BLOCKED" in out, out
+    assert "bare" in out and "renamed" in out, out
+
+
+def test_seven_of_ten_read_is_partial_with_the_three_named(tmp_path, monkeypatch, capsys):
+    """Some reviewed, some not -- the case BLOCKED-at-zero never saw. The model is stubbed."""
+    import importlib.util
+    import pytest
+    spec = importlib.util.spec_from_file_location("br_partial", TOOL)
+    br = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(br)
+    tasks = tmp_path / "tasks"
+    for i in range(10):
+        (tasks / f"t{i}").mkdir(parents=True)
+        if i < 7:
+            (tasks / f"t{i}" / "DNEVNIK.md").write_text("---\nnext: go on\n---\n## e\n", "utf-8")
+    monkeypatch.setattr(br, "value_of", lambda *a, **k: (0.1, [0.1], 0.0))
+    monkeypatch.setattr(br, "log_spend", lambda *a, **k: None)
+    cfg = {"home": str(tasks), "logbook": "DNEVNIK.md", "confidential": [], "source": None}
+    with pytest.raises(SystemExit) as stop:
+        br.tasks("k", cfg, set())
+    out = capsys.readouterr().out
+    assert stop.value.code == 2, out
+    assert "PARTIAL: 7 of 10 task folders read" in out and "t7, t8, t9" in out, out
+    cfg["required"] = True
+    with pytest.raises(SystemExit) as stop:
+        br.tasks("k", cfg, set())
+    assert "BLOCKED" in str(stop.value.code) and "t7, t8, t9" in str(stop.value.code)
