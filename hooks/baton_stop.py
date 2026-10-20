@@ -296,9 +296,14 @@ def _ss():
     return _SS
 
 
-def hand_typed_hours(root: Path, name: str, now: datetime | None = None) -> list[str]:
+def hand_typed_hours(root: Path, name: str, now: datetime | None = None,
+                     since: float | None = None) -> list[str]:
     """Folders whose newest entry is NEW since the last look and headed off the clock.
-    The first look at a folder only remembers its top entry: an old heading is history."""
+    The first look at a folder only remembers its top entry: an old heading is history.
+
+    With `since` (when this session began), an entry saved before it is another session's:
+    remembered as seen, never reported here, not counted. 2026-10-10 18:58: a session that
+    had touched no task folder was handed two other sessions' entries to "correct"."""
     now = now or datetime.now()
     ss = _ss()
     state = ss.lessons_load()
@@ -317,6 +322,8 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None) -> list
         seen, tops[key] = tops.get(key), line
         if seen is None or seen == line:
             continue
+        if since is not None and saved.timestamp() < since:
+            continue                          # saved before this session: not its entry
         ss.lesson_event(state, "L1", "fired", now)
         m = _HEADING.match(line)
         if not m.group(2):
@@ -509,13 +516,14 @@ def main() -> int:
     if not root.is_dir():
         return 0
 
-    stale = unrecorded(root, name, session_started(str(payload.get("transcript_path") or "")))
+    since = session_started(str(payload.get("transcript_path") or ""))
+    stale = unrecorded(root, name, since)
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     open_ended = [f for f in undefined(root, name) if f not in asked]
     ahead = [f for f in future_dated(root, name) if f"future:{f}" not in asked]
     try:
-        typed = hand_typed_hours(root, name)
+        typed = hand_typed_hours(root, name, since=since)
     except Exception:
         typed = []            # a lesson that cannot count must not cost the session
     typed = [t for t in typed if not any(t.startswith(f.split(" (")[0] + ":") for f in ahead)]
@@ -560,10 +568,16 @@ def main() -> int:
     if typed:
         rec = _ss().lessons_load().get("L1", {})
         listed = "\n".join(f"  - {t}" for t in typed)
+        # The lesson says "tools/baton_entry.py"; an agent's working directory is not this
+        # plugin's, so the hand-back gives the path that actually runs.
+        tool = Path(__file__).resolve().parent.parent / "tools" / "baton_entry.py"
         parts.append(
             f"Baton, lesson L1 -- a new entry's hour does not match the clock "
             f"({datetime.now():%Y-%m-%d %H:%M}):\n{listed}\n\n"
-            f"{_ss().LESSONS['L1']} Correct the heading. "
+            f"{_ss().LESSONS['L1']} On this machine that is\n"
+            f"  python3 \"{tool}\" <logbook> <entry-file> --title \"<title>\"\n"
+            f"(the entry file holds the body only; the heading is stamped from the clock). "
+            f"Correct the heading. "
             f"(Counted: caught {rec.get('caught', 0)} of {rec.get('fired', 0)} new entries.)")
     if thin:
         listed = "\n".join(f"  - {f}: \"{h[3:60].strip()}\" -- " + "; ".join(r)
