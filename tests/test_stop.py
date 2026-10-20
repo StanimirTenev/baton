@@ -300,3 +300,88 @@ def test_the_older_debt_is_on_the_board(tmp_path):
                          text=True, env=env)
     assert out.returncode == 0, out.stderr
     assert "from before this session" in out.stdout and "old (newest: draft.md)" in out.stdout
+
+
+# --- an older entry rewritten is not the work recorded ---------------------------------
+# Arthur Barbosa, 08.10: a folder the agent writes in is not an audit trail. Said back to him
+# that day: nothing stops an agent rewriting an older entry, and a rewrite would even count
+# as the logbook being updated -- the body was hashed whole. Since v3.17.0 the entries are
+# remembered one by one: a change confined to the top (a new entry, the newest one edited)
+# records the work; a change below it does not, and Stop says so once.
+
+def _two_entries(tmp_path, name="baton"):
+    folder = _task(tmp_path, name, log_age=7200, work_age=9000)
+    log = folder / "LOGBOOK.md"
+    log.write_text(log.read_text(encoding="utf-8").replace(
+        "## 2026-01-01", "## 2026-01-02 09:00 — newer\n\nkept\n\n## 2026-01-01"), encoding="utf-8")
+    os.utime(log, (time.time() - 7200, time.time() - 7200))
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []              # entries remembered
+    os.utime(folder / "draft.md", (time.time() - 600, time.time() - 600))
+    return folder, log
+
+
+def test_an_older_entry_rewritten_does_not_record_the_work(tmp_path, monkeypatch):
+    monkeypatch.setenv("BATON_BODY_STATE", str(tmp_path / ".bodies.json"))
+    folder, log = _two_entries(tmp_path)
+    log.write_text(log.read_text(encoding="utf-8").replace("\ny\n", "\ny, and it all worked\n"),
+                   encoding="utf-8")
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == ["baton (newest: draft.md)"]
+    assert bs.REWRITTEN == ["baton"]
+
+
+@pytest.mark.parametrize("change", [
+    ("## 2026-01-02 09:00", "## 2026-10-20 10:00 — one\n\na\n\n## 2026-10-20 10:30 — two\n\nb\n\n"
+                            "## 2026-01-02 09:00"),                  # two new entries at once
+    ("\nkept\n", "\nkept, and the step that was missing\n"),          # the newest one completed
+    ("## 2026-01-02 09:00 — newer", "## 2026-01-02 08:00 — newer"),   # its heading corrected (L1)
+])
+def test_a_change_at_the_top_records_the_work(tmp_path, monkeypatch, change):
+    monkeypatch.setenv("BATON_BODY_STATE", str(tmp_path / ".bodies.json"))
+    folder, log = _two_entries(tmp_path)
+    log.write_text(log.read_text(encoding="utf-8").replace(*change), encoding="utf-8")
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []
+    assert bs.REWRITTEN == []
+
+
+def test_an_entry_added_at_the_end_is_not_a_rewrite(tmp_path, monkeypatch):
+    """A logbook kept oldest-first: nothing older changed, one entry was added."""
+    monkeypatch.setenv("BATON_BODY_STATE", str(tmp_path / ".bodies.json"))
+    folder, log = _two_entries(tmp_path)
+    log.write_text(log.read_text(encoding="utf-8") + "\n## 2026-10-20 10:00 — later\n\nz\n",
+                   encoding="utf-8")
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []
+    assert bs.REWRITTEN == []
+
+
+def test_a_body_remembered_by_an_older_version_still_counts_a_change(tmp_path, monkeypatch):
+    """baton.bodies.json from v3.16.0 holds [hash, time] without entries: no false alarm."""
+    state = tmp_path / ".bodies.json"
+    monkeypatch.setenv("BATON_BODY_STATE", str(state))
+    folder, log = _two_entries(tmp_path)
+    state.write_text(json.dumps({k: v[:2] for k, v in json.loads(state.read_text()).items()}))
+    log.write_text(log.read_text(encoding="utf-8").replace("\ny\n", "\ny, rewritten\n"),
+                   encoding="utf-8")
+    assert bs.unrecorded(tmp_path, "LOGBOOK.md") == []
+
+
+def test_a_rewritten_older_entry_is_said_once_through_the_entry_point(tmp_path, monkeypatch):
+    monkeypatch.setenv("BATON_BODY_STATE", str(tmp_path / ".bodies.json"))
+    folder, log = _two_entries(tmp_path)
+    log.write_text(log.read_text(encoding="utf-8").replace("\ny\n", "\ny, and it all worked\n"),
+                   encoding="utf-8")
+    os.utime(folder / "draft.md", (time.time() - 90000, time.time() - 90000))   # no new work
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE_PLUGIN", "BATON_"))}
+    env.update(BATON_HOME=str(tmp_path), BATON_LOGBOOK="LOGBOOK.md",
+               BATON_BODY_STATE=str(tmp_path / ".bodies.json"),
+               BATON_STATE_DIR=str(tmp_path / "state"), HOME=str(tmp_path / "home"),
+               BATON_LESSONS_STATE=str(tmp_path / "lessons.json"))
+
+    def stop():
+        out = subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"session_id": "s"}),
+                             capture_output=True, text=True, env=env)
+        assert out.returncode == 0, out.stderr
+        return json.loads(out.stdout).get("reason", "") if out.stdout.strip() else ""
+
+    reason = stop()
+    assert "older entry" in reason and "baton" in reason, reason
+    assert "older entry" not in stop(), "said once"

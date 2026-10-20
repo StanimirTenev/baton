@@ -116,6 +116,23 @@ def _body(text: str) -> str:
     return text
 
 
+def _entries(body: str) -> list[str]:
+    """A short hash of each `## ` entry, newest first as they stand in the file."""
+    return [hashlib.sha1(part.rstrip().encode("utf-8")).hexdigest()[:12]
+            for part in re.split(r"(?m)^(?=## )", body) if part.startswith("## ")]
+
+
+def _at_the_top(old: list, new: list) -> bool:
+    """Nothing older than the newest entry changed: entries were added above it, or the
+    newest one itself was edited (completed, its heading corrected) -- or, in a logbook
+    kept oldest-first, one was added at the end."""
+    below = old[1:]
+    return (not below or new[len(new) - len(below):] == below) or new[:len(old)] == old
+
+
+REWRITTEN: list = []      # folders whose older entries changed during this run
+
+
 def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
     """When the logbook BODY last changed -- not when the file was last written.
 
@@ -126,17 +143,31 @@ def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
     that hash stands. With nothing remembered yet, the file time -- the old rule, so a first
     run raises no false alarm. Clock-independent on purpose: entry headings are typed by
     hand and were wrong by hours the same day.
+
+    v3.17.0: the entries are remembered one by one, too. A change below the newest entry --
+    an older one rewritten -- does not move the time, and the folder goes to REWRITTEN
+    (Arthur Barbosa, 08.10: a folder the agent writes in is not an audit trail).
     """
     mtime = logbook.stat().st_mtime
     try:
-        digest = hashlib.sha1(_body(logbook.read_text("utf-8-sig")).encode("utf-8")).hexdigest()
+        body = _body(logbook.read_text("utf-8-sig"))
     except OSError:
         return mtime
+    digest = hashlib.sha1(body.encode("utf-8")).hexdigest()
+    entries = _entries(body)
     key = str(folder)
     seen = bodies.get(key)
     if seen and seen[0] == digest:
+        if len(seen) < 3:
+            seen.append(entries)
         return min(mtime, seen[1])
-    bodies[key] = [digest, mtime]
+    old = seen[2] if seen and len(seen) > 2 else None
+    if old and entries and (old == entries or not _at_the_top(old, entries)):
+        if old != entries:
+            REWRITTEN.append(folder.name)
+        bodies[key] = [digest, seen[1], entries]
+        return min(mtime, seen[1])
+    bodies[key] = [digest, mtime, entries]
     return mtime
 
 
@@ -162,6 +193,7 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
     blocked every turn of a session that never touched it. Stop asks about this session's
     work; the older debt is listed on the board instead."""
     out = []
+    REWRITTEN.clear()
     path = _bodies_path()
     try:
         bodies = json.loads(path.read_text("utf-8"))
@@ -172,7 +204,10 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
         work, newest_name = newest_work(folder, name)
         if work == 0.0:
             continue
+        before = len(REWRITTEN)
         logged = recorded_time(folder, logbook, bodies) if logbook.is_file() else 0.0
+        if since is not None and len(REWRITTEN) > before and logbook.stat().st_mtime < since:
+            REWRITTEN.pop()               # rewritten before this session: not this session's
         # Newer than the logbook at all -- but leave alone what is being written now.
         if since is not None and work < since:
             continue
@@ -533,7 +568,8 @@ def main() -> int:
                 if h[0] not in flagged and f"hollow:{h[0]}:{h[1]}" not in asked]
     except Exception:
         thin = []             # a quality check that cannot read must not cost the session
-    if not stale and not open_ended and not ahead and not typed and not thin:
+    rewritten = [f for f in REWRITTEN if f"rewrite:{f}" not in asked]
+    if not stale and not open_ended and not ahead and not typed and not thin and not rewritten:
         return 0
 
     parts = []
@@ -590,6 +626,13 @@ def main() -> int:
             "what was done (name the files), the result, what is open. If it is right as it "
             "stands, say so in one line. (Asked once per entry.)")
         _remember(session, _already_asked(session) | {f"hollow:{f}:{h}" for f, h, _ in thin})
+    if rewritten:
+        parts.append(
+            f"Baton: an older entry changed in the {name} of " + ", ".join(rewritten) + " -- "
+            "not a new entry at the top. A logbook is a record and does not get edited, so this "
+            "does not count as recording the work. If something in it was wrong, leave it and add "
+            "a new entry at the top that says what changed and why. (Said once.)")
+        _remember(session, _already_asked(session) | {f"rewrite:{f}" for f in rewritten})
     # UTF-8, not \\uXXXX, and as bytes: a cp1252 pipe on Windows cannot raise (v3.12.0).
     sys.stdout.buffer.write(json.dumps({"decision": "block", "reason": "\n\n".join(parts)},
                                        ensure_ascii=False).encode("utf-8"))
