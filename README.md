@@ -127,7 +127,8 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   Every run prints the settings file it used and a fingerprint of its bytes
   (`config: <path> sha256:<12 hex>`, or `no config file` when only the environment set it), and a
   run that examined nothing ends with `BLOCKED` and a non-zero exit instead of an empty list
-  (since v3.12.1).
+  (since v3.12.1). A run that read some and not others ends with `PARTIAL`, the ones not read
+  named, and exit 2 (since v3.17.0).
   `/baton:baton-key` works the same in both installs: the key goes to `~/.config/baton/env`.
 - **`/baton:baton-doctor`** says whether the hooks actually run here, not only that the plugin
   is installed (see [Is it running?](#is-it-running-baton-doctor)).
@@ -271,7 +272,8 @@ Two hooks hold the checkable half of it, so it does not depend on the agent reme
 - **UserPromptSubmit** (`baton_prompt.py`): a message that names a task — its folder, or one of
   the `aliases` in its header, in any alphabet, meeting endings halfway (`скенер` finds
   `скенера`, `страницата` finds `страници`; a long alias keeps all of itself but its ending, so
-  `рестак` does not find `рестартирам`; a Latin alias takes only -s, -es, -y -> -ies, so `bot`
+  `рестак` does not find `рестартирам`; a short Cyrillic alias takes a noun's ending, so `пост`
+  finds `поста` and `постове`, not `построй`; a Latin alias takes only -s, -es, -y -> -ies, so `bot`
   does not find `both`) — gets that task's last entry and next step put in front of the agent, with
   "read the logbook first". Once per task per session; silent when nothing is named; never
   blocks a message.
@@ -340,7 +342,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.16.0]
+[baton:board v3.17.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -612,6 +614,20 @@ Set `source` in `baton.local.json` (or `BATON_SOURCE`) to the directory the hook
 in, and Baton compares its own bytes against it and reports a difference at session start. It is
 optional: an install from a release configures no source and nothing is reported.
 
+**As a plugin** (since v3.17.0) there is no source of ours; Claude Code installs the copy. Two
+questions are still answered at session start, without the network. Has Claude Code recorded
+another install of Baton since this session started (`installed_plugins.json`)? Then
+`claude plugin update` has taken effect on disk and not here, until a restart. And are the four
+running hooks and `hooks.json` byte for byte the catalog's copy of the same version (the
+marketplace clone Claude Code keeps)? A copy Claude Code did not install (`--plugin-dir`) is not
+compared, and nor is a catalog that has moved to another version.
+
+**What is not compared, as either install:** whether the catalog's copy is the newest release
+(that needs the network); `baton.local.json`, which has nothing to be compared with -- it is
+yours, and the review tools print its path and a hash of it instead; and the hook registration
+in `settings.json` for the install script, because Claude Code merges hooks from several settings
+files and a hook can read only some of them.
+
 A hook cannot verify that it was installed. It can ask the same question somewhere it can be
 answered.
 
@@ -653,6 +669,13 @@ Two Stop checks came from that evening, both mechanical:
   the evening the prompt hook shipped. It now remembers the body below the header by hash
   (`baton.bodies.json` next to the hooks); while the body is unchanged, its first-seen time
   stands. Nothing remembered yet means the file time, as before, so a first run raises nothing.
+- **An older entry rewritten is not an entry** (since v3.17.0). The entries are remembered one by
+  one as well. A change confined to the top records the work: new entries above the newest, the
+  newest one completed or its heading corrected, or -- in a logbook kept oldest-first -- one
+  added at the end. A change to anything below the newest entry does not, and Stop says once
+  that an older entry changed: the logbook is a record, so what was wrong gets a new entry at
+  the top. **What it does not catch:** a rewrite of the newest entry itself, and a rewrite by a
+  session before this one (it is remembered, not reported).
 
 
 ```
@@ -699,12 +722,16 @@ the situation arose, `caught` when the mistake happened. The counters are in
   an hour more than 20 minutes off the moment the logbook was saved, either way, is caught (the
   save time, not the time Stop runs: an entry written by another session and seen hours later is
   not late), and the agent is told
-  which tool makes it impossible: `tools/baton_entry.py --title`, which stamps the time itself.
+  which tool makes it impossible: `tools/baton_entry.py --title`, which stamps the time itself,
+  named by its full path on this machine (the plugin's folder, or the repository the install
+  script recorded) since v3.17.0.
 - **L2 — an empty result is a failed read** (`baton_batch.py`, PostToolBatch). After a read —
   web, a shell command that searches or fetches, or an MCP tool whose name says it reads
   (`search`, `query`, `get`, `list`, `read`, `fetch`…, and no `create`/`update`/`delete`…;
   a name that says neither is left alone; in a shell command the body of a heredoc is text being
-  written, not the command, and is not searched) — returns nothing, one line reaches
+  written, not the command, and is not searched -- nor, since v3.17.0, a quoted script or string
+  that `sed`, `echo`, `printf`, `awk`, `perl` or `python -c` carries; quotes that `ssh` or
+  `bash -c` runs, and a `$( )` inside double quotes, still count) — returns nothing, one line reaches
   the agent before its next sentence: name the check that would have found it before saying
   something is absent. At most once every 30 minutes; counted every time.
 
@@ -792,6 +819,12 @@ run with `CLAUDE_PLUGIN_DATA` set to that folder:
 | `review_index` | the index whose pointers get checked — any file with `[title](path.md)` links |
 | `review_shortlist` | optional shortlist: only the targets it names are checked, so a long index need not be paid for whole |
 | `review_confidential` | substrings that must never leave the machine |
+| `review_required` | optional, `true`: a run that could not read everything it was pointed at is `BLOCKED` (exit 1) instead of `PARTIAL` (exit 2); also `BATON_REVIEW_REQUIRED=1` |
+
+Every run ends with an account of what it was pointed at and what it read, each one not read
+named with the reason. Nothing read is `BLOCKED`, exit 1. Some read and some not is `PARTIAL`,
+exit 2 -- including a folder that was never meant to hold a logbook, which looks the same to the
+tool as one whose logbook went missing.
 
 The guard reads the **whole source file**, not the part that gets sent: the question is
 whether this document is about confidential matter, not whether the bytes that happened to fit
@@ -1232,6 +1265,44 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
+**v3.17.0** — a rewritten older entry, a partial review and an update not running say so
+
+- **Rewriting an older entry no longer counts as recording the work.** Arthur Barbosa, 8 October:
+  a folder the agent writes in is not an audit trail. We said then that a rewritten older entry
+  even counted as the logbook updated -- Stop hashed the whole body. The entries are now
+  remembered one by one: a change at the top (a new entry, the newest one completed or its
+  heading corrected) records the work; a change below it does not, and Stop says so once. Dry
+  run on copies of the 34 logbooks here: a new entry at the top of each is not a rewrite; one
+  figure changed in an older entry is. **What it does not catch:** the newest entry rewritten.
+- **A partial review says PARTIAL and exits 2.** The second half of Abhillash Jadhav's point (17
+  October): v3.15.0 named what it did not read and still exited 0. Now some read and some not is
+  `PARTIAL: 7 of 10 … read; not read: …`, exit 2; with `review_required: true` it is `BLOCKED`,
+  exit 1. Not live-run against the model after the change -- tested with the call stubbed.
+- **As a plugin, the running copy is compared too.** The check that the running hooks are the
+  installed ones stood down for plugins -- most installs -- while comments in public said each
+  session makes it. Now SessionStart says when Claude Code has installed another version since
+  this session started (restart to run it), and when the running hooks differ from the catalog's
+  copy of the same version. Checked on this machine both ways. **Not compared:** whether the
+  catalog copy is the newest release, `baton.local.json`, and the install script's registration in
+  `settings.json` (see "The running hook is a copy").
+- **A short Cyrillic alias no longer matches a longer word that starts the same.** `пост` matched
+  `построй`, `построи` and `пострим` (the replay of 12 October, Ilya Gorban's method; named as
+  unfixed in v3.14.3). A 3–4 letter Cyrillic alias now takes a noun's ending, not any three
+  letters. Over the human prompts on this machine exactly those four matches go; `поста`,
+  `постове`, `джефа`, `новата`, `парите`, `куката`, `чужди` stay.
+- **L2 no longer reads a verb inside a sed script or a quoted string as a read.** A `python3 -c`
+  body, a `sed`, `awk` or `perl` script, an `echo` or `printf` string: text the command carries,
+  as a heredoc body has been since v3.14.1. Over the recorded Bash calls here L2's fires go from
+  81 to 75 -- four logbook writes and two JSON-RPC payloads; the three `ssh host '…'` reads in
+  quotes still fire. Not claimed: that the other 75 are all reads.
+- **L1 names the entry tool where it is** -- from PR #2 by anandamandala12-source: an entry saved
+  by another session before this one is no longer handed to this one to correct, and the
+  hand-back gives the tool's full path. On top of it, the path for an install-script install,
+  where the tools stay in the repository.
+- **The README caught up with two things.** Compaction: seen once after a manual `/compact` (5
+  October), not yet after an automatic one. "Not solved here" now names the v3.16.0 shape check,
+  and still says no hook can tell whether an entry is true.
+
 **v3.16.0** — an entry written only to pass is asked about
 
 - **One word under a heading passed like a full entry.** Arpana Singh asked under a post about
@@ -1378,7 +1449,9 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   board. Not a PreCompact hook: Claude Code discards a PreCompact hook's `systemMessage` and gives
   it no `additionalContext` -- it can only block the compaction
   ([hooks reference](https://code.claude.com/docs/en/hooks#precompact)). Tested as Claude Code
-  runs the hook (a subprocess, JSON on stdin); **not yet seen in a live compaction**.
+  runs the hook (a subprocess, JSON on stdin), and seen once in a real session after a manual
+  `/compact` (5 October, `claude -p --resume <id> "/compact"` with the plugin loaded: the
+  instruction arrived, the board did not); **not yet seen after an automatic compaction**.
 - **The hooks write UTF-8, not `\uXXXX`.** On the author's machine, the same board: v3.11.0 wrote 13,585
   characters of JSON for 5,685 of text, because every Cyrillic letter was escaped; v3.12.0
   writes 5,967 for the same 5,685. All four hooks write UTF-8 bytes. A LinkedIn reader worried this hit Claude Code's
@@ -2206,7 +2279,8 @@ another tool's files.
 No syncing between machines. Each machine keeps its own task folders; if you work across
 several, put the root on shared storage yourself, and think first about what belongs on it.
 
-No enforcement of quality. The Stop hook can tell that a logbook was not written. It cannot
-tell that what was written is any good.
+No enforcement of quality. The Stop hook can tell that a logbook was not written, and since
+v3.16.0 whether its newest entry has the shape of one -- sections with text, some length, the
+files of this session named. It cannot tell that what was written is any good, or true.
 
 MIT licensed. Issues and pull requests welcome.
