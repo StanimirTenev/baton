@@ -1204,6 +1204,118 @@ def review_notice() -> str | None:
             "their yes. If they are not interested, drop it -- this note does not come back.")
 
 
+# A session that touched no task folder is never asked about: Stop judges by file times, and a
+# decision made only in chat passes clean (ZA-OPRAVYANE row 26; Jake Manis, 20.10, and four more
+# conversations that week). At the next start, the last session's messages are put next to the
+# entries written in that time -- two numbers, no judgement -- and the messages are named, so the
+# human can tell whether any of it was a decision. A message is one the human typed: the agent's
+# turns multiply in loops and subagents, tool results and command output are not anyone's word.
+QUIET_MIN_MESSAGES = 3          # fewer is a question asked and answered, not a lost decision
+QUIET_SLACK = timedelta(minutes=15)   # an entry written just after the last message counts
+QUIET_MAX_BYTES = 64 * 1024 * 1024
+_ENTRY_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}):(\d{2}))?", re.M)
+
+
+def _human(obj: dict) -> str | None:
+    """The text of a message the human typed, or None."""
+    if obj.get("type") != "user" or obj.get("isMeta") or obj.get("isSidechain"):
+        return None
+    content = (obj.get("message") or {}).get("content")
+    if isinstance(content, list):
+        if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+            return None
+        content = " ".join(str(b.get("text", "")) for b in content
+                           if isinstance(b, dict) and b.get("type") == "text")
+    if not isinstance(content, str):
+        return None
+    text = content.strip()
+    if not text or text.startswith("<") or text.startswith("[Request interrupted"):
+        return None
+    return text
+
+
+def _local_time(stamp) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return None
+
+
+def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
+    """The last session in this project said things and wrote no entry: say so, once."""
+    mine = Path(str(own.get("transcript_path") or ""))
+    if not mine.name or not mine.parent.is_dir():
+        return None
+    try:
+        others = [t for t in mine.parent.glob("*.jsonl")
+                  if t != mine and t.stem != str(own.get("session_id") or "")]
+        last = max(others, key=lambda t: t.stat().st_mtime) if others else None
+    except OSError:
+        return None
+    if last is None:
+        return None
+    key = f"{last}|{int(last.stat().st_mtime)}"
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+    if state.get("quiet_checked") == key:
+        return None
+    said, start, end, cut = [], None, None, False
+    try:
+        with open(last, "rb") as fh:
+            size = last.stat().st_size
+            if size > QUIET_MAX_BYTES:
+                fh.seek(size - QUIET_MAX_BYTES)
+                fh.readline()
+                cut = True
+            for raw in fh:
+                if b'"timestamp"' not in raw:
+                    continue
+                try:
+                    obj = json.loads(raw.decode("utf-8", "replace"))
+                except ValueError:
+                    continue
+                when = _local_time(obj.get("timestamp")) if isinstance(obj, dict) else None
+                if when is None:
+                    continue
+                start, end = min(start or when, when), max(end or when, when)
+                text = _human(obj)
+                if text:
+                    said.append(text)
+    except OSError:
+        return None
+    state["quiet_checked"] = key
+    try:
+        _state_file().write_text(json.dumps(state), "utf-8")
+    except OSError:
+        return None                 # cannot remember it was said: better silent than every time
+    if len(said) < QUIET_MIN_MESSAGES or start is None:
+        return None
+    entries = 0
+    for f in folders:
+        for m in _ENTRY_HEADING.finditer(read_head(f / logbook)):
+            try:
+                day = datetime.strptime(m.group(1), "%Y-%m-%d")
+            except ValueError:
+                continue
+            if m.group(2):
+                at = day.replace(hour=int(m.group(2)), minute=int(m.group(3)))
+                entries += start - QUIET_SLACK <= at <= end + QUIET_SLACK
+            else:
+                entries += start.date() <= day.date() <= end.date()
+    if entries:
+        return None
+    shown = "; ".join(f"\"{t[:70]}\"" for t in said[:5]) + (" ..." if len(said) > 5 else "")
+    return (f"📝 The last session in this project ({start:%Y-%m-%d %H:%M}–{end:%H:%M}) had "
+            f"{len(said)} messages from the human and 0 logbook entries headed in that time"
+            + (" (counted in its last 64 MB)" if cut else "") + ". Stop asks only about files, so "
+            "a decision made only in chat leaves no trace. Its messages began: " + shown + ". "
+            "Ask the human once, in their language, whether any of it should be recorded and in "
+            "which task; if not, drop it. (Messages the human typed, not the agent's turns; "
+            "entries by the time in their heading.)")
+
+
 SHOW_BOARD = (
     "The human has not seen this board -- only one line saying Baton is on. Whatever the "
     "human's first message is -- a greeting, a question or a task -- the first thing in your "
@@ -1374,6 +1486,13 @@ def main() -> int:
     notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),
                            review_notice()) if n]
     folders = task_folders(root) if root.is_dir() else []
+    if folders and own.get("source") in ("startup", "clear"):
+        try:
+            quiet = quiet_session(own, folders, name)
+        except Exception:
+            quiet = None            # a count that cannot be made must not cost the board
+        if quiet:
+            notices.append(quiet)
     if not folders:
         return _notices_only(notices + [n for n in (inventory_notice(date.today(),
                                                                      own),) if n],

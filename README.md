@@ -695,6 +695,22 @@ It happens at SessionStart with `source: "compact"`, not in a PreCompact hook: C
 gives a PreCompact hook no way to speak to the model -- it can only block the compaction, and
 its `systemMessage` is discarded ([hooks reference](https://code.claude.com/docs/en/hooks#precompact)).
 
+## A session that touched no task folder
+
+Stop judges by file times, so a turn that changed nothing in a task folder is never asked
+about, and a decision made only in chat passes clean. At the next session start (`startup` or
+`/clear`, not after a compaction or on `resume`), Baton reads the last other transcript in the
+same project folder and puts two numbers side by side: the messages the human typed in it, and
+the logbook entries whose heading falls inside its time (15 minutes' slack). Three messages or
+more and no entry: the agent is told so, with the first five messages quoted, and asks the human
+once whether any of it should be recorded. Said once per session.
+
+A message is one the human typed: the agent's turns multiply in loops and subagents, and tool
+results and command output are nobody's word. **What it cannot do:** say which task the
+messages belonged to, or tell a decision from small talk -- it names the messages and the human
+decides. With two windows open in the same project, "the last session" may be the other live
+one. Subagent transcripts are not read. The idea is Jake Manis's (20 October 2026).
+
 ## Writing the entry
 
 **The time in the heading is read from the clock (`date`), never typed.** On 2026-09-28 the agent
@@ -2356,8 +2372,9 @@ schedule except the opt-in update check above.
 
 What the hooks read, all on this machine: the task folders and their logbooks; the session's
 transcript (`transcript_path`) — its first timestamp, for when the session began, and its
-last answer's token count, for the restart reminder; and the text of tool results, for an
-empty read (lesson L2). Nothing of it leaves the machine. The review tools send only with the
+last answer's token count, for the restart reminder; at session start, the previous transcript
+in the same project folder — the messages the human typed and its times, to set beside the
+entries written then; and the text of tool results, for an empty read (lesson L2). Nothing of it leaves the machine. The review tools send only with the
 key given to Baton by `tools/baton_key.py` — never a key found in the environment or in
 another tool's files.
 
