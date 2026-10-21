@@ -676,6 +676,13 @@ folder or next to the script-installed hooks), and `/baton-doctor` (`/baton:bato
 plugin) shows when each last ran. No heartbeat at all: **installed but not running**. It reads
 only and sends nothing.
 
+It also shows whether Stop's hand-back does any work -- the one number that says it (ZA-OPRAVYANE
+row 27, from a question about how often the agent writes the entry only because it was made to).
+Stop counts, by folder, in `baton.lessons.json`: entries the agent **wrote unasked** this session,
+turns **handed back** for unrecorded work, and of those how many were **recorded on the second
+try** and how many **passed without one** -- Stop never asks twice, so an agent that ignores the
+note gets through, and until now that left no trace.
+
 ## After compaction: the agent writes the logbook first
 
 When Claude Code compacts a long conversation, everything before that point survives only as a

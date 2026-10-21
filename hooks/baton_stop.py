@@ -131,6 +131,7 @@ def _at_the_top(old: list, new: list) -> bool:
 
 
 REWRITTEN: list = []      # folders whose older entries changed during this run
+GREW: list = []           # folders that gained an entry since the last look (row 27)
 
 
 def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
@@ -167,6 +168,8 @@ def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
             REWRITTEN.append(folder.name)
         bodies[key] = [digest, seen[1], entries]
         return min(mtime, seen[1])
+    if old and len(entries) > len(old):
+        GREW.append(folder.name)
     bodies[key] = [digest, mtime, entries]
     return mtime
 
@@ -194,6 +197,7 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
     work; the older debt is listed on the board instead."""
     out = []
     REWRITTEN.clear()
+    GREW.clear()
     path = _bodies_path()
     try:
         bodies = json.loads(path.read_text("utf-8"))
@@ -648,6 +652,41 @@ def _remember(session: str, asked: set) -> None:
         pass          # state is a courtesy; never a reason to fail the session
 
 
+# Does the hand-back do any work? (ZA-OPRAVYANE row 27, 2026-10-21.) Nothing counted it: a turn
+# handed back and then let through with `stop_hook_active` left no trace. Three numbers, kept
+# with the lessons: entries the agent wrote unasked; turns handed back for unrecorded work; and
+# of those, recorded on the second try or passed without an entry. /baton-doctor shows them.
+def _count(**kinds) -> None:
+    try:
+        ss = _ss()
+        state = ss.lessons_load()
+        rec = state.setdefault("handback", {})
+        for kind, n in kinds.items():
+            if n:
+                rec[kind] = rec.get(kind, 0) + n
+        if any(kinds.values()):
+            rec.setdefault("since", datetime.now().isoformat(timespec="minutes"))
+            ss.lessons_save(state)
+    except Exception:
+        pass          # counting is a courtesy; never a reason to fail the session
+
+
+def second_try(payload: dict) -> None:
+    """The turn after a hand-back (`stop_hook_active`): was the work recorded, or passed?"""
+    session = str(payload.get("session_id") or "")
+    asked = _already_asked(session)
+    pending = {a[len("blocked:"):] for a in asked if a.startswith("blocked:")}
+    if not pending:
+        return
+    root, name = config()
+    if not root.is_dir():
+        return
+    since = session_started(str(payload.get("transcript_path") or ""))
+    still = {f.split(" (")[0] for f in unrecorded(root, name, since)}
+    _count(recorded_after=len(pending - still), passed=len(pending & still))
+    _remember(session, {a for a in asked if not a.startswith("blocked:")})
+
+
 def _stands_down() -> bool:
     """Installed twice (see installed_twice in SessionStart): this plugin copy stays quiet."""
     try:
@@ -668,8 +707,12 @@ def main() -> int:
     except Exception:
         payload = {}
 
-    # Already handed the turn back once — do not do it again.
+    # Already handed the turn back once — do not do it again. Only count what came of it.
     if payload.get("stop_hook_active"):
+        try:
+            second_try(payload)
+        except Exception:
+            pass
         return 0
 
     root, name = config()
@@ -680,6 +723,10 @@ def main() -> int:
     stale = unrecorded(root, name, since)
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
+    if since is not None:         # without a session start, an entry cannot be called this one's
+        stale_names = {f.split(" (")[0] for f in stale}
+        _count(unasked=sum(1 for f in GREW if f not in stale_names
+                           and (root / f / name).stat().st_mtime >= since))
     open_ended = [f for f in undefined(root, name) if f not in asked]
     ahead = [f for f in future_dated(root, name) if f"future:{f}" not in asked]
     try:
@@ -715,6 +762,8 @@ def main() -> int:
             "the next session, which will have none of this conversation.\n\n"
             "If the change was incidental and genuinely needs no entry, say so in one "
             "line and finish.")
+        _count(handed_back=len(stale))
+        _remember(session, _already_asked(session) | {"blocked:" + f.split(" (")[0] for f in stale})
     if open_ended:
         listed = "\n".join(f"  - {folder}" for folder in open_ended)
         parts.append(
@@ -723,7 +772,7 @@ def main() -> int:
             "Add `done_when:` to the header (or `kriterii_zavarshvane:`) — one sentence a person could check. "
             "If it is not known yet, ask the human rather than inventing one. "
             "(Asked once per session.)")
-        _remember(session, asked | set(open_ended))
+        _remember(session, _already_asked(session) | set(open_ended))
     if ahead:
         listed = "\n".join(f"  - {folder}" for folder in ahead)
         parts.append(

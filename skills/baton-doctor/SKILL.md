@@ -34,4 +34,9 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
   has not come yet (Stop needs a finished turn, PostToolBatch a tool call) -- not a failure, so
   do not report it as one. If it is still ⏳ after a turn with tool calls, it is failing.
 
+- **Logbook entries … written unasked / handed back / recorded on the second try / passed** —
+  read the four numbers as they are. Unasked against handed back says how often the agent wrote
+  the entry without Stop asking; "passed" is a turn Stop asked about and then let through, since
+  it never asks twice. No verdict: the human decides what the numbers mean.
+
 Do not change anything to fix it without the human's yes.

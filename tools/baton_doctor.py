@@ -10,6 +10,7 @@ Python, no Git Bash on Windows -- and nothing on the screen says so. Reads only;
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import datetime
@@ -56,6 +57,22 @@ def ago(when: datetime, now: datetime) -> str:
     return "just now"
 
 
+def handback(where: Path) -> str | None:
+    """Does Stop's hand-back do any work? The three numbers Stop keeps with the lessons."""
+    path = Path(os.environ.get("BATON_LESSONS_STATE") or where / "baton.lessons.json")
+    try:
+        rec = json.loads(path.read_text("utf-8")).get("handback") or {}
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not rec:
+        return None
+    return (f"Logbook entries since {rec.get('since', '?')}: written unasked: "
+            f"{rec.get('unasked', 0)}; handed back: {rec.get('handed_back', 0)} -- recorded on "
+            f"the second try: {rec.get('recorded_after', 0)}, passed without one: "
+            f"{rec.get('passed', 0)}.\n   (Counted by folder. \"Passed\" is a turn Stop asked about "
+            "and let through, since it never asks twice.)")
+
+
 def main() -> int:
     where, now = folder(), datetime.now()
     print(f"Baton doctor -- heartbeats in {where}\n")
@@ -72,6 +89,9 @@ def main() -> int:
             mark, state = "❌", "NEVER RAN"
         print(f"  {mark} {event:<17} {state}   -- runs {when}")
     print()
+    counted = handback(where)
+    if counted:
+        print(counted + "\n")
     if not any(seen.values()):
         print("🔴 Installed but not running: no Baton hook has left a heartbeat here.\n"
               "   Check that Python 3.8+ runs (`python3 --version`); on Windows, that Git for\n"
