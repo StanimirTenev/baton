@@ -83,13 +83,15 @@ def changed_after(index: Path, state: dict, accept: bool = False) -> list[str]:
     """Lines whose target file changed after the line was last written. Updates `state`:
     {index: {target: {line hash: time}}}, keeping only the lines the index holds now."""
     base, mine = index.parent, state.setdefault(str(index.resolve()), {})
+    # A logbook grows under its line by design; the line only says where it is.
+    logbook = os.environ.get("BATON_LOGBOOK") or _corpus_config()["logbook"]
     written = index.stat().st_mtime
     lines = index.read_text("utf-8", errors="replace").splitlines()
     kept: dict = {}
     out = []
     for n, target in links(index):
         path = (base / target).resolve()
-        if not path.is_file():
+        if not path.is_file() or path.name == logbook:
             continue                                   # a dead link is the first question's
         digest = hashlib.sha1(lines[n - 1].strip().encode("utf-8")).hexdigest()[:12]
         seen = mine.get(str(path), {}).get(digest, written)

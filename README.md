@@ -816,7 +816,9 @@ reason to read its line again, not proof the line is wrong. A line's time is rem
 text (`baton.memlint.json` next to the settings); a line not seen before takes the index's own
 file time, the latest it can have been written, so the first run already names a file newer
 than the whole index. An edit elsewhere in the index does not reset a line; rewriting the line
-does. `--accept` records the lines it names as re-read. Whether a line is still *true* is the
+does. A link to a logbook is left out: it grows under its line by design (on the author's
+index all four lines first named were logbooks). `--accept` records the lines it names as
+re-read. Whether a line is still *true* is the
 paid review below.
 
 ## The review: does the index still match the files?

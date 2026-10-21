@@ -100,3 +100,17 @@ def test_the_line_rewritten_or_accepted_is_quiet(tmp_path):
                               capture_output=True, text=True)
     assert "accepted" in accepted.stdout
     assert "changed after their line (0)" in _run(index).stdout, "re-read and still right"
+
+
+def test_a_logbook_growing_under_its_line_is_not_named(tmp_path):
+    """A logbook changes with every entry by design; its line in the index only points to it.
+    Measured on the author's index (21.10): all four lines named were logbooks."""
+    import os
+    index, detail = _olewinski(tmp_path)
+    book = detail.with_name("LOGBOOK.md")
+    detail.rename(book)
+    index.write_text(index.read_text("utf-8").replace("olewinski.md", "LOGBOOK.md"), "utf-8")
+    os.utime(index, (book.stat().st_mtime - 5 * DAY,) * 2)
+    out = subprocess.run([sys.executable, str(TOOL), str(index)], capture_output=True, text=True,
+                         env={**os.environ, "BATON_LOGBOOK": "LOGBOOK.md"})
+    assert "changed after their line (0)" in out.stdout, out.stdout
