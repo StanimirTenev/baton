@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A board of the tasks, as one local HTML file.
 
-    python3 tools/baton_board.py [--out tablo.html] [--open]
+    python3 tools/baton_board.py [--out tablo.html] [--open] [--lang bg]
 
 The session-start hook already says all of this, but it says it as a wall of text
 at the top of a conversation, which is where it is least readable and most easily
