@@ -298,7 +298,7 @@ Two hooks hold the checkable half of it, so it does not depend on the agent reme
   -- many commands, large output -- to a subagent with its own fresh context, so the main
   context grows by the subagent's report rather than by everything it read. A lower
   `restart_at` is yours to set if quality slips earlier for you.
-- **Stop**: a task worked on now whose header has no `kriterii_zavarshvane` hands the turn back
+- **Stop**: a task worked on now whose header has no `done_when` (or `kriterii_zavarshvane`) hands the turn back
   once per session: say when it is done, or ask the human — never invent one.
 
 Measured on the day that made it (2026-09-28), against its three misses: a proposal to redo a
@@ -354,7 +354,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.17.0]
+[baton:board v3.18.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -382,8 +382,10 @@ of its last entry, and that entry's title.
 **Stop** checks whether any task folder holds a file newer than its `LOGBOOK.md`. If one
 does, and that file was saved during this session (after the first timestamp of its
 transcript), the turn is handed back with a note naming it. The test is deliberately narrow:
-a session that touched no task folder is never interrupted, and `stop_hook_active` is honoured
-so it can block at most once per turn. Older unrecorded work — from a session that ended
+a session that touched no task folder is never interrupted (the next session start sets its
+messages beside the entries written then -- see *A session that touched no task folder*), and
+`stop_hook_active` is honoured so it can block at most once per turn; what came of each
+hand-back is counted (see `/baton-doctor`). Older unrecorded work — from a session that ended
 without its entry — is listed on the board under 📝 instead of stopping every session after
 it. Without a readable transcript Stop falls back to every folder, as before v3.10.1; a resumed
 session counts from its original start.
@@ -2367,11 +2369,11 @@ having been done.
 
 **Plugin:** `claude plugin uninstall baton` (add `--keep-data` to keep its settings).
 
-**Script install:** remove the three hook entries whose command runs a `baton_` script
-(`baton_session_start.py`, `baton_stop.py`, `baton_prompt.py`) from `~/.claude/settings.json`,
+**Script install:** remove the four hook entries whose command runs a `baton_` script
+(`baton_session_start.py`, `baton_stop.py`, `baton_prompt.py`, `baton_batch.py`) from `~/.claude/settings.json`,
 delete the Baton section from `~/.claude/CLAUDE.md` (the heading
 `# Baton — task folders and logbooks` and the text under it, marked
-`<!-- Installed by Baton. ... -->`), and remove `~/.claude/baton`, the four skills
+`<!-- Installed by Baton. ... -->`), and remove `~/.claude/baton`, the five skills
 `~/.claude/skills/baton-inventory`, `baton-plan`, `baton-task`, `baton-key` and `baton-doctor`, and the clone
 (`~/.baton`).
 
