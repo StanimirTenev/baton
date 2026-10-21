@@ -285,7 +285,11 @@ Two hooks hold the checkable half of it, so it does not depend on the agent reme
   brings the board back, told the logbooks were just written. No hook can run `/clear` itself
   (Claude Code issues #35150 and #16659, closed as not planned), so it costs one command. Set `restart_at` /
   `restart_step` in `baton.local.json` (or `BATON_RESTART_AT` / `BATON_RESTART_STEP`);
-  `restart_at: 0` turns it off.
+  `restart_at: 0` turns it off. The 200k default was set for cost, not for quality, and it stays
+  (decided 2026-10-21): what stretches a session before a restart is needed is handing heavy work
+  -- many commands, large output -- to a subagent with its own fresh context, so the main
+  context grows by the subagent's report rather than by everything it read. A lower
+  `restart_at` is yours to set if quality slips earlier for you.
 - **Stop**: a task worked on now whose header has no `kriterii_zavarshvane` hands the turn back
   once per session: say when it is done, or ask the human — never invent one.
 
