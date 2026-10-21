@@ -1191,6 +1191,26 @@ build/*
 
 The Stop hook also names the newest unrecorded file, so you can see at a glance what tripped it.
 
+**A folder of data** -- downloaded filings, cloned repositories, a cache -- goes in as a line
+ending in `/`. The hooks then do not walk into it at all, which is what keeps them fast: a glob
+such as `build/*` still lists and checks every file under `build/`, one by one.
+
+```
+cache/                      # a folder named cache, at any depth
+raw/2026/                   # this path, from the task folder
+```
+
+The task root's `.batonignore` can say the same with the task's name in front
+(`investicii-sec/raw/`). In a line, `*` also crosses `/`.
+
+**A folder bigger than 10,000 work files is not read to the end.** Every hook walks every task
+folder; on 21.10.2026 one task root of ~139,000 files took SessionStart and Stop to 19 seconds
+against their 20-second limit, and a hook over the limit is dropped without a word. So the walk
+stops at 10,000 files, and that is never a silent pass: the board lists the folder as *not read
+to the end*, and Stop says so once a session (a message, not a hand-back -- the agent cannot
+settle it in that turn). Newer work further in is not seen until its data folders are named
+with `dir/` lines.
+
 **A folder that is not a task** -- photos, an archive -- goes in a `.batonignore` at the task
 root, one folder name (or glob) per line. It means the same there: do not demand a logbook for
 this. Such a folder is not on the board, Stop never asks about it, and the review neither expects

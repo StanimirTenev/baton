@@ -36,19 +36,75 @@ SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cach
 GRACE_SECONDS = 90
 
 
-def ignore_patterns(folder: Path) -> list[str]:
-    """Globs from a .batonignore in the task folder (gitignore-style, one per line,
-    '#' comments). Use it for files that legitimately change without needing a logbook
-    entry — a live transcript, a rotating log, generated output."""
+# ZA-OPRAVYANE row 35 (2026-10-21): ~139,000 files under one task root took SessionStart and
+# Stop to 19 s against the 20 s hook limit. A folder holding more work files than this is not
+# read to the end, and the board and Stop say so -- never a silent pass. Measured that day:
+# ~50 us a file at load 1.6, so 10,000 is ~0.5 s a walk, ~1.3 s at the load of 8.7 that took
+# the hooks to 19 s; the largest folder here without its data folders holds ~3,800.
+WALK_CAP = 10_000
+
+
+def _lines(path: Path) -> list[str]:
     try:
-        lines = (folder / ".batonignore").read_text("utf-8-sig").splitlines()
+        lines = path.read_text("utf-8-sig").splitlines()
     except OSError:
         return []
     return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
 
 
+def ignore_patterns(folder: Path) -> list[str]:
+    """Globs from a .batonignore in the task folder (gitignore-style, one per line,
+    '#' comments). Use it for files that legitimately change without needing a logbook
+    entry — a live transcript, a rotating log, generated output. A line ending in `/` names a
+    folder, which the walk does not enter at all. The task ROOT's .batonignore may name the
+    same with a path, `<task>/<path>`: those lines count here, without the task's name."""
+    own = _lines(folder / ".batonignore")
+    prefix = folder.name + "/"
+    return own + [ln[len(prefix):] for ln in _lines(folder.parent / ".batonignore")
+                  if ln.startswith(prefix) and ln[len(prefix):].strip("/")]
+
+
+def _dir_patterns(patterns: list[str]) -> list[str]:
+    return [p.rstrip("/") for p in patterns if p.endswith("/") and p.rstrip("/")]
+
+
+def _dir_ignored(rel: str, name: str, dirs: list[str]) -> bool:
+    return any(fnmatch.fnmatch(rel, d) or fnmatch.fnmatch(name, d) for d in dirs)
+
+
 def is_ignored(rel: str, name: str, patterns: list[str]) -> bool:
-    return any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(name, p) for p in patterns)
+    if any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(name, p) for p in patterns):
+        return True
+    dirs = _dir_patterns(patterns)          # a file under a folder a `dir/` line names
+    parts = Path(rel).parts[:-1]
+    return bool(dirs) and any(_dir_ignored(os.path.join(*parts[:i + 1]), parts[i], dirs)
+                              for i in range(len(parts)))
+
+
+def work_files(folder: Path, logbook: str):
+    """(path relative to the folder, full path) of every work file: not the logbook, not a
+    dotfile, nothing in SKIP_DIRS or a folder a `dir/` line names, nothing .batonignore matches.
+    Stops after WALK_CAP files and adds the folder to TRUNCATED."""
+    patterns = ignore_patterns(folder)
+    dirs = _dir_patterns(patterns)
+    count = 0
+    for dirpath, dirnames, filenames in os.walk(folder):
+        here = os.path.relpath(dirpath, folder)
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")
+                       and not (dirs and _dir_ignored(
+                           d if here == "." else os.path.join(here, d), d, dirs))]
+        for name in filenames:
+            if name == logbook or name.startswith("."):
+                continue
+            rel = name if here == "." else os.path.join(here, name)
+            if is_ignored(rel, name, patterns):
+                continue
+            if count == WALK_CAP:
+                if folder.name not in TRUNCATED:
+                    TRUNCATED.append(folder.name)
+                return
+            count += 1
+            yield rel, os.path.join(dirpath, name)
 
 
 def _local_file(name: str) -> Path:
@@ -82,24 +138,23 @@ def config() -> tuple[Path, str]:
 
 def newest_work(folder: Path, logbook: str) -> tuple[float, str]:
     """Newest work-file mtime in the folder, and that file's name. Skips the logbook,
-    dotfiles, SKIP_DIRS, and anything matched by the folder's .batonignore."""
-    patterns = ignore_patterns(folder)
+    dotfiles, SKIP_DIRS, and anything matched by the folder's .batonignore -- see work_files."""
     newest, newest_name = 0.0, ""
-    for dirpath, dirnames, filenames in os.walk(folder):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
-        for name in filenames:
-            if name == logbook or name.startswith("."):
-                continue
-            rel = os.path.relpath(os.path.join(dirpath, name), folder)
-            if is_ignored(rel, name, patterns):
-                continue
-            try:
-                m = (Path(dirpath) / name).stat().st_mtime
-            except OSError:
-                continue
-            if m > newest:
-                newest, newest_name = m, rel
+    for rel, path in work_files(folder, logbook):
+        try:
+            m = os.stat(path).st_mtime
+        except OSError:
+            continue
+        if m > newest:
+            newest, newest_name = m, rel
     return newest, newest_name
+
+
+def unread_note(folders: list[str]) -> str:
+    """One sentence for the board and for Stop: which folders were not read to the end."""
+    return (f"Baton: not read to the end (over {WALK_CAP:,} files) -- newer work further in "
+            f"would not be seen: {', '.join(folders)}. Name the data folders in each one's "
+            ".batonignore with a line ending in / (e.g. `cache/`), and the walk skips them.")
 
 
 def _bodies_path() -> Path:
@@ -133,6 +188,7 @@ def _at_the_top(old: list, new: list) -> bool:
 REWRITTEN: list = []      # folders whose older entries changed during this run
 GREW: list = []           # folders that gained an entry since the last look (row 27)
 TOPPED: list = []         # folders whose body changed at the top since the last look
+TRUNCATED: list = []      # folders not read to the end: over WALK_CAP work files (row 35)
 
 
 def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
@@ -202,6 +258,7 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
     REWRITTEN.clear()
     GREW.clear()
     TOPPED.clear()
+    TRUNCATED.clear()
     path = _bodies_path()
     try:
         bodies = json.loads(path.read_text("utf-8"))
@@ -432,21 +489,13 @@ def session_entries(text: str, since: float) -> str:
 
 def touched_since(folder: Path, logbook: str, since: float) -> list[str]:
     """Work files saved at or after `since` -- the same files `newest_work` looks at."""
-    patterns = ignore_patterns(folder)
     out = []
-    for dirpath, dirnames, filenames in os.walk(folder):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
-        for name in filenames:
-            if name == logbook or name.startswith("."):
-                continue
-            rel = os.path.relpath(os.path.join(dirpath, name), folder)
-            if is_ignored(rel, name, patterns):
-                continue
-            try:
-                if (Path(dirpath) / name).stat().st_mtime >= since:
-                    out.append(rel.replace(os.sep, "/"))
-            except OSError:
-                continue
+    for rel, path in work_files(folder, logbook):
+        try:
+            if os.stat(path).st_mtime >= since:
+                out.append(rel.replace(os.sep, "/"))
+        except OSError:
+            continue
     return sorted(out)
 
 
@@ -754,8 +803,18 @@ def main() -> int:
     except Exception:
         claims = []           # a lesson that cannot count must not cost the session
     rewritten = [f for f in REWRITTEN if f"rewrite:{f}" not in asked]
+    # Row 35: a folder the walk stopped in may hold newer work than it saw. Not a hand-back --
+    # the agent cannot settle it in this turn -- but never a silent pass: said once a session.
+    unread = [f for f in TRUNCATED if f"unread:{f}" not in asked]
+    note = {}
+    if unread:
+        note = {"systemMessage": unread_note(unread)}
+        _remember(session, _already_asked(session) | {f"unread:{f}" for f in unread})
     if (not stale and not open_ended and not ahead and not typed and not thin and not claims
             and not rewritten):
+        if note:
+            sys.stdout.buffer.write(json.dumps(note, ensure_ascii=False).encode("utf-8"))
+            sys.stdout.flush()
         return 0
 
     parts = []
@@ -837,8 +896,8 @@ def main() -> int:
             "a new entry at the top that says what changed and why. (Said once.)")
         _remember(session, _already_asked(session) | {f"rewrite:{f}" for f in rewritten})
     # UTF-8, not \\uXXXX, and as bytes: a cp1252 pipe on Windows cannot raise (v3.12.0).
-    sys.stdout.buffer.write(json.dumps({"decision": "block", "reason": "\n\n".join(parts)},
-                                       ensure_ascii=False).encode("utf-8"))
+    sys.stdout.buffer.write(json.dumps({"decision": "block", "reason": "\n\n".join(parts),
+                                        **note}, ensure_ascii=False).encode("utf-8"))
     sys.stdout.flush()
     return 0
 

@@ -1542,15 +1542,23 @@ def compacted(own: dict) -> str:
     return text
 
 
+UNREAD: list = []     # the note for folders the walk did not read to the end (row 35)
+
+
 def unlogged_work(root: Path, name: str) -> list[str]:
     """Folders holding work newer than their logbook -- the Stop hook's own check, without its
-    session limit. Never a reason to lose the board."""
+    session limit. Never a reason to lose the board. Folders over the Stop hook's WALK_CAP
+    leave their note in UNREAD."""
+    UNREAD.clear()
     try:
         spec = importlib.util.spec_from_file_location(
             "baton_stop", Path(__file__).with_name("baton_stop.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        return mod.unrecorded(root, name)
+        found = mod.unrecorded(root, name)
+        if mod.TRUNCATED:
+            UNREAD.append(mod.unread_note(mod.TRUNCATED))
+        return found
     except Exception:
         return []
 
@@ -1711,7 +1719,7 @@ def main() -> int:
         blocks.append(block)
 
     unlogged = unlogged_work(root, name)
-    if not blocks and not frozen and not finished and not stale and not unlogged:
+    if not blocks and not frozen and not finished and not stale and not unlogged and not UNREAD:
         return _notices_only(notices, start_line())
 
     if unfinished:
@@ -1734,6 +1742,8 @@ def main() -> int:
             "📝 Work newer than its logbook, from before this session:\n"
             + "\n".join(f"- {u}" for u in unlogged)
             + "\n(Write the entry it is missing, or add the file to the folder's .batonignore.)")
+    if UNREAD:
+        blocks.append("✂️ " + UNREAD[0])
     if frozen:
         blocks.append(f"❄️ Frozen (not offered): {', '.join(sorted(frozen))}")
     if finished:
