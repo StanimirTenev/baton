@@ -820,6 +820,18 @@ It is generated, never edited. The logbooks are the record; this is a view of th
 uploaded and nothing leaves the machine, which is the reason it is a file rather than a hosted
 page: logbooks carry client matter, and a board is not worth sending it anywhere.
 
+**Opened by itself at session start, if you switch it on.** Put `"board_open": true` in
+`baton.local.json` and SessionStart writes the board to `baton.board.html` (next to the
+settings) and opens it in the browser -- at `startup` and after `/clear`, never after a
+compaction or on `resume`, which are the same work going on. Off by default: a browser that
+pops up by itself is not something to switch on for anyone. Without a display (an SSH session, a
+server: on Linux no `DISPLAY` or `WAYLAND_DISPLAY`, on a Mac an SSH connection) it does nothing.
+It runs in a process of its own, so the session does not wait for it and a failure in it costs
+nothing. `"board_language": "bg"` (or `--lang bg` by hand) gives the page Bulgarian labels; the
+terminal board is translated by the agent, and nobody translates a file opened in a browser.
+English is the default. The idea came from
+[answer-me-with-html](https://github.com/QingYunA/answer-me-with-html).
+
 ## A free check of the memory index
 
 ```

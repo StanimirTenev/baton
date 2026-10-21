@@ -123,3 +123,103 @@ def test_each_priority_badge_is_coloured(tmp_path):
     for p, var in (("high", "--hot"), ("medium", "--warm"), ("low", "--cool")):
         assert f'class="badge prio-{p}">{p}<' in page
         assert f".badge.prio-{p}{{color:var({var})" in page
+
+
+# -- Row 34: the board opens itself at session start, if asked to -------------------------
+
+def test_the_board_speaks_bulgarian_when_asked(tmp_path):
+    task(tmp_path, "ours", "sastoyanie: aktivna\nna_hod: nie\nprioritet: visok")
+    task(tmp_path, "theirs", "sastoyanie: chakashta\nna_hod: David")
+    task(tmp_path, "parked", "sastoyanie: zamrazena\nna_hod: nie")
+    rows, _ = tablo.collect(tmp_path, "LOGBOOK.md")
+    page = tablo.render(rows, tmp_path, TODAY, lang="bg")
+    assert '<html lang="bg">' in page
+    assert "Наш ход" in page and "Чакаме някого отвън" in page and "Замразени" in page
+    assert "Our move" not in page and "Waiting on someone outside" not in page
+    assert "чакаме: David" in page and "висок" in page
+    assert "Our move" in tablo.render(rows, tmp_path, TODAY), "English stays the default"
+
+
+def _hook_env(tmp_path, settings: dict | None, display=True):
+    import json
+    import os
+    root = Path(__file__).resolve().parent.parent
+    data = tmp_path / "data"
+    data.mkdir()
+    if settings is not None:
+        (data / "baton.local.json").write_text(json.dumps(settings), "utf-8")
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    tasks = tmp_path / "tasks"
+    task(tasks, "ours", "sastoyanie: aktivna\nna_hod: nie")
+    opened = tmp_path / "opened.txt"
+    browser = tmp_path / "browser.sh"
+    browser.write_text(f'#!/bin/sh\necho "$1" > "{opened}"\n', "utf-8")
+    browser.chmod(0o755)
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR", "BATON_HOME", "DISPLAY",
+                                "WAYLAND_DISPLAY"))}
+    env.update(HOME=str(home), BATON_HOME=str(tasks), BATON_LOGBOOK="LOGBOOK.md",
+               CLAUDE_PLUGIN_ROOT=str(root), CLAUDE_PLUGIN_DATA=str(data),
+               BROWSER=f"{browser} %s")
+    if display:
+        env["DISPLAY"] = ":99"
+    return env, opened, data
+
+
+def _start(env, source):
+    import subprocess
+    hook = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
+    out = subprocess.run([sys.executable, str(hook)], input=f'{{"source":"{source}"}}'.encode(),
+                         capture_output=True, env=env, timeout=30)
+    assert out.returncode == 0, out.stderr
+
+
+def _wait(path, seconds=15.0):
+    import time
+    end = time.time() + seconds
+    while time.time() < end and not path.exists():
+        time.sleep(0.1)
+    return path.exists()
+
+
+def test_session_start_opens_the_board_when_switched_on(tmp_path):
+    env, opened, data = _hook_env(tmp_path, {"board_open": True, "board_language": "bg"})
+    _start(env, "startup")
+    assert _wait(opened), "switched on, at startup, with a display: the board opens"
+    page = data / "baton.board.html"
+    assert opened.read_text("utf-8").strip() == page.resolve().as_uri()
+    assert "Наш ход" in page.read_text("utf-8")
+
+
+def test_the_board_opens_after_clear_too(tmp_path):
+    env, opened, _ = _hook_env(tmp_path, {"board_open": True})
+    _start(env, "clear")
+    assert _wait(opened)
+
+
+def test_never_on_compact_or_resume_or_when_off_or_without_a_display(tmp_path):
+    import importlib.util
+    hook = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
+    spec = importlib.util.spec_from_file_location("ss_board", hook)
+    ss = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ss)
+    on = {"board_open": True}
+    assert ss.board_wanted("startup", on, {"DISPLAY": ":0"}, "linux")
+    assert ss.board_wanted("clear", on, {"WAYLAND_DISPLAY": "w"}, "linux")
+    assert not ss.board_wanted("compact", on, {"DISPLAY": ":0"}, "linux")
+    assert not ss.board_wanted("resume", on, {"DISPLAY": ":0"}, "linux")
+    assert not ss.board_wanted(None, on, {"DISPLAY": ":0"}, "linux")
+    assert not ss.board_wanted("startup", {}, {"DISPLAY": ":0"}, "linux"), "off by default"
+    assert not ss.board_wanted("startup", {"board_open": "yes"}, {"DISPLAY": ":0"}, "linux")
+    assert not ss.board_wanted("startup", on, {}, "linux"), "no display (SSH): silent"
+    assert not ss.board_wanted("startup", on, {"SSH_CONNECTION": "x"}, "darwin")
+    assert ss.board_wanted("startup", on, {}, "darwin") and ss.board_wanted("startup", on, {}, "win32")
+
+
+def test_no_display_through_the_hook_opens_nothing_and_the_board_still_comes(tmp_path):
+    import time
+    env, opened, data = _hook_env(tmp_path, {"board_open": True}, display=False)
+    _start(env, "startup")
+    time.sleep(2)
+    assert not opened.exists() and not (data / "baton.board.html").exists()

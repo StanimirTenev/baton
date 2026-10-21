@@ -58,6 +58,30 @@ STATE_LABEL = {"active": "active", "waiting": "waiting", "ongoing": "ongoing",
                "frozen": "frozen", "finished": "finished", "done": "finished"}
 PRIORITY_LABEL = {"high": "high", "medium": "medium", "low": "low"}
 
+# The page's own words. The terminal board is translated by the agent; nobody translates a file
+# opened in a browser, so the language is a setting (`board_language` in baton.local.json, or
+# --lang). English is the default and the fallback for any word a language does not have.
+LABELS = {
+    "en": {},
+    "bg": {
+        "Our move": "Наш ход", "Waiting on someone outside": "Чакаме някого отвън",
+        "Frozen": "Замразени", "Finished": "Приключени", "live": "живи", "frozen": "замразени",
+        "finished": "приключени", "shelf-life notes": "бележки за срок на годност",
+        "waiting on:": "чакаме:", "deadline": "срок", "days": "дни", "passed": "изтекъл",
+        "no header — not ordered by state": "без заглавна част — не е подредена по състояние",
+        "active": "активна", "waiting": "чакаща", "ongoing": "постоянна",
+        "high": "висок", "medium": "среден", "low": "нисък",
+        "Generated from the logbooks. They are the record; this is a view of them. "
+        "Nothing leaves the machine.":
+            "Генерирано от дневниците. Те са записът; това е изглед към тях. "
+            "Нищо не напуска машината.",
+    },
+}
+
+
+def _t(lang: str, text: str) -> str:
+    return LABELS.get(lang, {}).get(text, text)
+
 CSS = """
 :root{--ink:#14171a;--dim:#5b6570;--line:#e3e6ea;--bg:#fbfcfd;--card:#fff;
       --hot:#b4232c;--warm:#8a6d1f;--cool:#2f6f4f}
@@ -136,7 +160,7 @@ def collect(root: Path, logbook: str) -> tuple[list[dict], date]:
     return rows, today
 
 
-def card(row: dict, today: date) -> str:
+def card(row: dict, today: date, lang: str = "en") -> str:
     klass = "card"
     if row["warnings"]:
         klass += " warm"
@@ -144,14 +168,15 @@ def card(row: dict, today: date) -> str:
         klass += " hot"
     badges = []
     if row["priority"]:
-        badges.append((row["priority"], f"prio-{row['raw_priority']}"))
+        badges.append((_t(lang, row["priority"]), f"prio-{row['raw_priority']}"))
     if row["state"] and row["state"] != "—":
-        badges.append((row["state"], ""))
+        badges.append((_t(lang, row["state"]), ""))
     if row["deadline"]:
         left = (row["deadline"] - today).days
-        badges.append((f"deadline {row['deadline']}" + (f" ({left} days)" if left >= 0 else " ⚠ passed"), ""))
+        badges.append((f"{_t(lang, 'deadline')} {row['deadline']}"
+                       + (f" ({left} {_t(lang, 'days')})" if left >= 0 else f" ⚠ {_t(lang, 'passed')}"), ""))
     if not row["on_us"] and row["who"]:
-        badges.append((f"waiting on: {html.escape(row['who'])}", ""))
+        badges.append((f"{_t(lang, 'waiting on:')} {row['who']}", ""))
     out = [f'<div class="{klass}">',
            '<span class="badges">'
            + "".join(f'<span class="badge {k}">{html.escape(b)}</span>' for b, k in badges)
@@ -160,14 +185,14 @@ def card(row: dict, today: date) -> str:
     if row["next"]:
         out.append(f'<div class="next">{html.escape(row["next"])}</div>')
     if row["headerless"]:
-        out.append('<div class="next quiet">no header — not ordered by state</div>')
+        out.append(f'<div class="next quiet">{_t(lang, "no header — not ordered by state")}</div>')
     for w in row["warnings"]:
         out.append(f'<div class="warn">⏳ {html.escape(w)}</div>')
     out.append("</div>")
     return "\n".join(out)
 
 
-def render(rows: list[dict], root: Path, today: date) -> str:
+def render(rows: list[dict], root: Path, today: date, lang: str = "en") -> str:
     # The header parser maps every spelling to `frozen` / `finished` (v3.2.0); `done` is kept
     # as its own word because plans share the field.
     live = [r for r in rows if r["raw_state"] not in ("frozen", "finished", "done")]
@@ -181,24 +206,27 @@ def render(rows: list[dict], root: Path, today: date) -> str:
     theirs = sorted([r for r in live if not r["on_us"]], key=order)
     flagged = sum(len(r["warnings"]) for r in rows)
 
+    t = lambda text: _t(lang, text)    # noqa: E731
     parts = [f"<h1>Baton</h1>",
              f'<div class="sub">{html.escape(str(root))} · {today} · '
-             f'{len(live)} live, {len(frozen)} frozen, {len(done)} finished'
-             + (f" · <strong>{flagged} shelf-life notes</strong>" if flagged else "")
+             f'{len(live)} {t("live")}, {len(frozen)} {t("frozen")}, {len(done)} {t("finished")}'
+             + (f" · <strong>{flagged} {t('shelf-life notes')}</strong>" if flagged else "")
              + "</div>"]
     if ours:
-        parts.append("<h2>Our move</h2>" + "\n".join(card(r, today) for r in ours))
+        parts.append(f"<h2>{t('Our move')}</h2>" + "\n".join(card(r, today, lang) for r in ours))
     if theirs:
-        parts.append("<h2>Waiting on someone outside</h2>" + "\n".join(card(r, today) for r in theirs))
+        parts.append(f"<h2>{t('Waiting on someone outside')}</h2>"
+                     + "\n".join(card(r, today, lang) for r in theirs))
     if frozen:
-        parts.append('<h2>Frozen</h2><div class="card quiet">'
+        parts.append(f'<h2>{t("Frozen")}</h2><div class="card quiet">'
                      + ", ".join(html.escape(r["name"]) for r in frozen) + "</div>")
     if done:
-        parts.append('<h2>Finished</h2><div class="card quiet">'
+        parts.append(f'<h2>{t("Finished")}</h2><div class="card quiet">'
                      + ", ".join(html.escape(r["name"]) for r in done) + "</div>")
-    parts.append("<footer>Generated from the logbooks. They are the record; this is a view of them. "
-                 "Nothing leaves the machine.</footer>")
-    return ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+    parts.append("<footer>" + t("Generated from the logbooks. They are the record; this is a view "
+                                "of them. Nothing leaves the machine.") + "</footer>")
+    code = lang if lang in LABELS else "en"
+    return (f"<!doctype html><html lang=\"{code}\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
             "<title>Baton</title><style>" + CSS + "</style></head><body>"
             "<div class=\"wrap\">" + "\n".join(parts) + "</div></body></html>")
@@ -208,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="A board of the Baton tasks, as one local HTML file.")
     ap.add_argument("--out", default="tablo.html", help="where to write it")
     ap.add_argument("--open", action="store_true", help="open it in the browser afterwards")
+    ap.add_argument("--lang", default="en", choices=sorted(LABELS),
+                    help="the page's language (default en)")
     a = ap.parse_args(argv)
 
     hook = _hook()
@@ -221,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"baton: no tasks under {root}", file=sys.stderr)
         return 1
     out = Path(a.out).expanduser()
-    out.write_text(render(rows, root, today), encoding="utf-8")
+    out.write_text(render(rows, root, today, a.lang), encoding="utf-8")
     print(f"wrote {out} ({len(rows)} tasks)")
     if a.open:
         webbrowser.open(out.resolve().as_uri())

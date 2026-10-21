@@ -203,6 +203,47 @@ def entry_tool() -> Path | None:
     return None
 
 
+def board_wanted(source, cfg: dict, env, platform: str) -> bool:
+    """Open the HTML board now? Only when the human switched it on (`board_open: true`), only
+    at `startup` and `/clear` -- never after a compaction or on `resume`, which are the same
+    work going on -- and only where a browser can appear: on Linux a DISPLAY or WAYLAND_DISPLAY
+    (without one, Python's browser module falls back to a text browser in the terminal), on a
+    Mac not over SSH. ZA-OPRAVYANE row 34 (2026-10-21)."""
+    if cfg.get("board_open") is not True or source not in ("startup", "clear"):
+        return False
+    if platform.startswith("win"):
+        return True
+    if platform == "darwin":
+        return not env.get("SSH_CONNECTION")
+    return bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
+
+
+def open_board(source, root: Path, logbook: str) -> None:
+    """Write the HTML board and open it, in a process of its own: the hook does not wait for
+    it, and nothing it does can fail the session. Off by default; silent when the board tool
+    is not on this machine (install.sh copies only the hooks; then `repo` says where it is)."""
+    try:
+        cfg = _local()
+        if not board_wanted(source, cfg, os.environ, sys.platform):
+            return
+        repo = cfg.get("repo")
+        tool = next((b / "tools" / "baton_board.py" for b in
+                     (Path(__file__).resolve().parent.parent, Path(repo).expanduser() if repo else None)
+                     if b is not None and (b / "tools" / "baton_board.py").is_file()), None)
+        if tool is None:
+            return
+        lang = str(cfg.get("board_language") or "en")
+        env = dict(os.environ, BATON_HOME=str(root), BATON_LOGBOOK=logbook)
+        detach = ({"creationflags": 0x00000008 | 0x00000200} if os.name == "nt"   # DETACHED, NEW_GROUP
+                  else {"start_new_session": True})
+        subprocess.Popen([sys.executable, str(tool), "--out", str(_local_file("baton.board.html")),
+                          "--open", "--lang", lang if lang in ("en", "bg") else "en"],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, env=env, **detach)
+    except Exception:
+        pass          # a view of the board is a courtesy; never a reason to fail the session
+
+
 def _state_file() -> Path:
     return Path(os.environ.get("BATON_SESSION_STATE")
                 or _local_file("baton.state.json"))
@@ -1486,6 +1527,8 @@ def main() -> int:
     notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),
                            review_notice()) if n]
     folders = task_folders(root) if root.is_dir() else []
+    if folders:
+        open_board(own.get("source"), root, name)
     if folders and own.get("source") in ("startup", "clear"):
         try:
             quiet = quiet_session(own, folders, name)

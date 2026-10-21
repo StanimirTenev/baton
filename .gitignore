@@ -6,3 +6,5 @@ hooks/baton.bodies.json
 hooks/baton.state.json
 hooks/baton.lessons.json
 hooks/baton.beat.*
+hooks/baton.board.html
+hooks/baton.memlint.json
