@@ -867,7 +867,10 @@ run with `CLAUDE_PLUGIN_DATA` set to that folder:
 Every run ends with an account of what it was pointed at and what it read, each one not read
 named with the reason. Nothing read is `BLOCKED`, exit 1. Some read and some not is `PARTIAL`,
 exit 2 -- including a folder that was never meant to hold a logbook, which looks the same to the
-tool as one whose logbook went missing.
+tool as one whose logbook went missing. Name such a folder in a `.batonignore` at the task root
+(see [Ignoring files](#ignoring-files-that-change-on-their-own)) and it is neither expected nor
+missing; the run prints it as `skipped`. `review_required` stays all-or-nothing: which folders
+are required cannot yet be said one by one.
 
 The guard reads the **whole source file**, not the part that gets sent: the question is
 whether this document is about confidential matter, not whether the bytes that happened to fit
@@ -1130,6 +1133,12 @@ build/*
 ```
 
 The Stop hook also names the newest unrecorded file, so you can see at a glance what tripped it.
+
+**A folder that is not a task** -- photos, an archive -- goes in a `.batonignore` at the task
+root, one folder name (or glob) per line. It means the same there: do not demand a logbook for
+this. Such a folder is not on the board, Stop never asks about it, and the review neither expects
+it nor counts it missing (it prints it as skipped). Without it, every folder in the task root is
+a task, and one without a logbook is reported as one.
 
 ## Where else does this live — and is that place still claiming it?
 

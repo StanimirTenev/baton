@@ -568,8 +568,13 @@ def tasks(api_key: str, cfg: dict, izbrani: set[str]) -> None:
     expected, missing = 0, []
     print(config_line(cfg))
     try:
-        for folder in sorted(p for p in root.iterdir() if p.is_dir()
-                             and not p.name.startswith(".")):
+        every = sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+        kept = hook.task_folders(root)
+        # Declared not a task (row 31): neither expected nor missing -- and named, not hidden.
+        skipped = [p.name for p in every if p not in kept]
+        if skipped:
+            print(f"  skipped (the task root's .batonignore): {', '.join(skipped)}")
+        for folder in kept:
             if izbrani and not any(part in folder.name for part in izbrani):
                 continue
             expected += 1

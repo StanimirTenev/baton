@@ -194,3 +194,53 @@ def test_seven_of_ten_read_is_partial_with_the_three_named(tmp_path, monkeypatch
     with pytest.raises(SystemExit) as stop:
         br.tasks("k", cfg, set())
     assert "BLOCKED" in str(stop.value.code) and "t7, t8, t9" in str(stop.value.code)
+
+
+def _stray_folder(tmp_path, ignore: str | None):
+    """Two tasks and a folder of photos (ZA-OPRAVYANE row 31, the probe of 21.10)."""
+    tasks = tmp_path / "tasks"
+    for name in ("a", "b"):
+        (tasks / name).mkdir(parents=True)
+        (tasks / name / "DNEVNIK.md").write_text("---\nnext: go on\n---\n## e\n", "utf-8")
+    (tasks / "snimki").mkdir()
+    (tasks / "snimki" / "photo.jpg").write_bytes(b"\xff\xd8")
+    if ignore is not None:
+        (tasks / ".batonignore").write_text(ignore, "utf-8")
+    return tasks
+
+
+def _tasks_stubbed(tmp_path, monkeypatch, tasks, required=False):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("br_stray", TOOL)
+    br = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(br)
+    monkeypatch.setattr(br, "value_of", lambda *a, **k: (0.1, [0.1], 0.0))
+    monkeypatch.setattr(br, "log_spend", lambda *a, **k: None)
+    cfg = {"home": str(tasks), "logbook": "DNEVNIK.md", "confidential": [], "source": None,
+           "required": required}
+    try:
+        br.tasks("k", cfg, set())
+        return 0
+    except SystemExit as stop:
+        return stop.code
+
+
+def test_a_stray_folder_makes_the_review_partial(tmp_path, monkeypatch, capsys):
+    """The defect as found: one folder of photos and every run is PARTIAL. Kept as it is --
+    a folder that lost its logbook must still be named."""
+    code = _tasks_stubbed(tmp_path, monkeypatch, _stray_folder(tmp_path, None))
+    out = capsys.readouterr().out
+    assert code == 2 and "PARTIAL: 2 of 3" in out and "snimki" in out, out
+
+
+def test_a_folder_the_root_batonignore_names_is_not_a_task(tmp_path, monkeypatch, capsys):
+    """Row 31: a folder can be declared not a task -- in a `.batonignore` at the task root --
+    and is then neither expected nor missing. It is named as skipped, never hidden."""
+    tasks = _stray_folder(tmp_path, "# not tasks\nsnimki\n")
+    code = _tasks_stubbed(tmp_path, monkeypatch, tasks)
+    out = capsys.readouterr().out
+    assert code in (0, None), out
+    assert "PARTIAL" not in out and "ACCOUNT: 2 task folders expected" in out, out
+    assert "skipped (the task root's .batonignore): snimki" in out, out
+    code = _tasks_stubbed(tmp_path, monkeypatch, tasks, required=True)
+    assert code in (0, None), "review_required: a declared non-task is not required input"

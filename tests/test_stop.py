@@ -385,3 +385,33 @@ def test_a_rewritten_older_entry_is_said_once_through_the_entry_point(tmp_path, 
     reason = stop()
     assert "older entry" in reason and "baton" in reason, reason
     assert "older entry" not in stop(), "said once"
+
+
+def test_a_folder_the_root_batonignore_names_is_never_asked_about(tmp_path):
+    """ZA-OPRAVYANE row 31: a folder of photos in the task root is not a task. Declared in a
+    `.batonignore` at the root, new work in it hands nothing back and it is not on the board."""
+    import os
+    import subprocess
+    import sys
+    import time
+    root = tmp_path / "tasks"
+    (root / "snimki").mkdir(parents=True)
+    photo = root / "snimki" / "photo.jpg"
+    photo.write_bytes(b"\xff\xd8")
+    old = time.time() - 600
+    os.utime(photo, (old, old))
+    hooks = Path(__file__).resolve().parent.parent / "hooks"
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE_PLUGIN", "BATON_HOME"))}
+    env.update(BATON_HOME=str(root), BATON_LOGBOOK="LOGBOOK.md", BATON_STATE_DIR=str(tmp_path / "st"))
+
+    def run(hook, payload):
+        out = subprocess.run([sys.executable, str(hooks / hook)], input=payload,
+                             capture_output=True, text=True, env=env)
+        assert out.returncode == 0, out.stderr
+        return out.stdout
+
+    assert "snimki" in run("baton_stop.py", "{}"), "without the declaration it is a task"
+    assert "snimki" in run("baton_session_start.py", '{"source":"startup"}')
+    (root / ".batonignore").write_text("snimki\n", "utf-8")
+    assert "snimki" not in run("baton_stop.py", "{}")
+    assert "snimki" not in run("baton_session_start.py", '{"source":"startup"}')

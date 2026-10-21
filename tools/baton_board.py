@@ -99,7 +99,7 @@ def collect(root: Path, logbook: str) -> tuple[list[dict], date]:
     rows: list[dict] = []
     if not root.is_dir():
         return rows, today
-    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    for folder in hook.task_folders(root):
         book = folder / logbook
         text = hook.read_head(book) if book.is_file() else ""
         fm = hook.parse_frontmatter(text) if text else {}

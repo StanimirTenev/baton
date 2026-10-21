@@ -77,6 +77,31 @@ ROW_DATE = re.compile(
     r"^(\d{4}-\d\d-\d\d|\d\d\.\d\d\.\d{4})(?:[ T](\d\d:\d\d))?$")
 
 
+def not_tasks(root: Path) -> list[str]:
+    """Globs from a `.batonignore` in the task ROOT: folders there that are not tasks (a folder
+    of photos, an archive). Inside a task folder the same file names files that need no entry;
+    at the root it names folders -- the same meaning, "do not demand a logbook for this".
+    ZA-OPRAVYANE row 31 (2026-10-21): one stray folder made every review PARTIAL, and nothing
+    let a folder say it was not a task."""
+    try:
+        lines = (root / ".batonignore").read_text("utf-8-sig").splitlines()
+    except OSError:
+        return []
+    return [ln.strip().rstrip("/") for ln in lines if ln.strip() and not ln.strip().startswith("#")]
+
+
+def task_folders(root: Path) -> list[Path]:
+    """The task folders under `root`, sorted: every folder but a dotted one or one the root's
+    `.batonignore` names. Every hook and tool asks this one function."""
+    import fnmatch
+    skip = not_tasks(root)
+    try:
+        found = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    except OSError:
+        return []
+    return sorted(p for p in found if not any(fnmatch.fnmatch(p.name, g) for g in skip))
+
+
 def plugin() -> bool:
     """Installed as a Claude Code plugin: Claude Code sets CLAUDE_PLUGIN_ROOT for its hooks."""
     return bool(os.environ.get("CLAUDE_PLUGIN_ROOT"))
@@ -1348,8 +1373,7 @@ def main() -> int:
     root, name = config()
     notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),
                            review_notice()) if n]
-    folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")] \
-        if root.is_dir() else []
+    folders = task_folders(root) if root.is_dir() else []
     if not folders:
         return _notices_only(notices + [n for n in (inventory_notice(date.today(),
                                                                      own),) if n],

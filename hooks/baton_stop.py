@@ -199,7 +199,7 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
         bodies = json.loads(path.read_text("utf-8"))
     except Exception:
         bodies = {}
-    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    for folder in _ss().task_folders(root):
         logbook = folder / name
         work, newest_name = newest_work(folder, name)
         if work == 0.0:
@@ -261,7 +261,7 @@ def _criterion(logbook: Path) -> bool:
 def undefined(root: Path, name: str) -> list[str]:
     out = []
     now = time.time()
-    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    for folder in _ss().task_folders(root):
         logbook = folder / name
         if not logbook.is_file():
             continue          # no logbook at all is `unrecorded`'s finding, not this one
@@ -284,7 +284,7 @@ def future_dated(root: Path, name: str) -> list[str]:
     mistake below it is history; the top one is what the next session trusts."""
     out = []
     now = datetime.now()
-    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    for folder in _ss().task_folders(root):
         book = folder / name
         try:
             text = book.read_text("utf-8-sig")
@@ -344,7 +344,7 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None,
     state = ss.lessons_load()
     tops = state.setdefault("tops", {})
     out = []
-    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    for folder in _ss().task_folders(root):
         try:
             text = (folder / name).read_text("utf-8-sig")
             saved = datetime.fromtimestamp((folder / name).stat().st_mtime)
@@ -477,7 +477,7 @@ def _changed_tops(root: Path, name: str, since: float | None):
         bodies = json.loads(_bodies_path().read_text("utf-8"))
     except Exception:
         bodies = {}
-    for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    for folder in _ss().task_folders(root):
         book = folder / name
         try:
             saved = book.stat().st_mtime
