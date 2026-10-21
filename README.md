@@ -354,7 +354,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.18.0]
+[baton:board v3.19.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1396,6 +1396,44 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.19.0** — the hooks under 2 s on a large task root; a hand-back counted by the logbook
+
+- **A folder too large to walk is skipped or said, not read for 19 seconds.** On a task root of
+  about 139,000 files SessionStart and Stop took up to 19 s against Claude Code's 20 s limit.
+  A `.batonignore` line ending in `/` now names a folder the walk does not enter (in a task
+  folder, or at the task root as `<task>/<path>/`), and a folder with more than 10,000 work files
+  is read that far and named -- "not read to the end" on the board and once a session from Stop,
+  never a hand-back. Measured here on copies of the hooks: 7.3 s / 14.0 s before, 1.0 s / 1.7 s
+  after with the lines. **The cost:** a folder over the cap is not read to the end, so its newest
+  file can be missed; the `/` lines are the fix, the cap a guard. See "Ignoring files".
+- **A hand-back counts as recorded only when the logbook says so.** Stop now counts what came of
+  a hand-back (`unasked`, `handed_back`, `recorded_after`, `passed`, shown by `/baton-doctor`).
+  It first counted a folder as recorded when its file was merely too new to be asked about; now
+  recorded means the logbook changed at the top after the hand-back.
+- **The last session's messages beside the entries written then.** On `startup` and `/clear`,
+  the previous transcript in the project folder is read -- only what the human typed -- and three
+  or more messages with no entry in their time are said once, the first five quoted. 73 MB is
+  read in 0.4 s. Not on compact or resume.
+- **A folder the task root's `.batonignore` names is not a task**, for SessionStart, Stop, the
+  board and the review alike; the review lists it as skipped.
+- **The memory lint names a file that changed after the line pointing to it** (by file time, not
+  meaning; `--accept` records the lines as re-read). Logbooks, which change with every entry, are
+  left out.
+- **For lesson L3, a catch is the claims section working**: SessionStart says the two numbers and
+  proposes nothing.
+- **The HTML board can open itself** at `startup` and `/clear` with `"board_open": true` (off by
+  default, only with a display), with Bulgarian labels by `"board_language": "bg"`. Its process
+  gets only the environment variables it needs (`BOARD_ENV`); a key or token in the session's
+  environment is not passed to it.
+- **After a week of use the agent asks once for feedback** and names the issues page. Nothing is
+  sent; Baton has no telemetry.
+- **L3's hand-back names no command.** It said to check visibility with a GitHub CLI command; it
+  now says "the repository's or the page's own visibility setting". Detection is unchanged.
+- **The plugin's description is 497 characters**, under the directory's cut at 500, and says
+  where the hooks run.
+- README: Uninstall names four hook entries and five skills; the restart reminder stays at 200k
+  (why is written down).
 
 **v3.18.0** — a claim that something is public or private is asked to be listed at the top
 
