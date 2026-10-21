@@ -226,6 +226,23 @@ def test_notice_only_when_a_lesson_recurs_or_goes_unused(tmp_path):
     assert "L2 has not come up in 60 days" in ss.lessons_notice(now)
 
 
+def test_l3_caught_is_the_section_working_not_a_lesson_failing(tmp_path):
+    """ZA-OPRAVYANE row 33: for L1 and L2 `caught` is the mistake made again; for L3 it is a
+    claim listed at the top and later shown wrong -- the section did its job. Two of those in a
+    fortnight must not be reported as a lesson that is not holding."""
+    env = _env(tmp_path, tmp_path / "tasks")
+    ss = _ss(env)
+    now = datetime.now()
+    state = {}
+    for days in (3, 1):
+        ss.lesson_event(state, "L3", "fired", now - timedelta(days=days))
+        ss.lesson_event(state, "L3", "caught", now - timedelta(days=days))
+    ss.lessons_save(state)
+    notice = ss.lessons_notice(now) or ""
+    assert "not holding" not in notice and "next rung" not in notice
+    assert "L3 caught 2 wrong claims in 14 days" in notice and "doing its work" in notice
+
+
 # -- the tool that makes L1 impossible -------------------------------------------------------
 
 def test_entry_title_takes_the_hour_from_the_clock(tmp_path):

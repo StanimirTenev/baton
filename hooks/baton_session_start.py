@@ -205,6 +205,10 @@ LESSONS = {
           "in a later entry if it proves wrong.",
 }
 RECUR_DAYS, RECUR_MIN, RETIRE_DAYS = 14, 2, 60
+# For L1 and L2 `caught` is the mistake made again. For L3 it is a listed claim later shown
+# wrong: the section did its work, and two of those in a fortnight are not a lesson failing
+# (ZA-OPRAVYANE row 33, 2026-10-21).
+CAUGHT_IS_USE = {"L3"}
 
 
 def _lessons_file() -> Path:
@@ -252,7 +256,11 @@ def lessons_notice(now: datetime | None = None) -> str | None:
         rec = state.get(lid) or {}
         caught = [d for d in rec.get("caught_dates", []) if d >= recent]
         fired = [d for d in rec.get("fired_dates", []) if d >= recent]
-        if len(caught) >= RECUR_MIN:
+        if len(caught) >= RECUR_MIN and lid in CAUGHT_IS_USE:
+            lines.append(f"- {lid} caught {len(caught)} wrong claims in {RECUR_DAYS} days "
+                         f"(asked {len(fired)} times): the claims section is doing its work. "
+                         "Nothing to change; tell the human the two numbers if they ask.")
+        elif len(caught) >= RECUR_MIN:
             lines.append(f"- {lid} recurred {len(caught)} times in {RECUR_DAYS} days "
                          f"({len(fired)} times the situation arose): \"{text}\" -- it is not "
                          "holding. Propose to the human the next rung: a check that catches it "

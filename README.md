@@ -774,7 +774,9 @@ the situation arose, `caught` when the mistake happened. The counters are in
 
 SessionStart says something only when a lesson has earned it: caught twice in 14 days (it is
 not holding — propose the next rung: a check on the result, or a tool that makes the mistake
-impossible), or silent for 60 days (ask whether to retire it).
+impossible), or silent for 60 days (ask whether to retire it). For L3 a catch is the opposite
+fact -- a listed claim shown wrong means the section did its work -- so two of them say that,
+with the two numbers, and propose nothing.
 
 ## The board
 
