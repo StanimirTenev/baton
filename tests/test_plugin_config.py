@@ -82,3 +82,12 @@ def test_the_plugin_version_is_the_hooks_version():
     forgot plugin.json would never reach a plugin user."""
     manifest = json.loads((HOOKS.parent / ".claude-plugin" / "plugin.json").read_text())
     assert manifest["version"] == _load("baton_session_start").BATON_VERSION
+
+
+def test_the_description_fits_the_directory_and_says_where_the_hooks_run():
+    """The plugin directory cuts the summary at 500 characters (measured 20.10 over its cache:
+    the longest of 3,605 listings is 500), and v3.18.0's 648 lost its last sentences there."""
+    d = json.loads((HOOKS.parent / ".claude-plugin" / "plugin.json").read_text())["description"]
+    assert len(d) <= 500, len(d)
+    assert d.startswith("Baton is a Claude Code plugin")
+    assert "only the skills load" in d and "no network requests" in d
