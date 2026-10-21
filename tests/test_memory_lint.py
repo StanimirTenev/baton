@@ -42,3 +42,61 @@ def test_a_clean_index_passes(tmp_path):
     index.write_text("- [A](a.md)\n- [B](qrp/b.md)\n", "utf-8")
     out = _run(index)
     assert out.returncode == 0, out.stdout
+
+
+DAY = 86400
+
+
+def _olewinski(tmp_path):
+    """The case of 19.09.2026 (ZA-OPRAVYANE row 29): the index said "we want the paper, it is
+    behind a wall"; the detail file had recorded it as read five days earlier."""
+    import os
+    import time
+    mem = tmp_path / "memory"
+    mem.mkdir()
+    detail = mem / "olewinski.md"
+    detail.write_text("Read in full on 14.09.\n", "utf-8")
+    index = mem / "MEMORY.md"
+    index.write_text("- [Olewinski](olewinski.md) — ⚠️ we want the PDF, it is behind a wall\n", "utf-8")
+    now = time.time()
+    os.utime(index, (now - 5 * DAY, now - 5 * DAY))
+    os.utime(detail, (now, now))
+    return index, detail
+
+
+def test_a_line_whose_file_changed_after_it_is_named(tmp_path):
+    index, _ = _olewinski(tmp_path)
+    out = _run(index)
+    assert out.returncode == 1, out.stdout
+    assert "changed after their line" in out.stdout and "line 1: olewinski.md" in out.stdout, out.stdout
+
+
+def test_an_edit_elsewhere_in_the_index_does_not_hide_it(tmp_path):
+    """The index's own time moves with every edit; the line's is remembered by its text."""
+    import os
+    import time
+    index, _ = _olewinski(tmp_path)
+    _run(index)
+    index.write_text(index.read_text("utf-8") + "- other line\n", "utf-8")
+    now = time.time()
+    os.utime(index, (now + 60, now + 60))
+    assert "line 1: olewinski.md" in _run(index).stdout
+
+
+def test_the_line_rewritten_or_accepted_is_quiet(tmp_path):
+    import os
+    import time
+    index, detail = _olewinski(tmp_path)
+    _run(index)
+    index.write_text("- [Olewinski](olewinski.md) — read in full, 14.09\n", "utf-8")
+    later = time.time() + 120
+    os.utime(index, (later, later))
+    assert "changed after their line (0)" in _run(index).stdout, "rewritten: nothing to re-read"
+
+    detail.write_text("Read in full on 14.09. Cited on 20.09.\n", "utf-8")
+    os.utime(detail, (later + 600, later + 600))
+    assert "line 1: olewinski.md" in _run(index).stdout
+    accepted = subprocess.run([sys.executable, str(TOOL), str(index), "--accept"],
+                              capture_output=True, text=True)
+    assert "accepted" in accepted.stdout
+    assert "changed after their line (0)" in _run(index).stdout, "re-read and still right"

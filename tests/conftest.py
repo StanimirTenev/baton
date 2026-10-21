@@ -27,3 +27,5 @@ def _baton_state_outside_the_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_SESSION_STATE", str(state))
     # Lesson counters (L1, L2) the same way: a test must not count into the real register.
     monkeypatch.setenv("BATON_LESSONS_STATE", str(tmp_path / ".baton.lessons.json"))
+    # The memory lint's remembered lines (row 29), the same way.
+    monkeypatch.setenv("BATON_MEMLINT_STATE", str(tmp_path / ".baton.memlint.json"))

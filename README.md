@@ -803,11 +803,21 @@ page: logbooks carry client matter, and a board is not worth sending it anywhere
 python3 tools/baton_memory_lint.py ~/.claude/projects/<project>/memory/MEMORY.md
 ```
 
-Two questions, no model, nothing sent: does every link in the index lead to a file that
-exists, and does every Markdown file in the index's folder have a line in it? A memory file
-without a line is invisible -- the index is what a session reads first. It reports and never
-edits; exit 1 when it found something. Without a path it checks `review_index` from the
-settings. Whether a line is still *true* is the paid review below.
+Three questions, no model, nothing sent: does every link in the index lead to a file that
+exists, does every Markdown file in the index's folder have a line in it, and which files
+changed after the line that points to them? A memory file without a line is invisible -- the
+index is what a session reads first. It reports and never edits the index; exit 1 when it found
+something. Without a path it checks `review_index` from the settings.
+
+The third question is the case of 19 September 2026: the index said "we want the paper, it is
+behind a wall" five days after the detail file had recorded it as read, and the first two
+questions passed it clean. It is answered by file time, not by meaning -- a changed file is a
+reason to read its line again, not proof the line is wrong. A line's time is remembered by its
+text (`baton.memlint.json` next to the settings); a line not seen before takes the index's own
+file time, the latest it can have been written, so the first run already names a file newer
+than the whole index. An edit elsewhere in the index does not reset a line; rewriting the line
+does. `--accept` records the lines it names as re-read. Whether a line is still *true* is the
+paid review below.
 
 ## The review: does the index still match the files?
 
