@@ -1253,7 +1253,9 @@ def review_notice() -> str | None:
 # turns multiply in loops and subagents, tool results and command output are not anyone's word.
 QUIET_MIN_MESSAGES = 3          # fewer is a question asked and answered, not a lost decision
 QUIET_SLACK = timedelta(minutes=15)   # an entry written just after the last message counts
-QUIET_MAX_BYTES = 64 * 1024 * 1024
+QUIET_MAX_BYTES = 16 * 1024 * 1024
+_STAMP = re.compile(rb'"timestamp":\s*"([^"]+)"')
+_USER = re.compile(rb'"type":\s*"user"')
 _ENTRY_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}):(\d{2}))?", re.M)
 
 
@@ -1311,17 +1313,20 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
                 fh.readline()
                 cut = True
             for raw in fh:
-                if b'"timestamp"' not in raw:
+                # Only a line that can be a human message is parsed; the time is cut out of the
+                # rest as bytes. A 73 MB transcript took 3.5 s parsed whole (21.10, under load).
+                stamp = _STAMP.search(raw)
+                when = _local_time(stamp.group(1).decode("ascii", "replace")) if stamp else None
+                if when is None:
+                    continue
+                start, end = min(start or when, when), max(end or when, when)
+                if not _USER.search(raw) or b'"tool_result"' in raw:
                     continue
                 try:
                     obj = json.loads(raw.decode("utf-8", "replace"))
                 except ValueError:
                     continue
-                when = _local_time(obj.get("timestamp")) if isinstance(obj, dict) else None
-                if when is None:
-                    continue
-                start, end = min(start or when, when), max(end or when, when)
-                text = _human(obj)
+                text = _human(obj) if isinstance(obj, dict) else None
                 if text:
                     said.append(text)
     except OSError:
@@ -1350,7 +1355,7 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
     shown = "; ".join(f"\"{t[:70]}\"" for t in said[:5]) + (" ..." if len(said) > 5 else "")
     return (f"📝 The last session in this project ({start:%Y-%m-%d %H:%M}–{end:%H:%M}) had "
             f"{len(said)} messages from the human and 0 logbook entries headed in that time"
-            + (" (counted in its last 64 MB)" if cut else "") + ". Stop asks only about files, so "
+            + (f" (counted in its last {QUIET_MAX_BYTES >> 20} MB)" if cut else "") + ". Stop asks only about files, so "
             "a decision made only in chat leaves no trace. Its messages began: " + shown + ". "
             "Ask the human once, in their language, whether any of it should be recorded and in "
             "which task; if not, drop it. (Messages the human typed, not the agent's turns; "
