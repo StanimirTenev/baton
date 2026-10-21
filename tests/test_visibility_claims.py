@@ -232,6 +232,9 @@ def test_the_hook_asks_once_per_entry_and_counts_it(tmp_path):
     assert reason.startswith("Baton, lesson L3"), "nothing else hands this turn back"
     assert "swarm" in reason and "### Claims to verify" in reason and "PUBLIC" in reason
     assert "refuted:" in reason, "the agent is told the one marker that counts as caught"
+    assert "own visibility setting" in reason
+    for command in ("gh ", "--json", "curl", "api."):
+        assert command not in reason, f"the hand-back names no credentialed command ({command!r})"
     assert _lessons()["L3"]["fired"] == 1
     again = _run(tmp_path, "s1")
     assert "Claims to verify" not in again.get("reason", ""), "asked twice about the same entry"

@@ -576,7 +576,7 @@ def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
 _VISIBLE = re.compile(r"(?i)(?<![\w-])(public(?:ly)?|private(?:ly)?|публичен|частен|"
                       r"(?:публичн|частн)(?:о|а|и|ия|ият|ото|ата|ите)?)(?![\w-])")
 # Senses of the word that are not a thing's visibility, and mentions that are not claims:
-# a span of code (`--private-key`, `"visibility":"PRIVATE"` pasted from a tool), a key in
+# a span of code (`"visibility":"PRIVATE"` pasted from a tool), a key in
 # cryptography, one word in quotes (the word talked about), and the pair named as a topic
 # (`public/private`). Kept to classes, not phrases: a phrase list is fitted to one machine.
 _CODE = re.compile(r"`[^`\n]*`")
@@ -882,8 +882,8 @@ def main() -> int:
             f"or private:\n{listed}\n\n"
             "Open the entry with a short section, before the others: `### Claims to verify` (or "
             "`### За проверка`), one line per claim about what is public or private, each checked "
-            "against the source (`gh repo view --json visibility`, the page's own sharing "
-            "setting) -- the human reads that section, not the prose. If a listed claim later "
+            "against the source (the repository's or the page's own visibility setting) -- the "
+            "human reads that section, not the prose. If a listed claim later "
             "proves wrong, the new entry's section says `refuted: <the claim>`; only that is "
             "counted as caught. If the word is not a claim here, say so in one line. "
             f"(Asked once per entry. Counted: caught {rec.get('caught', 0)} of "

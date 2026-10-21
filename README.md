@@ -407,10 +407,10 @@ newest entry this session wrote says something is public or private -- `public`,
 `publicly`, `privately`, and the Bulgarian `публичен`/`публично`/`частен`/`частно` with their
 endings -- and does not open with a section for it, Stop hands the turn back once per entry and
 asks for one: `### Claims to verify` (or `### За проверка`) as the **first** `###` section, one
-line per claim, each checked against the source (`gh repo view --json visibility`, the page's
-own sharing setting). The human reads that section instead of the prose. Adding it to the newest
+line per claim, each checked against the source (the repository's or the page's own visibility
+setting). The human reads that section instead of the prose. Adding it to the newest
 entry is completing the top entry, not rewriting an older one. Not counted as a claim: a word
-inside inline code (`--private-key`, `"visibility":"PRIVATE"` pasted from a tool), a key in
+inside inline code (`"visibility":"PRIVATE"` pasted from a tool), a key in
 cryptography (`private key`, `публичен ключ`), one word in quotes (the word talked about,
 not used), and the pair named as a topic (`public/private`). "Said publicly" is left in: a
 promise made in a public comment is a claim about where something is, and a list of verbs to
@@ -426,8 +426,8 @@ cannot do:** tell whether the claim is true. It puts the claim in front of a rea
 claim listed in the section passes until someone checks it. Over copies of the 34 logbooks on
 the author's machine: 21 of the 195 entries since 10 October would have been asked about (165 of
 1,274 in all). Read one by one, 11 of the 21 state what a repository or a page is; 5 are
-borderline (a reply labelled public, an API key said to be public, a project required to be
-public); 5 use the word in another sense -- public sources, public data, public contracting
+borderline (a reply labelled public, twice; a note to write about something publicly; a
+project required to be public; one more of the kind); 5 use the word in another sense -- public sources, public data, public contracting
 authorities -- and are answered in one line.
 
 ## The task header
