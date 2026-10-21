@@ -223,3 +223,44 @@ def test_no_display_through_the_hook_opens_nothing_and_the_board_still_comes(tmp
     _start(env, "startup")
     time.sleep(2)
     assert not opened.exists() and not (data / "baton.board.html").exists()
+
+
+def test_the_board_process_gets_no_secret_from_the_session(tmp_path):
+    """The board is opened in a process of its own. It gets the names it needs to find the
+    tasks and to bring up a browser -- this machine's GNOME/X11 set among them -- and none of
+    the session's keys or tokens (v3.19.0, before resubmitting to the plugin directory)."""
+    env, opened, data = _hook_env(tmp_path, {"board_open": True})
+    seen = tmp_path / "browser-env.txt"
+    browser = tmp_path / "browser-env.sh"
+    browser.write_text(f'#!/bin/sh\nenv > "{seen}"\necho "$1" > "{opened}"\n', "utf-8")
+    browser.chmod(0o755)
+    display = {"XAUTHORITY": "/run/user/1000/gdm/Xauthority", "XDG_RUNTIME_DIR": "/run/user/1000",
+               "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+               "XDG_CURRENT_DESKTOP": "ubuntu:GNOME", "XDG_SESSION_TYPE": "x11",
+               "WAYLAND_DISPLAY": "wayland-0"}
+    secrets = {"OPENROUTER_API_KEY": "sk-or-test", "GITHUB_TOKEN": "ghp_test",
+               "CLAUDE_CODE_MESSAGING_TOKEN": "t", "ANTHROPIC_API_KEY": "sk-ant-test",
+               "AWS_SECRET_ACCESS_KEY": "s"}
+    env.update(display, **secrets, BROWSER=f"{browser} %s")
+    _start(env, "startup")
+    assert _wait(opened), "the board still opens"
+    assert opened.read_text("utf-8").strip() == (data / "baton.board.html").resolve().as_uri()
+    got = dict(line.split("=", 1) for line in seen.read_text("utf-8").splitlines() if "=" in line)
+    for name, value in {**display, "DISPLAY": ":99"}.items():
+        assert got.get(name) == value, f"{name} reaches the browser"
+    for name in secrets:
+        assert name not in got, f"{name} is not passed to the board"
+    assert got["BATON_HOME"] == env["BATON_HOME"] and got["CLAUDE_PLUGIN_DATA"] == str(data)
+
+
+def test_board_env_keeps_only_the_listed_names():
+    import importlib.util
+    hook = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
+    spec = importlib.util.spec_from_file_location("ss_board_env", hook)
+    ss = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ss)
+    env = ss.board_env({"PATH": "/bin", "HOME": "/h", "SYSTEMROOT": "C:\\Windows",
+                        "OPENROUTER_API_KEY": "k", "SSH_AUTH_SOCK": "/s", "BATON_HOME": "old"},
+                       Path("/tasks"), "LOGBOOK.md")
+    assert env == {"PATH": "/bin", "HOME": "/h", "SYSTEMROOT": "C:\\Windows",
+                   "BATON_HOME": str(Path("/tasks")), "BATON_LOGBOOK": "LOGBOOK.md"}

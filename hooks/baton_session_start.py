@@ -218,6 +218,26 @@ def board_wanted(source, cfg: dict, env, platform: str) -> bool:
     return bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
 
 
+# What the board process gets from the session's environment: where to run and what to read
+# (PATH, home, temp, locale; Windows needs SYSTEMROOT to start Python at all), where Baton keeps
+# its settings, and what a browser needs to appear (display, X authority, session bus, desktop,
+# the human's BROWSER). Nothing else: a session's environment can hold API keys and tokens, and
+# the board needs none of them. BATON_HOME and BATON_LOGBOOK are set by open_board itself.
+BOARD_ENV = ("PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "SYSTEMDRIVE",
+             "WINDIR", "COMSPEC", "PATHEXT", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR",
+             "LANG", "LC_ALL", "LC_CTYPE", "CLAUDE_PLUGIN_DATA",
+             "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR",
+             "DBUS_SESSION_BUS_ADDRESS", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+             "XDG_DATA_DIRS", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "BROWSER")
+
+
+def board_env(environ, root: Path, logbook: str) -> dict:
+    """The environment of the board process: only the names in BOARD_ENV."""
+    env = {k: v for k, v in environ.items() if k in BOARD_ENV}
+    env.update(BATON_HOME=str(root), BATON_LOGBOOK=logbook)
+    return env
+
+
 def open_board(source, root: Path, logbook: str) -> None:
     """Write the HTML board and open it, in a process of its own: the hook does not wait for
     it, and nothing it does can fail the session. Off by default; silent when the board tool
@@ -233,7 +253,7 @@ def open_board(source, root: Path, logbook: str) -> None:
         if tool is None:
             return
         lang = str(cfg.get("board_language") or "en")
-        env = dict(os.environ, BATON_HOME=str(root), BATON_LOGBOOK=logbook)
+        env = board_env(os.environ, root, logbook)
         detach = ({"creationflags": 0x00000008 | 0x00000200} if os.name == "nt"   # DETACHED, NEW_GROUP
                   else {"start_new_session": True})
         subprocess.Popen([sys.executable, str(tool), "--out", str(_local_file("baton.board.html")),

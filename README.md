@@ -837,7 +837,10 @@ compaction or on `resume`, which are the same work going on. Off by default: a b
 pops up by itself is not something to switch on for anyone. Without a display (an SSH session, a
 server: on Linux no `DISPLAY` or `WAYLAND_DISPLAY`, on a Mac an SSH connection) it does nothing.
 It runs in a process of its own, so the session does not wait for it and a failure in it costs
-nothing. `"board_language": "bg"` (or `--lang bg` by hand) gives the page Bulgarian labels; the
+nothing. That process gets only the environment variables it needs (`BOARD_ENV` in
+`hooks/baton_session_start.py`: paths, locale, Baton's settings folder, and what a browser needs
+to appear -- display, session bus, `BROWSER`); a key or token in the session's environment is
+not passed to it. `"board_language": "bg"` (or `--lang bg` by hand) gives the page Bulgarian labels; the
 terminal board is translated by the agent, and nobody translates a file opened in a browser.
 English is the default. The idea came from
 [answer-me-with-html](https://github.com/QingYunA/answer-me-with-html).
