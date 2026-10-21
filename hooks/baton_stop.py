@@ -132,6 +132,7 @@ def _at_the_top(old: list, new: list) -> bool:
 
 REWRITTEN: list = []      # folders whose older entries changed during this run
 GREW: list = []           # folders that gained an entry since the last look (row 27)
+TOPPED: list = []         # folders whose body changed at the top since the last look
 
 
 def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
@@ -170,6 +171,8 @@ def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
         return min(mtime, seen[1])
     if old and len(entries) > len(old):
         GREW.append(folder.name)
+    if seen:
+        TOPPED.append(folder.name)
     bodies[key] = [digest, mtime, entries]
     return mtime
 
@@ -198,6 +201,7 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
     out = []
     REWRITTEN.clear()
     GREW.clear()
+    TOPPED.clear()
     path = _bodies_path()
     try:
         bodies = json.loads(path.read_text("utf-8"))
@@ -682,8 +686,11 @@ def second_try(payload: dict) -> None:
     if not root.is_dir():
         return
     since = session_started(str(payload.get("transcript_path") or ""))
-    still = {f.split(" (")[0] for f in unrecorded(root, name, since)}
-    _count(recorded_after=len(pending - still), passed=len(pending & still))
+    unrecorded(root, name, since)
+    # Judged by the logbook, not by `unrecorded`'s verdict: a folder whose newest file was saved
+    # seconds ago is left out of it by the grace period, recorded or not.
+    wrote = set(TOPPED)
+    _count(recorded_after=len(pending & wrote), passed=len(pending - wrote))
     _remember(session, {a for a in asked if not a.startswith("blocked:")})
 
 

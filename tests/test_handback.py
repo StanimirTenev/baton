@@ -118,3 +118,24 @@ def test_doctor_shows_the_three_numbers(tmp_path):
     out = subprocess.run([sys.executable, str(DOCTOR)], capture_output=True, text=True, env=env)
     assert "written unasked: 0" in out.stdout and "handed back: 1" in out.stdout, out.stdout
     assert "passed without one: 1" in out.stdout, out.stdout
+
+
+def test_more_work_instead_of_an_entry_is_passed_not_recorded(tmp_path):
+    """Leaving the folder out of `unrecorded` is not recording it: a file saved seconds ago is
+    inside the grace period. Judged by the logbook, not by Stop's verdict."""
+    env, folder, book, tr = _setup(tmp_path)
+    _work(folder)
+    assert _stop(env, tr).get("decision") == "block"
+    (folder / "draft.txt").write_text("kept working", "utf-8")          # fresh, no entry
+    _stop(env, tr, active=True)
+    c = _counts(env)
+    assert c.get("passed") == 1 and c.get("recorded_after", 0) == 0, c
+
+
+def test_completing_the_newest_entry_after_a_hand_back_counts_as_recorded(tmp_path):
+    env, folder, book, tr = _setup(tmp_path)
+    _work(folder)
+    assert _stop(env, tr).get("decision") == "block"
+    book.write_text(book.read_text("utf-8").replace("body", "body\n\nwork.txt: done"), "utf-8")
+    _stop(env, tr, active=True)
+    assert _counts(env).get("recorded_after") == 1, _counts(env)
