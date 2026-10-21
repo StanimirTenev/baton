@@ -221,6 +221,14 @@ update. Nothing is installed on its own: the hooks run in every session, and cod
 itself unasked would put whoever controlled the repository into every one of them. A check that
 fails says so, and tries again the next day.
 
+### After a week: one question
+
+About a week after the first session start (counted from Baton's own state file, on this
+machine; an install from before this note counts from the update that brought it), the agent
+asks you once what has worked, what has not and what you would improve, and names where to tell
+the author: [the issues](https://github.com/StanimirTenev/baton/issues). Baton sends nothing --
+there is no telemetry; if you would rather not answer, the question does not come back.
+
 ### Existing work: `/baton-inventory`
 
 The installer also copies one skill, `~/.claude/skills/baton-inventory/`. Baton starts

@@ -1357,6 +1357,44 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
             "entries by the time in their heading.)")
 
 
+FEEDBACK_AFTER_DAYS = 7
+ISSUES = "https://github.com/StanimirTenev/baton/issues"
+
+
+def feedback_notice(today: date) -> str | None:
+    """After about a week of use, once ever: ask the human what worked, what did not, and what
+    they would improve -- and where to tell the author. Baton sends nothing.
+
+    ZA-OPRAVYANE row 17 (stenly, 07.10): installs come from the comments, and nobody knows why
+    most never reach real use. The week counts from the first start this state file saw, so an
+    install from before this note counts from the update that brought it."""
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+    if state.get("feedback_asked"):
+        return None
+    first = _as_date(state.get("first_seen"))
+    if first is None or (today - first).days < FEEDBACK_AFTER_DAYS:
+        if first is None:
+            state["first_seen"] = today.isoformat()
+            try:
+                _state_file().write_text(json.dumps(state), "utf-8")
+            except OSError:
+                pass
+        return None
+    state["feedback_asked"] = today.isoformat()
+    try:
+        _state_file().write_text(json.dumps(state), "utf-8")
+    except OSError:
+        return None                 # cannot remember the question: better silent than every day
+    return (f"💬 Once, and only this once: Baton has been running here for {(today - first).days} "
+            "days. Ask the human one short question, in their language: what has worked, what has "
+            "not, and what they would improve. If they want the author to hear it, the place is "
+            f"{ISSUES}. Baton sends nothing itself. If they would rather not, drop it -- this note "
+            "does not come back.")
+
+
 SHOW_BOARD = (
     "The human has not seen this board -- only one line saying Baton is on. Whatever the "
     "human's first message is -- a greeting, a question or a task -- the first thing in your "
@@ -1525,7 +1563,7 @@ def main() -> int:
     cleared = own.get("source") == "clear"
     root, name = config()
     notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),
-                           review_notice()) if n]
+                           review_notice(), feedback_notice(date.today())) if n]
     folders = task_folders(root) if root.is_dir() else []
     if folders:
         open_board(own.get("source"), root, name)
