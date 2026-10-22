@@ -61,11 +61,20 @@ def crashed(where: Path, stem: str) -> tuple[datetime, str] | None:
         return None
 
 
-def stopped(where: Path, stem: str) -> datetime | None:
+def order(path: Path, when: datetime) -> tuple:
+    """Which marker is newer: by the file's own time, the text's time on a tie. The text is local
+    time and repeats in the hour after the clocks go back (row 64, 25.10.2026)."""
+    try:
+        return (path.stat().st_mtime_ns, when)
+    except OSError:
+        return (0, when)
+
+
+def stopped(where: Path, stem: str) -> tuple | None:
     """When a run that did not finish began (since v3.21.0, ZA-OPRAVYANE row 41). Each run writes
     `baton.beat.<hook>.started.<pid>` before its work and removes it when it finishes or crashes;
     one left behind whose process is gone, or older than any hook's limit, was stopped from outside
-    -- killed, or timed out. A run still going in another session is not counted."""
+    -- killed, or timed out. A run still going in another session is not counted. Its `order`."""
     import time
     found = []
     for mark in where.glob(f"baton.beat.{stem}.started.*"):
@@ -78,7 +87,7 @@ def stopped(where: Path, stem: str) -> datetime | None:
                 except ProcessLookupError:
                     gone = True
             if gone:
-                found.append(datetime.fromisoformat(mark.read_text("utf-8").strip()))
+                found.append(order(mark, datetime.fromisoformat(mark.read_text("utf-8").strip())))
         except (OSError, ValueError):
             continue
     return max(found) if found else None
@@ -158,11 +167,14 @@ def main() -> int:
     where, now = folder(), datetime.now()
     print(f"Baton doctor -- heartbeats in {where}\n")
     seen = {stem: last_run(where, stem) for stem, _, _ in HOOKS}
+    beat = {stem: order(where / f"baton.beat.{stem}", seen[stem]) for stem, _, _ in HOOKS}
     crashes = {stem: c for stem, _, _ in HOOKS for c in [crashed(where, stem)]
-               if c and (seen[stem] is None or c[0] > seen[stem])}
+               if c and (seen[stem] is None
+                         or order(where / f"baton.beat.{stem}.crashed", c[0]) > beat[stem])}
     killed = {stem: k for stem, _, _ in HOOKS for k in [stopped(where, stem)]
-              if k and (seen[stem] is None or k > seen[stem])
-              and (stem not in crashes or k > crashes[stem][0])}
+              if k and (seen[stem] is None or k > beat[stem])
+              and (stem not in crashes
+                   or k > order(where / f"baton.beat.{stem}.crashed", crashes[stem][0]))}
     for stem in killed:
         crashes.pop(stem, None)
     started = (seen["baton_session_start"] is not None or "baton_session_start" in crashes
@@ -171,8 +183,9 @@ def main() -> int:
         t = seen[stem]
         if stem in killed:
             last = f"{t:%Y-%m-%d %H:%M}" if t else "never"
-            mark, state = "❌", (f"DID NOT FINISH: started {killed[stem]:%Y-%m-%d %H:%M} "
-                                 f"({ago(killed[stem], now)}), killed or timed out?; "
+            k = killed[stem][1]
+            mark, state = "❌", (f"DID NOT FINISH: started {k:%Y-%m-%d %H:%M} "
+                                 f"({ago(k, now)}), killed or timed out?; "
                                  f"last finished {last}")
         elif stem in crashes:
             c, kind = crashes[stem]

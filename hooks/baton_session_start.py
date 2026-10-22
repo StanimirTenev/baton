@@ -268,6 +268,17 @@ HOOK_EVENTS = (("baton_session_start", "SessionStart"), ("baton_prompt", "UserPr
                ("baton_stop", "Stop"), ("baton_batch", "PostToolBatch"))
 
 
+def marker_order(path: Path, when: str) -> tuple:
+    """Which of two markers is newer. By the file's own time, not its text: the text is local
+    time, and in the hour after the clocks go back (25.10.2026, 04:00 -> 03:00) a crash at 03:20
+    sorted before a finish at 03:50 written half an hour earlier, and was shown as ✅ (row 64).
+    The text breaks a tie -- a coarse clock can give two files the same time."""
+    try:
+        return (path.stat().st_mtime_ns, when)
+    except OSError:
+        return (0, when)
+
+
 def crashed_hooks() -> list[str]:
     """The hooks whose last run raised: a `.crashed` marker newer than their last finish (row 36).
     A hook exits 0 whatever happens, so this is the only place a crash is seen."""
@@ -275,23 +286,25 @@ def crashed_hooks() -> list[str]:
     folder = Path(data) if data else Path(__file__).resolve().parent
     out = []
     for stem, event in HOOK_EVENTS:
+        crash, beat = folder / f"baton.beat.{stem}.crashed", folder / f"baton.beat.{stem}"
         try:
-            marker = (folder / f"baton.beat.{stem}.crashed").read_text("utf-8")
+            marker = crash.read_text("utf-8")
         except OSError:
             continue
         when, _, kind = marker.strip().partition(" ")
         try:
-            done = (folder / f"baton.beat.{stem}").read_text("utf-8").strip()
+            done = beat.read_text("utf-8").strip()
         except OSError:
             done = ""
-        if when > done:
+        if marker_order(crash, when) > marker_order(beat, done):
             out.append(f"{event} at {when.replace('T', ' ')[:16]} ({kind or 'unknown error'})")
     return out
 
 
-def stopped_start(folder: Path, stem: str) -> str | None:
+def stopped_start(folder: Path, stem: str) -> tuple | None:
     """The newest start mark of a run that is gone without finishing or crashing (row 41): its
-    pid is not running, or it is older than any hook's limit. None when there is none."""
+    pid is not running, or it is older than any hook's limit. Its `marker_order` -- the file's
+    time, then the text -- or None when there is none."""
     import time
     found = []
     for mark in folder.glob(f"baton.beat.{stem}.started.*"):
@@ -304,7 +317,7 @@ def stopped_start(folder: Path, stem: str) -> str | None:
                 except ProcessLookupError:
                     gone = True
             if gone:
-                found.append(mark.read_text("utf-8").strip())
+                found.append(marker_order(mark, mark.read_text("utf-8").strip()))
         except (OSError, ValueError):
             continue
     return max(found) if found else None
@@ -317,16 +330,18 @@ def stopped_hooks() -> list[str]:
     folder = Path(data) if data else Path(__file__).resolve().parent
     out = []
     for stem, event in HOOK_EVENTS:
-        when = stopped_start(folder, stem)
-        if not when:
+        key = stopped_start(folder, stem)
+        if not key:
             continue
+        when = key[1]
         later = []
         for name in (f"baton.beat.{stem}", f"baton.beat.{stem}.crashed"):
             try:
-                later.append((folder / name).read_text("utf-8").strip().partition(" ")[0])
+                later.append(marker_order(folder / name, (folder / name).read_text("utf-8")
+                                          .strip().partition(" ")[0]))
             except OSError:
                 pass
-        if all(when > t for t in later):
+        if all(key > t for t in later):
             out.append(f"{event}, started at {when.replace('T', ' ')[:16]}")
     return out
 
