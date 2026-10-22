@@ -387,7 +387,14 @@ def undefined(root: Path, name: str) -> list[str]:
 # "2026-09-29 00:50" -- typed by the agent, not read from a clock. A few minutes of slack
 # for a heading written just before it was saved.
 FUTURE_SLACK_SECONDS = 600
-_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}):(\d{2}))?")
+# ISO or day first: `## 22.10.2026 15:30` is how the human writes a date everywhere else, and a top
+# entry headed so was no entry here -- every check read the older ISO one below it (row 58, 22.10).
+_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})(?:[ T](\d{1,2}):(\d{2}))?")
+
+
+def _day(date: str) -> datetime:
+    """The date of a heading, in either form _HEADING reads. ValueError for one that is no date."""
+    return datetime.strptime(date, "%Y-%m-%d" if "-" in date else "%d.%m.%Y")
 
 
 def future_dated(root: Path, name: str) -> list[str]:
@@ -406,7 +413,7 @@ def future_dated(root: Path, name: str) -> list[str]:
             if not m:
                 continue
             try:
-                day = datetime.strptime(m.group(1), "%Y-%m-%d")
+                day = _day(m.group(1))
             except ValueError:
                 break
             if m.group(2):
@@ -475,7 +482,7 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None,
         if not m.group(2):
             continue                          # a date without an hour: nothing to compare
         try:
-            when = datetime.strptime(f"{m.group(1)} {m.group(2)}:{m.group(3)}", "%Y-%m-%d %H:%M")
+            when = _day(m.group(1)).replace(hour=int(m.group(2)), minute=int(m.group(3)))
         except ValueError:
             continue
         off = (when - saved).total_seconds() / 60
@@ -521,7 +528,7 @@ def session_entries(text: str, since: float) -> str:
         m = _HEADING.match(line)
         if m:
             try:
-                day = datetime.strptime(m.group(1), "%Y-%m-%d")
+                day = _day(m.group(1))
             except ValueError:
                 break
             when = day.replace(hour=int(m.group(2)), minute=int(m.group(3))) if m.group(2) \
@@ -951,7 +958,7 @@ def _fixed(lesson: str, book: Path) -> bool | None:
         if not m.group(2):
             return False      # the hour deleted is not the hour read from the clock (row 62)
         try:
-            when = datetime.strptime(f"{m.group(1)} {m.group(2)}:{m.group(3)}", "%Y-%m-%d %H:%M")
+            when = _day(m.group(1)).replace(hour=int(m.group(2)), minute=int(m.group(3)))
         except ValueError:
             return False
         return abs((when - saved).total_seconds() / 60) <= L1_SLACK_MINUTES
