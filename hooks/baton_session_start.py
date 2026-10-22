@@ -2017,7 +2017,8 @@ def main() -> int:
         blocks.append(
             "📝 Work newer than its logbook, from before this session:\n"
             + "\n".join(f"- {u}" for u in unlogged)
-            + "\n(Write the entry it is missing, or add the file to the folder's .batonignore.)")
+            + "\n(Write the entry it is missing. A .batonignore line is for a file that changes on "
+              "its own, and is the human's to add.)")
     if UNREAD:
         blocks.append("✂️ " + UNREAD[0])
     if UNREADABLE:

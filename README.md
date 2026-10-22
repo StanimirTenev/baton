@@ -1374,6 +1374,12 @@ this. Such a folder is not on the board, Stop never asks about it, and the revie
 it nor counts it missing (it prints it as skipped). Without it, every folder in the task root is
 a task, and one without a logbook is reported as one.
 
+**A `.batonignore` saved in the same session as the work it hides is said to the human** (since
+v3.22.0, ZA-OPRAVYANE row 57). Its lines apply the moment they are on disk, so an agent handed
+back for unrecorded work could add `*` or the file's name and pass with no word. Stop still obeys
+the line -- it may be right -- but says once a session, in a message the agent does not write,
+which files saved this session it hides; the board no longer suggests it as the way out.
+
 ## Where else does this live — and is that place still claiming it?
 
 ```

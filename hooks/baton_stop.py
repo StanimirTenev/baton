@@ -81,6 +81,48 @@ def is_ignored(rel: str, name: str, patterns: list[str]) -> bool:
                               for i in range(len(parts)))
 
 
+def ignored_this_session(root: Path, logbook: str, since: float | None) -> list[tuple]:
+    """(folder, files) where a .batonignore saved this session -- the folder's or the root's --
+    hides files saved this session (ZA-OPRAVYANE row 57, 22.10). Its lines apply the moment they
+    are on disk, so an agent handed back for unrecorded work could ignore the work and pass with
+    no word. Said to the human; the lines still apply, since the line may be right."""
+    if since is None:
+        return []
+
+    def new(path: Path) -> bool:
+        try:
+            return path.stat().st_mtime >= since
+        except OSError:
+            return False
+
+    root_new = new(root / ".batonignore")
+    skip = _ss().not_tasks(root) if root_new else []
+    out = []
+    try:
+        folders = sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+    except OSError:
+        return []
+    for folder in folders:
+        if not (root_new or new(folder / ".batonignore")):
+            continue
+        whole = any(fnmatch.fnmatch(folder.name, g) for g in skip)   # the folder is no task now
+        patterns = ignore_patterns(folder)
+        hidden, count = [], 0
+        for dirpath, dirnames, filenames in os.walk(folder):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+            for name in filenames:
+                count += 1
+                if name == logbook or name.startswith(".") or count > WALK_CAP:
+                    continue
+                full = os.path.join(dirpath, name)
+                rel = os.path.relpath(full, folder)
+                if (whole or is_ignored(rel, name, patterns)) and new(Path(full)):
+                    hidden.append(rel.replace(os.sep, "/"))
+        if hidden:
+            out.append((folder.name, sorted(hidden)))
+    return out
+
+
 def work_files(folder: Path, logbook: str):
     """(path relative to the folder, full path) of every work file: not the logbook, not a
     dotfile, nothing in SKIP_DIRS or a folder a `dir/` line names, nothing .batonignore matches.
@@ -1235,6 +1277,19 @@ def main() -> int:
     if unread:
         note = {"systemMessage": unread_note(unread)}
         _remember(session, _already_asked(session) | {f"unread:{f}" for f in unread})
+    try:
+        hidden = [h for h in ignored_this_session(root, name, since) if f"ignore:{h[0]}" not in asked]
+    except Exception:
+        hidden = []           # a check that cannot read must not cost the session
+    if hidden:
+        listed = "; ".join(f"{f}: " + ", ".join(files[:3]) + (", ..." if len(files) > 3 else "")
+                           for f, files in hidden)
+        said = (f"Baton: a .batonignore saved in this session hides files saved in it, so Stop "
+                f"did not ask about them -- {listed}. A .batonignore line is for a file that "
+                "changes on its own; if this one was added to get past the check, the work has "
+                "no entry.")
+        note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), said)))}
+        _remember(session, _already_asked(session) | {f"ignore:{f}" for f, _ in hidden})
     locked = [f for f in _ss().UNREADABLE if f"locked:{f}" not in asked]    # row 54, the same way
     if locked:
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"),
