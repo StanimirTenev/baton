@@ -127,6 +127,33 @@ def lesson_l2(where: Path) -> str | None:
             "calls; it may have been planned anyway.)")
 
 
+def lesson_fixes(where: Path) -> str | None:
+    """Was each lesson followed? (since v3.21.0, ZA-OPRAVYANE row 44). L1, L3, L4: after Stop asked,
+    the next three Stops looked at the entry with the test that raised the ask. L2: the next tool
+    calls after a shown note (row 40)."""
+    path = Path(os.environ.get("BATON_LESSONS_STATE") or where / "baton.lessons.json")
+    try:
+        state = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    lines = []
+    for lid, what, ok, no, since in (
+            ("L1", "an hour off the clock", "fixed_after", "not_fixed_after", "fixed_since"),
+            ("L2", "a failed read", "checked_after", "no_check_after", "shown_since"),
+            ("L3", "a public/private claim", "fixed_after", "not_fixed_after", "fixed_since"),
+            ("L4", "a tests claim", "fixed_after", "not_fixed_after", "fixed_since")):
+        rec = state.get(lid) if isinstance(state, dict) else None
+        if not isinstance(rec, dict) or not rec.get(since):
+            continue
+        n, m = rec.get(ok, 0), rec.get(ok, 0) + rec.get(no, 0)
+        lines.append(f"   {lid} ({what}): fixed after the lesson: {n} of {m} since {rec[since]}")
+    if not lines:
+        return None
+    return ("Followed? (a proxy, not proof -- L1, L3, L4: the entry no longer shows what Stop asked "
+            "about within three\n   Stops, a new entry on top counts too; L2: a read among the next "
+            "tool calls):\n" + "\n".join(lines))
+
+
 def main() -> int:
     where, now = folder(), datetime.now()
     print(f"Baton doctor -- heartbeats in {where}\n")
@@ -167,6 +194,9 @@ def main() -> int:
     l2 = lesson_l2(where)
     if l2:
         print(l2 + "\n")
+    fixes = lesson_fixes(where)
+    if fixes:
+        print(fixes + "\n")
     if killed:
         names = ", ".join(event for stem, event, _ in HOOKS if stem in killed)
         print(f"🔴 Did not finish its last run: {names}. It was stopped from outside -- killed, or\n"

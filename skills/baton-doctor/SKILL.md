@@ -48,5 +48,7 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
   it never asks twice. No verdict: the human decides what the numbers mean.
 - **Lesson L2 … fired / shown / followed by a check: N of M** — say it is a proxy: "a check" is a
   read among the agent's next tool calls after a shown note, which may have been planned anyway.
+- **Followed? … fixed after the lesson: N of M** (since v3.21.0, per lesson) — read the numbers as
+  they are and say it is a proxy: a new entry written on top of the flagged one counts as fixed.
 
 Do not change anything to fix it without the human's yes.

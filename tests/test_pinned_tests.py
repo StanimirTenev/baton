@@ -82,14 +82,14 @@ def _env(tmp_path):
     return env
 
 
-def _stop(tmp_path, session="s1"):
+def _stop(tmp_path, session="s1", again=False):
     transcript = tmp_path / "t.jsonl"
     start = datetime.fromtimestamp(time.time() - 600, tz=timezone.utc).isoformat()
     transcript.write_text(json.dumps({"timestamp": start}) + "\n", "utf-8")
     t0 = time.time()
     out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True,
                          env=_env(tmp_path), timeout=30,
-                         input=json.dumps({"session_id": session,
+                         input=json.dumps({"session_id": session, "stop_hook_active": again,
                                            "transcript_path": str(transcript)}))
     assert out.returncode == 0, out.stderr
     return (json.loads(out.stdout) if out.stdout.strip() else {}), time.time() - t0
@@ -229,6 +229,23 @@ def test_one_run_per_entry(tmp_path):
     _stop(tmp_path, "s2")
     time.sleep(0.5)
     assert _result(tmp_path)["started"] == first["started"], "run again for the same entry"
+
+
+def test_the_entry_written_after_a_hand_back_gets_its_run(tmp_path):
+    """The usual order: Stop hands back for unrecorded work, the agent writes the entry, and Stop
+    runs again with `stop_hook_active` -- which returned before anything else."""
+    folder = _setup(tmp_path, _entry(heading="2026-10-21 09:00 — earlier", mention="Read it."),
+                    {"login": {"command": f"{PY} -c \"print('3 passed')\"", "cwd": str(tmp_path)}})
+    log = folder / "LOGBOOK.md"
+    old, work = time.time() - 3000, time.time() - 200      # older than Stop's 90 s of grace
+    os.utime(log, (old, old))
+    os.utime(folder / "fix_test.py", (work, work))
+    first, _ = _stop(tmp_path)
+    assert first.get("decision") == "block" and "login" in first["reason"], first
+    log.write_text(log.read_text("utf-8").replace("\n\n## ", "\n\n" + _entry() + "\n## ", 1), "utf-8")
+    second, _ = _stop(tmp_path, again=True)
+    assert "running the pinned test command" in second.get("systemMessage", ""), second
+    assert _result(tmp_path)["verdict"] == "passed"
 
 
 # -- the reviewer's question: nothing runs that a human did not pin --------------------------

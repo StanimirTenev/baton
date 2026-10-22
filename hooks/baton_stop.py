@@ -482,6 +482,7 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None,
         off = (when - saved).total_seconds() / 60
         if abs(off) > L1_SLACK_MINUTES:
             ss.lesson_event(state, "L1", "caught", now)
+            _fix_watch(state, "L1", folder, line, now)
             out.append(f"{folder.name}: \"{line[3:40].strip()}\" is {abs(off):.0f} min "
                        f"{'ahead of' if off > 0 else 'behind'} the clock when it was saved "
                        f"({saved:%H:%M})")
@@ -702,15 +703,18 @@ def visibility_entries(root: Path, name: str, since: float | None) -> list[tuple
     return out
 
 
+def tests_listed(body: str) -> bool:
+    """The entry opens with a claims section that lists a tests claim (what L4 asks for)."""
+    return claims_first(body) and any(_TESTS.search(_CODE.sub(" ", ln)) for ln in _claims(body)[0])
+
+
 def tests_entries(root: Path, name: str, since: float | None) -> list[tuple]:
     """(folder, heading, phrases) for each newest entry this session wrote that says tests pass
     and does not list that claim in a claims section at its top (L4)."""
     out = []
     for folder, _text, (heading, body) in _changed_tops(root, name, since):
         words = tests_words(heading + "\n" + body)
-        listed = claims_first(body) and any(_TESTS.search(_CODE.sub(" ", ln))
-                                            for ln in _claims(body)[0])
-        if words and not listed:
+        if words and not tests_listed(body):
             out.append((folder.name, heading, list(dict.fromkeys(words))))
     return out
 
@@ -897,11 +901,79 @@ def first_asks(asks: list[tuple], root: Path, now: datetime | None = None,
         if key not in seen:
             seen.append(key)
             ss.lesson_event(state, lesson, "fired", now)
+            _fix_watch(state, lesson, root / ask[0], ask[1], now)
             out.append(ask)
     if out:
         state[f"{lesson}_asked"] = seen[-_SEEN_CAP:]
         ss.lessons_save(state)
     return out
+
+
+# Was the lesson followed? (ZA-OPRAVYANE row 44, after Sentry's "recovery verification", 22.10.)
+# Row 40 measured it for L2 only. After Stop asks about an entry -- L1 an hour off the clock, L3 a
+# public/private claim, L4 a tests claim -- the next FIX_STOPS Stops look at that folder's newest
+# entry with the same test that raised the ask: gone counts `fixed_after`, still there after
+# FIX_STOPS Stops `not_fixed_after`. A Stop, not a turn, is what the hook can count; the second pass
+# after a hand-back is one. A proxy, not proof: a new entry on top of the flagged one answers too.
+FIX_STOPS = 3
+_FIX_CAP = 200
+
+
+def _fix_watch(state: dict, lesson: str, folder: Path, heading: str, now: datetime | None) -> None:
+    rec = state.setdefault(lesson, {})
+    rec.setdefault("fixed_since", (now or datetime.now()).isoformat(timespec="minutes"))
+    watch = state.setdefault("fix_watch", [])
+    watch.append({"lesson": lesson, "folder": str(folder), "heading": heading, "stops": 0})
+    state["fix_watch"] = watch[-_FIX_CAP:]
+
+
+def _fixed(lesson: str, book: Path) -> bool | None:
+    """Is the violation gone from this logbook's newest entry? None: the logbook cannot be read."""
+    try:
+        text = book.read_text("utf-8-sig")
+        saved = datetime.fromtimestamp(book.stat().st_mtime)
+    except OSError:
+        return None
+    top = top_entry(text)
+    if top is None:
+        return None
+    heading, body = top
+    if lesson == "L1":
+        m = _HEADING.match(heading)
+        if not m.group(2):
+            return True
+        try:
+            when = datetime.strptime(f"{m.group(1)} {m.group(2)}:{m.group(3)}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            return False
+        return abs((when - saved).total_seconds() / 60) <= L1_SLACK_MINUTES
+    if lesson == "L3":
+        return claims_first(body)
+    return tests_listed(body)
+
+
+def fix_check(name: str, now: datetime | None = None) -> None:
+    """One Stop's look at every ask still watched. Never raises."""
+    try:
+        ss = _ss()
+        state = ss.lessons_load()
+        watch = state.get("fix_watch") or []
+        if not watch:
+            return
+        left = []
+        for w in watch:
+            fixed = _fixed(w.get("lesson", ""), Path(w.get("folder", "")) / name)
+            w["stops"] = w.get("stops", 0) + 1
+            if fixed:
+                ss.lesson_event(state, w["lesson"], "fixed_after", now)
+            elif w["stops"] >= FIX_STOPS:
+                ss.lesson_event(state, w["lesson"], "not_fixed_after", now)
+            else:
+                left.append(w)
+        state["fix_watch"] = left
+        ss.lessons_save(state)
+    except Exception:
+        pass          # counting is a courtesy; never a reason to fail the session
 
 
 def _state(session: str) -> Path:
@@ -1004,6 +1076,15 @@ def main() -> int:
             lost = second_try(payload)
         except Exception:
             lost = None
+        fix_check(config()[1])        # the hand-back's answer lands here (row 44)
+        try:      # the entry the hand-back asked for may say tests pass: its pinned run (row 43)
+            root, name = config()
+            tested = _ss().tests_results() + (pinned_runs(
+                root, name, session_started(str(payload.get("transcript_path") or "")),
+                str(payload.get("session_id") or ""))[0] if root.is_dir() else [])
+        except Exception:
+            tested = []
+        lost = " ".join(filter(None, (lost, *tested)))
         if lost:          # a message for the human, not a hand-back: never twice in a turn
             sys.stdout.buffer.write(json.dumps({"systemMessage": lost},
                                                ensure_ascii=False).encode("utf-8"))
@@ -1013,6 +1094,7 @@ def main() -> int:
     root, name = config()
     if not root.is_dir():
         return 0
+    fix_check(name)               # before this Stop's own asks: they are judged from the next one
 
     since = session_started(str(payload.get("transcript_path") or ""))
     stale = unrecorded(root, name, since)

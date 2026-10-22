@@ -472,7 +472,8 @@ nothing runs. **Limits:** the file is on disk, and an agent with write access to
 the pin -- every result names the command that ran, so a changed one shows, but Baton does not
 stop it. The verdict is as good as the command: a pin that runs one file says nothing about the
 rest. A result arrives a turn late, and a run that outlives its budget plus two minutes without a
-record is said as "never finished", with nothing known about the claim.
+record is said as "never finished", with nothing known about the claim. Two sessions whose Stops
+see the same entry at the same moment can each start a run; the later record wins.
 
 ## The task header
 
@@ -763,6 +764,16 @@ And since v3.20.0, for lesson L2, how often its note was **shown** (it is said a
 second read may have been planned anyway, and a sentence written without one may be right; it says
 whether the next step looked like a check, not whether the note caused it.
 
+And since v3.21.0, the same question for every lesson (ZA-OPRAVYANE row 44, after Sentry's
+"recovery verification"): **fixed after the lesson: N of M**, per lesson. After Stop asks about an
+entry -- L1 an hour off the clock, L3 a public/private claim, L4 a tests claim -- the next three
+Stops look at that folder's newest entry with the same test that raised the ask: the violation
+gone counts as fixed (`fixed_after` in `baton.lessons.json`), still there after three Stops as not
+(`not_fixed_after`). The second pass after a hand-back is one of the three, and is where the
+answer usually lands. A Stop, not a turn, is what the hook can count. For L2 the line is row 40's
+"followed by a check". **The same proxy:** a new entry written on top of the flagged one counts as
+fixed too, and a fix made because the agent would have made it anyway looks the same.
+
 ## After compaction: the agent writes the logbook first
 
 When Claude Code compacts a long conversation, everything before that point survives only as a
@@ -917,7 +928,16 @@ the situation arose, `caught` when the mistake happened. The counters are in
   author's logbooks: 29 match before and after the change, all claims, and the only four "N/N
   pass" in them are the phrase quoted. And since v3.21.0, where a human has pinned a test command
   for the folder (see *What you get*), its result is set beside the claim, and a run that failed
-  or ran no tests is counted `caught` -- the one catch here that is measured, not written.
+  or ran no tests is counted `caught` -- the one catch here that is measured, not written. `caught`
+  counts both kinds, a `refuted:` line and a pinned run that disagreed, and does not tell them
+  apart; a run's catch has no `fired` of its own, so "caught N of M asked" can show N above M.
+- **Not a lesson: looping** (ZA-OPRAVYANE row 45, measured 22 October 2026, not added). The
+  proposal: the same tool with the same input returning the same error three times in a row,
+  then one note to change the approach. In the 26,747 tool calls of the 404 transcripts on the
+  author's machine (subagents included): three in a row, 0; three within ten calls, 0, also with
+  the error text ignored. Twice in a row: 4, all four the harness's own permission classifier
+  refusing, and the retry was right. There is no threshold the numbers support -- at three
+  nothing to test it against, at two only noise -- so it is not in Baton.
 
 SessionStart says something only when a lesson has earned it: caught twice in 14 days (it is
 not holding — propose the next rung: a check on the result, or a tool that makes the mistake
@@ -1524,6 +1544,12 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   logbook, the model or the repository.
 - **L4 reads "5/5 passes"** -- the honest entry of the probe was not asked. N/N only; "3/5 passed"
   no longer reads as "5 passed". On 1,382 real entries: 29 matches before and after, all claims.
+- **Every lesson says whether it was followed:** "fixed after the lesson: N of M" in
+  `/baton-doctor` for L1, L3 and L4 -- the next three Stops look at the flagged entry with the test
+  that raised the ask -- beside L2's "followed by a check". A proxy, not proof.
+- **Looping was measured and not added.** Three identical failing calls in a row: 0 in 26,747
+  recorded tool calls; the only pairs were the harness's own refusals. No threshold the numbers
+  support, so no lesson L5.
 
 **v3.20.0** — a crash is shown; history that disappears is said; "tests pass" goes in the claims
 
