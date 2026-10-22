@@ -138,3 +138,17 @@ def test_l4_a_claims_section_without_the_tests_claim_is_not_a_fix(tmp_path):
     _write(tmp_path, H, "All tests pass.", claims="- the fixture waits for the token (fix_test.py)")
     _stop(tmp_path, again=True)
     assert "fixed_after" not in _rec("L4"), _rec("L4")
+
+
+def test_l1_deleting_the_hour_is_not_a_fix(tmp_path):
+    """ZA-OPRAVYANE row 62 (swarm D, 22.10; probe G08): the cheapest answer to "the hour does not
+    match the clock" -- drop the hour -- was counted as L1 followed, and the record kept no time."""
+    now = datetime.now()
+    _write(tmp_path, f"{now - timedelta(days=3):%Y-%m-%d %H:%M} — old", "Read it.")
+    _stop(tmp_path, "first")
+    typed = now - timedelta(hours=2)
+    _write(tmp_path, f"{typed:%Y-%m-%d %H:%M} — typed", "Read it.")
+    assert "lesson L1" in _stop(tmp_path).get("reason", "")
+    _write(tmp_path, f"{typed:%Y-%m-%d} — typed", "Read it.")
+    _stop(tmp_path, again=True)
+    assert "fixed_after" not in _rec("L1"), _rec("L1")

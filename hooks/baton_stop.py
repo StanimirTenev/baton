@@ -949,7 +949,7 @@ def _fixed(lesson: str, book: Path) -> bool | None:
     if lesson == "L1":
         m = _HEADING.match(heading)
         if not m.group(2):
-            return True
+            return False      # the hour deleted is not the hour read from the clock (row 62)
         try:
             when = datetime.strptime(f"{m.group(1)} {m.group(2)}:{m.group(3)}", "%Y-%m-%d %H:%M")
         except ValueError:
