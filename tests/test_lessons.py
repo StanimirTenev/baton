@@ -370,7 +370,7 @@ def test_l2_a_result_that_carries_anything_else_is_not_an_error(tmp_path):
 def test_l2_counts_shown_apart_from_fired(tmp_path):
     env = _env(tmp_path, tmp_path / "tasks")
     out = _batch(env, [_call("Bash", "", "grep -rn Featured profile.txt")])
-    assert "shown 1 of 1 times" in json.dumps(out)
+    assert "shown 1, followed by a check 0 of 0; fired 1 since" in json.dumps(out)
     _batch(env, [_call("Bash", "", "grep -rn Featured profile.txt")])      # inside the half hour
     rec = _state(env)["L2"]
     assert rec["fired"] == 2 and rec["shown"] == 1
@@ -407,4 +407,19 @@ def test_l2_the_turn_ending_after_the_note_counts_as_no_check(tmp_path):
     assert rec.get("no_check_after") == 1 and not rec.get("checked_after")
     doctor = subprocess.run([sys.executable, str(ROOT / "tools" / "baton_doctor.py")],
                             capture_output=True, text=True, env=env).stdout
-    assert "fired 1, shown 1; followed by a check: 0 of 1" in doctor and "proxy" in doctor
+    assert "fired 1 since" in doctor and "shown 1, followed by a check: 0 of 1" in doctor
+    assert "proxy" in doctor
+
+
+def test_l2_a_register_from_before_v3_20_does_not_read_as_never_shown(tmp_path):
+    """`shown` is counted from v3.20.0 on; 144 fires since 3 Oct must not read "shown 0 of 144"."""
+    env = _env(tmp_path, tmp_path / "tasks")
+    Path(env["BATON_LESSONS_STATE"]).write_text(json.dumps(
+        {"L2": {"fired": 144, "since": "2026-10-03T08:00", "last_shown": "2026-10-01T08:00"}}))
+    doctor = subprocess.run([sys.executable, str(ROOT / "tools" / "baton_doctor.py")],
+                            capture_output=True, text=True, env=env).stdout
+    assert "fired 144 since 2026-10-03T08:00; shown and followed by a check: not counted yet" in doctor
+    note = json.dumps(_batch(env, [_call("Bash", "", "grep -rn Featured profile.txt")]),
+                      ensure_ascii=False)
+    assert "shown 1, followed by a check 0 of 0; fired 145 since 2026-10-03T08:00" in note
+    assert "of 145" not in note and "of 144" not in note

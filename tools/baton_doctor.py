@@ -53,7 +53,8 @@ def last_run(where: Path, stem: str) -> datetime | None:
 def crashed(where: Path, stem: str) -> tuple[datetime, str] | None:
     """When the hook last raised, and the exception's class (since v3.20.0)."""
     try:
-        when, _, kind = (where / f"baton.beat.{stem}.crashed").read_text("utf-8").strip().partition(" ")
+        marker = (where / f"baton.beat.{stem}.crashed").read_text("utf-8")
+        when, _, kind = marker.strip().partition(" ")
         return datetime.fromisoformat(when), kind or "unknown error"
     except (OSError, ValueError):
         return None
@@ -94,18 +95,20 @@ def lesson_l2(where: Path) -> str | None:
     if not rec:
         return None
     after = rec.get("checked_after", 0) + rec.get("no_check_after", 0)
-    return (f"Lesson L2 (a failed read) since {rec.get('since', '?')}: fired "
-            f"{rec.get('fired', 0)}, shown {rec.get('shown', 0)}; followed by a check: "
-            f"{rec.get('checked_after', 0)} of {after}.\n   (A proxy, not proof: \"a check\" is a "
-            "read in the agent's next tool calls; it may have been planned anyway.)")
+    shown = (f"since {rec['shown_since']}: shown {rec.get('shown', 0)}, followed by a check: "
+             f"{rec.get('checked_after', 0)} of {after}" if rec.get("shown_since")
+             else "shown and followed by a check: not counted yet (from v3.20.0 on)")
+    return (f"Lesson L2 (a failed read): fired {rec.get('fired', 0)} since {rec.get('since', '?')}; "
+            f"{shown}.\n   (A proxy, not proof: \"a check\" is a read in the agent's next tool "
+            "calls; it may have been planned anyway.)")
 
 
 def main() -> int:
     where, now = folder(), datetime.now()
     print(f"Baton doctor -- heartbeats in {where}\n")
     seen = {stem: last_run(where, stem) for stem, _, _ in HOOKS}
-    crashes = {stem: c for stem, _, _ in HOOKS
-               for c in [crashed(where, stem)] if c and (seen[stem] is None or c[0] > seen[stem])}
+    crashes = {stem: c for stem, _, _ in HOOKS for c in [crashed(where, stem)]
+               if c and (seen[stem] is None or c[0] > seen[stem])}
     started = seen["baton_session_start"] is not None or "baton_session_start" in crashes
     for stem, event, when in HOOKS:
         t = seen[stem]

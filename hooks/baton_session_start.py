@@ -276,9 +276,10 @@ def crashed_hooks() -> list[str]:
     out = []
     for stem, event in HOOK_EVENTS:
         try:
-            when, _, kind = (folder / f"baton.beat.{stem}.crashed").read_text("utf-8").strip().partition(" ")
+            marker = (folder / f"baton.beat.{stem}.crashed").read_text("utf-8")
         except OSError:
             continue
+        when, _, kind = marker.strip().partition(" ")
         try:
             done = (folder / f"baton.beat.{stem}").read_text("utf-8").strip()
         except OSError:

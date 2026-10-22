@@ -122,7 +122,8 @@ ERROR_MAX_CHARS, ERROR_MAX_LINES = 400, 4
 def is_error(call: dict) -> bool:
     """An error message where the result should be: short, and every line an error line, at least
     one of them more than an exit code."""
-    lines = [ln.strip() for ln in _text(call.get("tool_response")).strip().splitlines() if ln.strip()]
+    text = _text(call.get("tool_response")).strip()
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     if not lines or len(lines) > ERROR_MAX_LINES or sum(map(len, lines)) > ERROR_MAX_CHARS:
         return False
     if all(re.match(r"(?i)exit code \d+$", ln) for ln in lines):
@@ -194,6 +195,9 @@ def main() -> int:
         if shown and shown > (now - timedelta(minutes=SHOW_EVERY_MINUTES)).isoformat(timespec="minutes"):
             ss.lessons_save(state)
             return 0
+        # `shown` and what came after are counted from v3.20.0 on, `fired` from earlier. Each says
+        # its own start: a register from before reads "fired 147 since 3 Oct", not "shown 0 of 147".
+        rec.setdefault("shown_since", now.isoformat(timespec="minutes"))
         ss.lesson_event(state, "L2", "shown", now)
         ss.lessons_save(state)
         try:
@@ -201,13 +205,14 @@ def main() -> int:
             _pending(session).write_text(now.isoformat(timespec="seconds"), "utf-8")
         except OSError:
             pass          # the measure is a courtesy; the note still goes out
-        what = " and ".join(dict.fromkeys(
-            "an empty result" if k == "empty" else "an error instead of a result" for _, k in failed))
+        what = " and ".join(dict.fromkeys("an empty result" if k == "empty" else
+                                          "an error instead of a result" for _, k in failed))
         tools = ", ".join(sorted({str(c.get("tool_name")) for c, _ in failed}))
         after = rec.get("checked_after", 0) + rec.get("no_check_after", 0)
         note = (f"Baton, lesson L2 -- {what} just came back ({tools}). {ss.LESSONS['L2']} "
-                f"(Counted: shown {rec.get('shown', 0)} of {rec.get('fired', 0)} times; followed "
-                f"by a check {rec.get('checked_after', 0)} of {after}.)")
+                f"(Counted since {rec['shown_since']}: shown {rec.get('shown', 0)}, followed by a "
+                f"check {rec.get('checked_after', 0)} of {after}; fired {rec.get('fired', 0)} "
+                f"since {rec.get('since', '?')}.)")
     except Exception:
         return 0              # a lesson that cannot count must not cost the session
     sys.stdout.buffer.write(json.dumps({"hookSpecificOutput": {

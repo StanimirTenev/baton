@@ -151,7 +151,7 @@ def newest_work(folder: Path, logbook: str) -> tuple[float, str]:
 
 
 def lost_note(lost: list[str], forgot: list[str]) -> str:
-    """One message for the human, from Stop or on the board: history gone with no entry saying so."""
+    """One message for the human, from Stop or on the board: history gone, no entry saying so."""
     out = []
     if lost:
         out.append("Baton: part of the record is gone, and no entry says so -- " + "; ".join(lost)
