@@ -663,10 +663,15 @@ def visibility_words(text: str) -> list[str]:
 # "3/5 passed" no longer reads as "5 passed": like "1 failed, 9 passed", a run that failed.
 # Measured on the 1,382 dated entries here (22.10): 29 match before and after, all claims; the
 # four "N/N pass" in the logbooks are the phrase quoted, talked about.
-_TESTS = re.compile(r"(?i)(?<![\w-])((?:all\s+)?tests?\s+(?:all\s+)?pass(?:es|ed)?|all\s+green"
+# Row 60 (22.10): the plain sentence was missed -- "tests are passing", "the suite passes", "CI is
+# green", and Bulgarian without the article or with "преминаха"/"са зелени" (two real claims in
+# investicii-sec, never asked).
+_TESTS = re.compile(r"(?i)(?<![\w-])((?:all\s+)?tests?\s+(?:all\s+)?(?:are\s+|is\s+)?pass(?:es|ed|ing)?"
+                    r"|(?:test\s+)?suite\s+pass(?:es|ed|ing)?|CI\s+(?:is\s+)?green|all\s+green"
                     r"|(?<!failed, )(?<![\d,./])\d[\d,]*\s+passed"
                     r"|(?<![\d,./])(?P<n>\d+)\s*/\s*(?P=n)\s+(?:tests?\s+)?pass(?:es|ed)?"
-                    r"|тестовете\s+(?:минават|минаха)(?!\s+през)|минаха\s+(?:всички\s+)?тестовете)"
+                    r"|тестове(?:те)?\s+(?:минават|минаха|преминават|преминаха|са\s+зелени)(?!\s+през)"
+                    r"|минаха\s+(?:всички\s+)?тестовете)"
                     r"(?![\w-])")
 _QUOTE = re.compile(r"[„“\"«][^„“”\"«»\n]{1,160}[“”\"»]")
 
@@ -698,14 +703,24 @@ def claims_first(body: str) -> bool:
     return bool(secs) and bool(_CLAIMS.match(secs[0][0])) and any(x.strip() for x in secs[0][1])
 
 
+def _session_tops(text: str, top: tuple, since: float) -> list[tuple]:
+    """The entries this session wrote, newest first; the top one always. L3 and L4 read only the
+    top, so a claim with a clean entry written above it was never asked (row 59, 22.10) -- the
+    hollow check had already learned a session writes several entries (`session_entries`)."""
+    entries = _all_entries(session_entries(text, since))
+    return entries if entries and entries[0][0] == top[0] else [top] + entries
+
+
 def visibility_entries(root: Path, name: str, since: float | None) -> list[tuple]:
-    """(folder, heading, words) for each newest entry this session wrote that says something is
-    public or private and does not open with a claims section."""
+    """(folder, heading, words) for the newest entry this session wrote, in each folder, that says
+    something is public or private and does not open with a claims section."""
     out = []
-    for folder, _text, (heading, body) in _changed_tops(root, name, since):
-        words = visibility_words(heading + "\n" + body)
-        if words and not claims_first(body):
-            out.append((folder.name, heading, list(dict.fromkeys(words))))
+    for folder, text, top in _changed_tops(root, name, since):
+        for heading, body in _session_tops(text, top, since):
+            words = visibility_words(heading + "\n" + body)
+            if words and not claims_first(body):
+                out.append((folder.name, heading, list(dict.fromkeys(words))))
+                break
     return out
 
 
@@ -715,13 +730,15 @@ def tests_listed(body: str) -> bool:
 
 
 def tests_entries(root: Path, name: str, since: float | None) -> list[tuple]:
-    """(folder, heading, phrases) for each newest entry this session wrote that says tests pass
-    and does not list that claim in a claims section at its top (L4)."""
+    """(folder, heading, phrases) for the newest entry this session wrote, in each folder, that
+    says tests pass and does not list that claim in a claims section at its top (L4)."""
     out = []
-    for folder, _text, (heading, body) in _changed_tops(root, name, since):
-        words = tests_words(heading + "\n" + body)
-        if words and not tests_listed(body):
-            out.append((folder.name, heading, list(dict.fromkeys(words))))
+    for folder, text, top in _changed_tops(root, name, since):
+        for heading, body in _session_tops(text, top, since):
+            words = tests_words(heading + "\n" + body)
+            if words and not tests_listed(body):
+                out.append((folder.name, heading, list(dict.fromkeys(words))))
+                break
     return out
 
 

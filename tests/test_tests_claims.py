@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_stop.py"
@@ -182,3 +182,49 @@ def test_the_hook_asks_once_per_entry_and_counts_it(tmp_path):
     assert "Claims to verify" not in _run(tmp_path, "s1").get("reason", ""), "asked twice"
     assert "Claims to verify" not in _run(tmp_path, "s2").get("reason", ""), "asked again"
     assert _lessons()["L4"]["fired"] == 1, "one entry is one fire"
+
+
+# -- row 60 (swarm D, 22.10; probe G12): the plain sentence, in both languages -----------------
+
+def test_ordinary_ways_of_saying_tests_pass():
+    """Two of these were found in real logbooks (investicii-sec), both claims, never asked."""
+    for text in ("синтетичните тестове минават; ръчна проверка AAPL/DE",
+                 "Всички тестове минаха след поправката.", "Тестовете са зелени.",
+                 "Тестовете преминаха успешно.", "All tests passing after the fix.",
+                 "The tests are passing now.", "The suite passes on Python 3.8 and 3.12.",
+                 "CI is green.", "the test suite passed"):
+        assert bs.tests_words(text), text
+
+
+def test_the_new_forms_still_leave_mentions_alone():
+    for text in ("тестове минават през хука", "the CI is not set up yet", "a green CI badge",
+                 "suite passenger", "`CI is green`"):
+        assert not bs.tests_words(text), text
+
+
+# -- row 59 (swarm D, 22.10; probe G11): every entry this session wrote, not only the top ------
+
+def test_a_claim_in_the_sessions_second_entry_is_asked(tmp_path):
+    now = datetime.now()
+    _folder(tmp_path, _entry(heading=f"{now:%Y-%m-%d %H:%M} — outline for the next part",
+                             mention="Wrote the outline.")
+            + "\n" + _entry(heading=f"{now:%Y-%m-%d %H:%M} — fix the login test")
+            + "\n" + _entry(heading="2026-01-05 10:00 — older", mention="Wrote the notes."))
+    asks = _asks(tmp_path)
+    assert len(asks) == 1 and "fix the login test" in asks[0][1], asks
+
+
+def test_a_visibility_claim_in_the_sessions_second_entry_is_asked(tmp_path):
+    now = datetime.now()
+    _folder(tmp_path, _entry(heading=f"{now:%Y-%m-%d %H:%M} — outline", mention="Wrote the outline.")
+            + "\n" + _entry(heading=f"{now:%Y-%m-%d %H:%M} — published",
+                            mention="The repository is public now."))
+    asks = bs.visibility_entries(tmp_path, "LOGBOOK.md", _since())
+    assert len(asks) == 1 and "published" in asks[0][1], asks
+
+
+def test_an_entry_from_before_the_session_is_still_not_judged(tmp_path):
+    now = datetime.now()
+    _folder(tmp_path, _entry(heading=f"{now:%Y-%m-%d %H:%M} — outline", mention="Wrote the outline.")
+            + "\n" + _entry(heading=f"{now - timedelta(days=1):%Y-%m-%d %H:%M} — yesterday"))
+    assert _asks(tmp_path) == []

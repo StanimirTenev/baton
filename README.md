@@ -435,7 +435,11 @@ below). The same section, the same once-per-entry ask, for "tests pass", "all gr
 and „тестовете минават/минаха“: one line with the command and the result line it printed. An entry
 that said "did not run pytest … All tests pass." had the right shape and passed the check above;
 now it is asked about. It cannot tell a true claim from a false one either. Since v3.21.0 "5/5
-passes" is read as the claim too (N/N only: "3/5 passed" is a run that failed).
+passes" is read as the claim too (N/N only: "3/5 passed" is a run that failed). Since v3.22.0 the
+plain sentence too -- "tests are passing", "the suite passes", "CI is green", „тестове минават“
+without the article, „тестовете преминаха / са зелени“ (row 60) -- and every entry the session
+wrote is read, not only the top one: a claim with a clean entry written above it was never asked
+(row 59; the same for L3).
 
 **A pinned test command sets the actual result beside the claim** (since v3.21.0, ZA-OPRAVYANE
 row 43, after Apurv Khare: "tests pass" should come from a hook that re-runs them). The listed
@@ -939,7 +943,11 @@ the situation arose, `caught` when the mistake happened. The counters are in
   the command is there, nor that it ran -- it puts the claim where a reader checks it. Since
   v3.21.0 "N/N passes" counts too (row 42); measured again on the 1,382 dated entries of the
   author's logbooks: 29 match before and after the change, all claims, and the only four "N/N
-  pass" in them are the phrase quoted. And since v3.21.0, where a human has pinned a test command
+  pass" in them are the phrase quoted. Since v3.22.0 (rows 59, 60) the plain sentence ("tests are
+  passing", "the suite passes", "CI is green", „тестове минават“, „преминаха“, „са зелени“) and
+  every entry this session wrote, not only the newest; on 1,417 dated entries 35 match, the two
+  new ones both real claims („синтетичните тестове минават“, investicii-sec) that had never been
+  asked. And since v3.21.0, where a human has pinned a test command
   for the folder (see *What you get*), its result is set beside the claim, and a run that failed
   or ran no tests is counted `caught` -- the one catch here that is measured, not written. `caught`
   counts both kinds, a `refuted:` line and a pinned run that disagreed, and does not tell them
