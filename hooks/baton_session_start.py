@@ -181,7 +181,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.19.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.20.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -264,6 +264,40 @@ def open_board(source, root: Path, logbook: str) -> None:
         pass          # a view of the board is a courtesy; never a reason to fail the session
 
 
+HOOK_EVENTS = (("baton_session_start", "SessionStart"), ("baton_prompt", "UserPromptSubmit"),
+               ("baton_stop", "Stop"), ("baton_batch", "PostToolBatch"))
+
+
+def crashed_hooks() -> list[str]:
+    """The hooks whose last run raised: a `.crashed` marker newer than their last finish (row 36).
+    A hook exits 0 whatever happens, so this is the only place a crash is seen."""
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    folder = Path(data) if data else Path(__file__).resolve().parent
+    out = []
+    for stem, event in HOOK_EVENTS:
+        try:
+            when, _, kind = (folder / f"baton.beat.{stem}.crashed").read_text("utf-8").strip().partition(" ")
+        except OSError:
+            continue
+        try:
+            done = (folder / f"baton.beat.{stem}").read_text("utf-8").strip()
+        except OSError:
+            done = ""
+        if when > done:
+            out.append(f"{event} at {when.replace('T', ' ')[:16]} ({kind or 'unknown error'})")
+    return out
+
+
+def crash_notice() -> str | None:
+    found = crashed_hooks()
+    if not found:
+        return None
+    return ("🔴 Baton: a hook crashed on its last run, so its check did not happen -- "
+            + "; ".join(found) + ". A hook never breaks the session, so nothing else said so. "
+            f"Tell the human in one line; {command('baton-doctor')} shows when each hook last "
+            "finished.")
+
+
 def _state_file() -> Path:
     return Path(os.environ.get("BATON_SESSION_STATE")
                 or _local_file("baton.state.json"))
@@ -284,17 +318,21 @@ def _state_file() -> Path:
 LESSONS = {
     "L1": "The hour in a logbook heading is read from the clock, never typed: write entries "
           "with tools/baton_entry.py --title, which stamps the time itself.",
-    "L2": "An empty result is a failed read until a second check shows otherwise: before "
-          "saying something is absent, name the check that would have found it.",
+    "L2": "An empty result, or an error instead of one, is a failed read until a second check "
+          "shows otherwise: before saying something is absent, name the check that would have "
+          "found it.",
     "L3": "A claim that something is public or private is checked against the source: list it "
           "under `### Claims to verify` at the top of the entry, and mark it `refuted:` there "
           "in a later entry if it proves wrong.",
+    "L4": "A claim that tests pass is listed with the command that showed it: under `### Claims "
+          "to verify` at the top of the entry, with its result line, and marked `refuted:` there "
+          "in a later entry if it proves wrong.",
 }
 RECUR_DAYS, RECUR_MIN, RETIRE_DAYS = 14, 2, 60
-# For L1 and L2 `caught` is the mistake made again. For L3 it is a listed claim later shown
+# For L1 and L2 `caught` is the mistake made again. For L3 and L4 it is a listed claim later shown
 # wrong: the section did its work, and two of those in a fortnight are not a lesson failing
 # (ZA-OPRAVYANE row 33, 2026-10-21).
-CAUGHT_IS_USE = {"L3"}
+CAUGHT_IS_USE = {"L3", "L4"}
 
 
 def _lessons_file() -> Path:
@@ -1539,6 +1577,7 @@ def compacted(own: dict) -> str:
     the whole board again, with the instruction to open the next reply with it."""
     root, name = config()
     folders: list[str] = []
+    lost = ""
     try:
         spec = importlib.util.spec_from_file_location(
             "baton_stop", Path(__file__).with_name("baton_stop.py"))
@@ -1547,6 +1586,7 @@ def compacted(own: dict) -> str:
         if root.is_dir():
             folders = mod.unrecorded(root, name,
                                      mod.session_started(str(own.get("transcript_path") or "")))
+            lost = mod.lost_note(mod.LOST, mod.FORGOT) if mod.LOST or mod.FORGOT else ""
     except Exception:
         folders = []
     text = ("Baton: the conversation was just compacted. What happened before this point now "
@@ -1559,10 +1599,13 @@ def compacted(own: dict) -> str:
     if folders:
         text += ("\n\nTask folders holding this session's work, newer than their "
                  f"{name}:\n" + "\n".join(f"- {f}" for f in folders))
+    if lost:
+        text += "\n\n" + lost + " Tell the human in one line."
     return text
 
 
 UNREAD: list = []     # the note for folders the walk did not read to the end (row 35)
+LOST: list = []       # the note for history gone without an entry saying so (row 37)
 
 
 def unlogged_work(root: Path, name: str) -> list[str]:
@@ -1570,6 +1613,7 @@ def unlogged_work(root: Path, name: str) -> list[str]:
     session limit. Never a reason to lose the board. Folders over the Stop hook's WALK_CAP
     leave their note in UNREAD."""
     UNREAD.clear()
+    LOST.clear()
     try:
         spec = importlib.util.spec_from_file_location(
             "baton_stop", Path(__file__).with_name("baton_stop.py"))
@@ -1578,6 +1622,8 @@ def unlogged_work(root: Path, name: str) -> list[str]:
         found = mod.unrecorded(root, name)
         if mod.TRUNCATED:
             UNREAD.append(mod.unread_note(mod.TRUNCATED))
+        if mod.LOST or mod.FORGOT:
+            LOST.append(mod.lost_note(mod.LOST, mod.FORGOT))
         return found
     except Exception:
         return []
@@ -1595,8 +1641,8 @@ def main() -> int:
         return _emit(compacted(own), COMPACT_LINE, block="compact")
     cleared = own.get("source") == "clear"
     root, name = config()
-    notices = [n for n in (whats_new_notice(), update_notice(date.today()), lessons_notice(),
-                           review_notice(), feedback_notice(date.today())) if n]
+    notices = [n for n in (crash_notice(), whats_new_notice(), update_notice(date.today()),
+                           lessons_notice(), review_notice(), feedback_notice(date.today())) if n]
     folders = task_folders(root) if root.is_dir() else []
     if folders:
         open_board(own.get("source"), root, name)
@@ -1739,7 +1785,8 @@ def main() -> int:
         blocks.append(block)
 
     unlogged = unlogged_work(root, name)
-    if not blocks and not frozen and not finished and not stale and not unlogged and not UNREAD:
+    if (not blocks and not frozen and not finished and not stale and not unlogged and not UNREAD
+            and not LOST):
         return _notices_only(notices, start_line())
 
     if unfinished:
@@ -1764,6 +1811,8 @@ def main() -> int:
             + "\n(Write the entry it is missing, or add the file to the folder's .batonignore.)")
     if UNREAD:
         blocks.append("✂️ " + UNREAD[0])
+    if LOST:
+        blocks.append("🕳️ " + LOST[0] + " (Said once; tell the human.)")
     if frozen:
         blocks.append(f"❄️ Frozen (not offered): {', '.join(sorted(frozen))}")
     if finished:
@@ -1787,30 +1836,40 @@ def main() -> int:
     return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external)))
 
 
-def _beat() -> None:
-    """When this hook last ran, for /baton-doctor: a plugin can be installed and enabled and
+def _beat(crash: BaseException | None = None) -> None:
+    """When this hook last FINISHED, for /baton-doctor: a plugin can be installed and enabled and
     still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
-    One small file per hook, next to the other state. Never raises."""
+    One small file per hook, next to the other state. A run that raised leaves
+    `baton.beat.<hook>.crashed` instead: the time and the exception's class -- no message, no
+    path. Until v3.20.0 the beat was written before main() ran, so a crash still showed ✅
+    (ZA-OPRAVYANE row 36, Pawan Singh Rathore, 22.10). Never raises."""
     try:
         data = os.environ.get("CLAUDE_PLUGIN_DATA")
         folder = Path(data) if data else Path(__file__).resolve().parent
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"baton.beat.{Path(__file__).stem}").write_text(
-            datetime.now().isoformat(timespec="seconds"), "utf-8")
+        beat, now = folder / f"baton.beat.{Path(__file__).stem}", datetime.now()
+        # To the microsecond: a crash and a finish in the same second still have an order.
+        if crash is None:
+            beat.write_text(now.isoformat(), "utf-8")
+        else:
+            beat.with_name(beat.name + ".crashed").write_text(
+                f"{now.isoformat()} {type(crash).__name__}", "utf-8")
     except Exception:
         pass
 
 
 if __name__ == "__main__":
     try:
-        _beat()
-        sys.exit(main())
-    except Exception:
+        code = main()
+    except Exception as exc:
         # A hook must never break the session it is trying to help -- but it must not
         # disappear either. Exiting 0 in silence is how a NameError in main() once let
         # the whole report vanish while every unit test still passed: the functions were
         # tested, the wiring was not. The traceback goes to stderr, where it costs the
         # session nothing and is there when someone wonders why Baton said nothing.
+        _beat(exc)              # and for /baton-doctor and the next SessionStart (row 36)
         import traceback
         traceback.print_exc(file=sys.stderr)
         sys.exit(0)
+    _beat()
+    sys.exit(code)

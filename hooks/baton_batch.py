@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -96,6 +97,39 @@ def is_empty(call: dict) -> bool:
     return text.lower() in EMPTY
 
 
+# An error that came back instead of a result is a failed read as well (ZA-OPRAVYANE row 39,
+# Oliver Veits, 22.10: `grep: nofile.txt: No such file or directory` passed unseen). Kept narrow:
+# a short result whose every line is an error line. A result that carries anything else -- a
+# grep hit that mentions "not found", pytest output, a listing with one `ls:` complaint in it --
+# is left alone, and so is `ls`/`stat` saying a path is not there: that is the check for absence
+# itself, not a read that failed (2026-10-22: 4 of the first 16 fires on recorded reads). A
+# half-loaded page that returns navigation text is still not seen.
+ERROR_LINE = re.compile(
+    r"(?i)^(?:exit code \d+"
+    r"|(?!(?:ls|stat|dir): )(?:[\w./~-]+: )+.*\b(?:no such file or directory|permission denied"
+    r"|cannot open\b.*|command not found|not a git repository\b.*|could not resolve host\b.*)"
+    r"|(?:error|fatal)(?: \d{3})?:.*"
+    r"|curl: \(\d+\).*"
+    r"|.*\bhttp(?:/\d(?:\.\d)?)? [45]\d\d\b.*"
+    r"|the response body was not retrieved\b.*"
+    r"|[45]\d\d:? (?:not found|forbidden|unauthorized|bad request|internal server error|"
+    r"bad gateway|service unavailable|too many requests|gone)\.?"
+    r"|(?:page )?not found\.?"
+    r"|getaddrinfo enotfound .*)\s*$")
+ERROR_MAX_CHARS, ERROR_MAX_LINES = 400, 4
+
+
+def is_error(call: dict) -> bool:
+    """An error message where the result should be: short, and every line an error line, at least
+    one of them more than an exit code."""
+    lines = [ln.strip() for ln in _text(call.get("tool_response")).strip().splitlines() if ln.strip()]
+    if not lines or len(lines) > ERROR_MAX_LINES or sum(map(len, lines)) > ERROR_MAX_CHARS:
+        return False
+    if all(re.match(r"(?i)exit code \d+$", ln) for ln in lines):
+        return False                        # a process killed or ended, with nothing said
+    return all(ERROR_LINE.match(ln) for ln in lines)
+
+
 def _ss():
     spec = importlib.util.spec_from_file_location(
         "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
@@ -104,13 +138,45 @@ def _ss():
     return mod
 
 
+# Does the note change what comes next? (ZA-OPRAVYANE row 40, 22.10.) After a shown note this
+# session's next batch is looked at: a read in it counts `checked_after`; anything else, or the
+# turn ending first (Stop), counts `no_check_after`. A proxy, not proof: the second read may have
+# been planned anyway, and a sentence written without one may be right.
+def _pending(session: str) -> Path:
+    base = Path(os.environ.get("BATON_STATE_DIR") or tempfile.gettempdir())
+    safe = "".join(ch for ch in session if ch.isalnum() or ch in "-_")[:80] or "nosession"
+    return base / f"baton-l2-{safe}.json"
+
+
+def followed(session: str, calls: list | None, ss=None, state=None) -> bool:
+    """Count what came after a shown note in this session, once. `calls` None: the turn ended."""
+    path = _pending(session)
+    if not path.is_file():
+        return False
+    try:
+        path.unlink()
+    except OSError:
+        return False
+    own = state is None
+    ss = ss or _ss()
+    state = ss.lessons_load() if own else state
+    checked = bool(calls) and any(isinstance(c, dict) and is_read(c) for c in calls)
+    ss.lesson_event(state, "L2", "checked_after" if checked else "no_check_after")
+    if own:
+        ss.lessons_save(state)
+    return True
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except Exception:
         return 0
-    empties = [c for c in payload.get("tool_calls") or [] if is_read(c) and is_empty(c)]
-    if not empties:
+    calls = payload.get("tool_calls") or []
+    session = str(payload.get("session_id") or "")
+    failed = [(c, "empty" if is_empty(c) else "error") for c in calls
+              if is_read(c) and (is_empty(c) or is_error(c))]
+    if not failed and not _pending(session).is_file():
         return 0
     try:
         ss = _ss()
@@ -118,16 +184,30 @@ def main() -> int:
             return 0
         now = datetime.now()
         state = ss.lessons_load()
-        for _ in empties:
+        followed(session, calls, ss, state)
+        if not failed:
+            ss.lessons_save(state)
+            return 0
+        for _ in failed:
             rec = ss.lesson_event(state, "L2", "fired", now)
         shown = rec.get("last_shown", "")
         if shown and shown > (now - timedelta(minutes=SHOW_EVERY_MINUTES)).isoformat(timespec="minutes"):
             ss.lessons_save(state)
             return 0
-        rec["last_shown"] = now.isoformat(timespec="minutes")
+        ss.lesson_event(state, "L2", "shown", now)
         ss.lessons_save(state)
-        tools = ", ".join(sorted({str(c.get("tool_name")) for c in empties}))
-        note = f"Baton, lesson L2 -- an empty result just came back ({tools}). {ss.LESSONS['L2']}"
+        try:
+            _pending(session).parent.mkdir(parents=True, exist_ok=True)
+            _pending(session).write_text(now.isoformat(timespec="seconds"), "utf-8")
+        except OSError:
+            pass          # the measure is a courtesy; the note still goes out
+        what = " and ".join(dict.fromkeys(
+            "an empty result" if k == "empty" else "an error instead of a result" for _, k in failed))
+        tools = ", ".join(sorted({str(c.get("tool_name")) for c, _ in failed}))
+        after = rec.get("checked_after", 0) + rec.get("no_check_after", 0)
+        note = (f"Baton, lesson L2 -- {what} just came back ({tools}). {ss.LESSONS['L2']} "
+                f"(Counted: shown {rec.get('shown', 0)} of {rec.get('fired', 0)} times; followed "
+                f"by a check {rec.get('checked_after', 0)} of {after}.)")
     except Exception:
         return 0              # a lesson that cannot count must not cost the session
     sys.stdout.buffer.write(json.dumps({"hookSpecificOutput": {
@@ -137,20 +217,36 @@ def main() -> int:
     return 0
 
 
-def _beat() -> None:
-    """When this hook last ran, for /baton-doctor: a plugin can be installed and enabled and
+def _beat(crash: BaseException | None = None) -> None:
+    """When this hook last FINISHED, for /baton-doctor: a plugin can be installed and enabled and
     still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
-    One small file per hook, next to the other state. Never raises."""
+    One small file per hook, next to the other state. A run that raised leaves
+    `baton.beat.<hook>.crashed` instead: the time and the exception's class -- no message, no
+    path. Until v3.20.0 the beat was written before main() ran, so a crash still showed ✅
+    (ZA-OPRAVYANE row 36, Pawan Singh Rathore, 22.10). Never raises."""
     try:
         data = os.environ.get("CLAUDE_PLUGIN_DATA")
         folder = Path(data) if data else Path(__file__).resolve().parent
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"baton.beat.{Path(__file__).stem}").write_text(
-            datetime.now().isoformat(timespec="seconds"), "utf-8")
+        beat, now = folder / f"baton.beat.{Path(__file__).stem}", datetime.now()
+        # To the microsecond: a crash and a finish in the same second still have an order.
+        if crash is None:
+            beat.write_text(now.isoformat(), "utf-8")
+        else:
+            beat.with_name(beat.name + ".crashed").write_text(
+                f"{now.isoformat()} {type(crash).__name__}", "utf-8")
     except Exception:
         pass
 
 
 if __name__ == "__main__":
+    try:
+        code = main()
+    except Exception as exc:
+        # A hook must never break the session it is trying to help -- but it must not vanish:
+        # the crash is left for /baton-doctor and the next SessionStart (row 36). Stop has had
+        # this top-level guard; this hook had none, so a malformed batch exited 1 with a traceback.
+        _beat(exc)
+        sys.exit(0)
     _beat()
-    sys.exit(main())
+    sys.exit(code)

@@ -338,26 +338,36 @@ def main() -> int:
     return 0
 
 
-def _beat() -> None:
-    """When this hook last ran, for /baton-doctor: a plugin can be installed and enabled and
+def _beat(crash: BaseException | None = None) -> None:
+    """When this hook last FINISHED, for /baton-doctor: a plugin can be installed and enabled and
     still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
-    One small file per hook, next to the other state. Never raises."""
+    One small file per hook, next to the other state. A run that raised leaves
+    `baton.beat.<hook>.crashed` instead: the time and the exception's class -- no message, no
+    path. Until v3.20.0 the beat was written before main() ran, so a crash still showed ✅
+    (ZA-OPRAVYANE row 36, Pawan Singh Rathore, 22.10). Never raises."""
     try:
         from datetime import datetime
         data = os.environ.get("CLAUDE_PLUGIN_DATA")
         folder = Path(data) if data else Path(__file__).resolve().parent
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"baton.beat.{Path(__file__).stem}").write_text(
-            datetime.now().isoformat(timespec="seconds"), "utf-8")
+        beat, now = folder / f"baton.beat.{Path(__file__).stem}", datetime.now()
+        # To the microsecond: a crash and a finish in the same second still have an order.
+        if crash is None:
+            beat.write_text(now.isoformat(), "utf-8")
+        else:
+            beat.with_name(beat.name + ".crashed").write_text(
+                f"{now.isoformat()} {type(crash).__name__}", "utf-8")
     except Exception:
         pass
 
 
 if __name__ == "__main__":
     try:
-        _beat()
-        sys.exit(main())
-    except Exception:
+        code = main()
+    except Exception as exc:
         # A hook must never break the session it is trying to help -- and exit 2 would
-        # block the user's message outright.
+        # block the user's message outright. The crash is left for /baton-doctor (row 36).
+        _beat(exc)
         sys.exit(0)
+    _beat()
+    sys.exit(code)

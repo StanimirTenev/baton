@@ -1,13 +1,14 @@
 ---
 name: baton-doctor
-description: Check that Baton's hooks actually run on this machine, not only that Baton is installed - shows when each hook last ran. Use when the human asks whether Baton is working, when the session-start board did not appear, or after installing or updating Baton.
+description: Check that Baton's hooks actually run on this machine, not only that Baton is installed - shows when each hook last finished, or that it crashed. Use when the human asks whether Baton is working, when the session-start board did not appear, or after installing or updating Baton.
 ---
 
 # Baton doctor — installed is not running
 
 A plugin can be installed and enabled and still never run: no Python 3.8+, or on Windows no
 Git for Windows (the hooks start through Git Bash). Nothing on the screen says so. Since
-v3.12.0 every hook leaves a heartbeat when it runs; this reads them. It reads only and sends
+v3.12.0 every hook leaves a heartbeat (since v3.20.0 when it finishes, and a crash marker when
+it raises); this reads them. It reads only and sends
 nothing.
 
 Output in the human's language. Commands and hook names stay as they are.
@@ -29,6 +30,9 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
 - **🔴 Installed but not running** — no hook left a heartbeat. Check `python3 --version` (3.8 or
   later) and, on Windows, `where bash`. A hook older than v3.12.0 leaves none either: a new
   session first, then ask again.
+- **❌ CRASHED / 🔴 Crashed on its last run** — the hook raised; it exited 0, as a hook must, so
+  its check did not happen and nothing else said so. Give the time and the exception class as
+  shown, and the command the doctor prints to see the traceback.
 - **🔴 SessionStart has never run** — the board and the rules are not reaching the agent.
 - **✅ Running** — say when SessionStart last ran. A hook marked ⏳ not yet is one whose moment
   has not come yet (Stop needs a finished turn, PostToolBatch a tool call) -- not a failure, so
@@ -38,5 +42,7 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
   read the four numbers as they are. Unasked against handed back says how often the agent wrote
   the entry without Stop asking; "passed" is a turn Stop asked about and then let through, since
   it never asks twice. No verdict: the human decides what the numbers mean.
+- **Lesson L2 … fired / shown / followed by a check: N of M** — say it is a proxy: "a check" is a
+  read among the agent's next tool calls after a shown note, which may have been planned anyway.
 
 Do not change anything to fix it without the human's yes.

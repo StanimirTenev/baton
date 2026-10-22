@@ -337,3 +337,74 @@ def test_l2_a_read_next_to_a_heredoc_still_speaks(tmp_path):
         env["BATON_LESSONS_STATE"] = str(tmp_path / str(i) / "lessons.json")
         out = _batch(env, [_call("Bash", "0" if "-c" in command else "", command)])
         assert "lesson L2" in json.dumps(out), command
+
+
+# -- L2 since v3.20.0: an error instead of a result; shown apart from fired; what came next ---
+# ZA-OPRAVYANE rows 39 and 40 (22.10). Replayed on the 5,213 recorded reads here: 11 new fires,
+# each a read that returned an error (WebFetch 403/404, DNS, an MCP 400, a missing file to grep).
+
+def test_l2_an_error_instead_of_a_result_is_a_failed_read(tmp_path):
+    env = _env(tmp_path, tmp_path / "tasks")
+    for response in ("grep: nofile.txt: No such file or directory",
+                     "Exit code 2\ngrep: nofile.txt: No such file or directory",
+                     "The server returned HTTP 404 Not Found.\n\nThe response body was not "
+                     "retrieved. If this URL requires authentication, use an authenticated tool.",
+                     "getaddrinfo ENOTFOUND example.invalid"):
+        state = Path(env["BATON_LESSONS_STATE"])
+        state.unlink(missing_ok=True)
+        out = _batch(env, [_call("Bash", response, "grep -rn Featured nofile.txt")])
+        assert "an error instead of a result" in json.dumps(out), response
+
+
+def test_l2_a_result_that_carries_anything_else_is_not_an_error(tmp_path):
+    env = _env(tmp_path, tmp_path / "tasks")
+    for response in ("x.py:12: raise KeyError('not found')",          # a grep hit
+                     "ls: cannot access 'w.py': No such file or directory",   # absence checked
+                     "1 failed, 9 passed in 0.3s\nE   AssertionError",
+                     "Exit code 144",                                    # a process ended
+                     "Home\nMy Network\nJobs\nMessaging"):               # still not seen (O3)
+        assert _batch(env, [_call("Bash", response, "grep -rn x . ; ls w.py")]) == {}, response
+    assert "L2" not in _state(env)
+
+
+def test_l2_counts_shown_apart_from_fired(tmp_path):
+    env = _env(tmp_path, tmp_path / "tasks")
+    out = _batch(env, [_call("Bash", "", "grep -rn Featured profile.txt")])
+    assert "shown 1 of 1 times" in json.dumps(out)
+    _batch(env, [_call("Bash", "", "grep -rn Featured profile.txt")])      # inside the half hour
+    rec = _state(env)["L2"]
+    assert rec["fired"] == 2 and rec["shown"] == 1
+
+
+def _batch_in(env, session, calls):
+    return _run("baton_batch.py", env, {"session_id": session, "tool_calls": calls})
+
+
+def test_l2_a_read_right_after_the_note_counts_as_a_check(tmp_path):
+    env = _env(tmp_path, tmp_path / "tasks")
+    _batch_in(env, "s", [_call("Bash", "", "grep -rn Featured profile.txt")])
+    _batch_in(env, "s", [_call("Bash", "found: Featured", "grep -rn Featured page.html")])
+    _batch_in(env, "s", [_call("Bash", "x", "grep -rn y .")])               # counted once only
+    rec = _state(env)["L2"]
+    assert rec.get("checked_after") == 1 and not rec.get("no_check_after")
+
+
+def test_l2_anything_else_after_the_note_counts_as_no_check(tmp_path):
+    env = _env(tmp_path, tmp_path / "tasks")
+    _batch_in(env, "s", [_call("Bash", "", "grep -rn Featured profile.txt")])
+    _batch_in(env, "other", [_call("Bash", "x", "grep -rn y .")])           # another session
+    _batch_in(env, "s", [_call("Edit", "ok")])
+    rec = _state(env)["L2"]
+    assert rec.get("no_check_after") == 1 and not rec.get("checked_after")
+
+
+def test_l2_the_turn_ending_after_the_note_counts_as_no_check(tmp_path):
+    env = _env(tmp_path, tmp_path / "tasks")
+    _batch_in(env, "s", [_call("Bash", "", "grep -rn Featured profile.txt")])
+    _run("baton_stop.py", env, {"session_id": "s"})
+    _run("baton_stop.py", env, {"session_id": "s"})
+    rec = _state(env)["L2"]
+    assert rec.get("no_check_after") == 1 and not rec.get("checked_after")
+    doctor = subprocess.run([sys.executable, str(ROOT / "tools" / "baton_doctor.py")],
+                            capture_output=True, text=True, env=env).stdout
+    assert "fired 1, shown 1; followed by a check: 0 of 1" in doctor and "proxy" in doctor

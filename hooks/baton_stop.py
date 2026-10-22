@@ -150,6 +150,20 @@ def newest_work(folder: Path, logbook: str) -> tuple[float, str]:
     return newest, newest_name
 
 
+def lost_note(lost: list[str], forgot: list[str]) -> str:
+    """One message for the human, from Stop or on the board: history gone with no entry saying so."""
+    out = []
+    if lost:
+        out.append("Baton: part of the record is gone, and no entry says so -- " + "; ".join(lost)
+                   + ". Baton keeps no copy of a logbook; if this was not on purpose, restore it "
+                   "from git or a backup.")
+    if forgot:
+        out.append(f"Baton: its memory of the logbooks ({forgot[0]}) was gone or unreadable, so it "
+                   "started over. Until it has seen each logbook again, an older entry rewritten "
+                   "before now cannot be told from a new one.")
+    return " ".join(out)
+
+
 def unread_note(folders: list[str]) -> str:
     """One sentence for the board and for Stop: which folders were not read to the end."""
     return (f"Baton: not read to the end (over {WALK_CAP:,} files) -- newer work further in "
@@ -189,6 +203,8 @@ REWRITTEN: list = []      # folders whose older entries changed during this run
 GREW: list = []           # folders that gained an entry since the last look (row 27)
 TOPPED: list = []         # folders whose body changed at the top since the last look
 TRUNCATED: list = []      # folders not read to the end: over WALK_CAP work files (row 35)
+LOST: list = []           # logbooks gone, or holding fewer entries than last seen (row 37)
+FORGOT: list = []         # Baton's own memory of the logbooks was gone (row 37)
 
 
 def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
@@ -220,6 +236,13 @@ def recorded_time(folder: Path, logbook: Path, bodies: dict) -> float:
             seen.append(entries)
         return min(mtime, seen[1])
     old = seen[2] if seen and len(seen) > 2 else None
+    if old and len(entries) < len(old):
+        # v3.20.0, row 37 (Marcelo Dantas, 22.10): entries removed -- the newest one too, which
+        # _at_the_top took for a change at the top -- is not the work recorded, and is said once.
+        LOST.append(f"{folder.name}: {len(old) - len(entries)} of {len(old)} entries gone "
+                    f"from its {logbook.name}")
+        bodies[key] = [digest, seen[1], entries]
+        return min(mtime, seen[1])
     if old and entries and (old == entries or not _at_the_top(old, entries)):
         if old != entries:
             REWRITTEN.append(folder.name)
@@ -259,11 +282,23 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
     GREW.clear()
     TOPPED.clear()
     TRUNCATED.clear()
+    LOST.clear()
+    FORGOT.clear()
     path = _bodies_path()
     try:
         bodies = json.loads(path.read_text("utf-8"))
     except Exception:
         bodies = {}
+        # Row 37: the memory is a file the agent can delete. Without it Stop starts over from file
+        # times, and a rewrite cannot be told from a new entry -- so it is said, once. The lessons
+        # register remembers the top entry of every logbook Stop has seen ("tops"); when it knows
+        # some and this file is gone or unreadable, the memory was lost, not never made. Both
+        # files deleted: nothing here can tell.
+        try:
+            if _ss().lessons_load().get("tops"):
+                FORGOT.append(path.name)
+        except Exception:
+            pass
     for folder in _ss().task_folders(root):
         logbook = folder / name
         work, newest_name = newest_work(folder, name)
@@ -281,6 +316,17 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
                 out.append(f"{folder.name} (newest: {newest_name})")
             else:
                 out.append(f"{folder.name} (no {name} at all; newest: {newest_name})")
+    # Row 37: a logbook Baton remembered that is not there now -- said once, then forgotten.
+    for key in [k for k in bodies if Path(k).parent == root]:
+        folder = Path(key)
+        if (folder / name).is_file():
+            continue
+        seen = bodies.pop(key)
+        known = f"{len(seen[2])} entries" if len(seen) > 2 else "entries"
+        LOST.append(f"{folder.name}: its {name} is gone, with the {known} Baton had seen"
+                    if folder.is_dir() else
+                    f"{folder.name}: the folder is gone (moved, renamed or deleted), with the "
+                    f"{known} of its {name}")
     try:
         path.write_text(json.dumps(bodies, ensure_ascii=False), "utf-8")
     except Exception:
@@ -597,6 +643,26 @@ def visibility_words(text: str) -> list[str]:
     return [m.group(1) for m in _VISIBLE.finditer(t)]
 
 
+# Lesson L4: a claim that tests pass is listed with the command that showed it. ZA-OPRAVYANE
+# row 38 (Apurv Khare, 22.10): the shape check above passed "did not run pytest ... All tests
+# pass." -- decided by the human the same day: ask for it as L3 asks for visibility. Measured
+# on the 1,347 dated entries in the logbooks here (22.10): 25 match, all 25 a claim that tests
+# passed. A first version matched 35; the 10 it dropped were the phrase quoted (talked about, not
+# claimed), "минават през" (go through), and "1 failed, 9 passed" (a run that failed). Code spans
+# are not read: a pasted result line is the evidence, not the claim. It cannot tell a true
+# claim from a false one; it puts the claim and its command where a reader checks them.
+_TESTS = re.compile(r"(?i)(?<![\w-])((?:all\s+)?tests?\s+(?:all\s+)?pass(?:es|ed)?|all\s+green"
+                    r"|(?<!failed, )(?<![\d,.])\d[\d,]*\s+passed"
+                    r"|тестовете\s+(?:минават|минаха)(?!\s+през)|минаха\s+(?:всички\s+)?тестовете)"
+                    r"(?![\w-])")
+_QUOTE = re.compile(r"[„“\"«][^„“”\"«»\n]{1,160}[“”\"»]")
+
+
+def tests_words(text: str) -> list[str]:
+    """The phrases in `text` that say tests pass, as written."""
+    return [m.group(1) for m in _TESTS.finditer(_QUOTE.sub(" ", _CODE.sub(" ", text)))]
+
+
 def _sections(body: str) -> list[tuple[str, list[str]]]:
     """The `###` sections of an entry body: (heading line, lines under it)."""
     out = []
@@ -630,6 +696,19 @@ def visibility_entries(root: Path, name: str, since: float | None) -> list[tuple
     return out
 
 
+def tests_entries(root: Path, name: str, since: float | None) -> list[tuple]:
+    """(folder, heading, phrases) for each newest entry this session wrote that says tests pass
+    and does not list that claim in a claims section at its top (L4)."""
+    out = []
+    for folder, _text, (heading, body) in _changed_tops(root, name, since):
+        words = tests_words(heading + "\n" + body)
+        listed = claims_first(body) and any(_TESTS.search(_CODE.sub(" ", ln))
+                                            for ln in _claims(body)[0])
+        if words and not listed:
+            out.append((folder.name, heading, list(dict.fromkeys(words))))
+    return out
+
+
 def _all_entries(text: str) -> list[tuple[str, str]]:
     """Every dated entry, newest first as they stand: (heading, body)."""
     out = []
@@ -657,7 +736,7 @@ def refuted_claims(root: Path, name: str, since: float | None, now: datetime | N
                 key = f"{folder}|{heading}|{line.strip()}"
                 if _REFUTED.match(line) and key not in seen:
                     seen.append(key)
-                    ss.lesson_event(state, "L3", "caught", now)
+                    ss.lesson_event(state, "L4" if tests_words(line) else "L3", "caught", now)
                     new += 1
     if new:
         state["L3_refuted"] = seen[-_SEEN_CAP:]
@@ -665,20 +744,21 @@ def refuted_claims(root: Path, name: str, since: float | None, now: datetime | N
     return new
 
 
-def first_asks(asks: list[tuple], root: Path, now: datetime | None = None) -> list[tuple]:
-    """The entries never asked about before, in any session; each one counts L3 `fired`."""
+def first_asks(asks: list[tuple], root: Path, now: datetime | None = None,
+               lesson: str = "L3") -> list[tuple]:
+    """The entries never asked about before, in any session; each one counts `fired`."""
     ss = _ss()
     state = ss.lessons_load()
-    seen = state.setdefault("L3_asked", [])
+    seen = state.setdefault(f"{lesson}_asked", [])
     out = []
     for ask in asks:
         key = f"{root / ask[0]}|{ask[1]}"
         if key not in seen:
             seen.append(key)
-            ss.lesson_event(state, "L3", "fired", now)
+            ss.lesson_event(state, lesson, "fired", now)
             out.append(ask)
     if out:
-        state["L3_asked"] = seen[-_SEEN_CAP:]
+        state[f"{lesson}_asked"] = seen[-_SEEN_CAP:]
         ss.lessons_save(state)
     return out
 
@@ -724,16 +804,16 @@ def _count(**kinds) -> None:
         pass          # counting is a courtesy; never a reason to fail the session
 
 
-def second_try(payload: dict) -> None:
+def second_try(payload: dict) -> str | None:
     """The turn after a hand-back (`stop_hook_active`): was the work recorded, or passed?"""
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     pending = {a[len("blocked:"):] for a in asked if a.startswith("blocked:")}
     if not pending:
-        return
+        return None
     root, name = config()
     if not root.is_dir():
-        return
+        return None
     since = session_started(str(payload.get("transcript_path") or ""))
     unrecorded(root, name, since)
     # Judged by the logbook, not by `unrecorded`'s verdict: a folder whose newest file was saved
@@ -741,6 +821,16 @@ def second_try(payload: dict) -> None:
     wrote = set(TOPPED)
     _count(recorded_after=len(pending & wrote), passed=len(pending - wrote))
     _remember(session, {a for a in asked if not a.startswith("blocked:")})
+    return lost_note(LOST, FORGOT) if LOST or FORGOT else None
+
+
+def _batch():
+    """The PostToolBatch hook's module: lesson L2 and what came after its note."""
+    spec = importlib.util.spec_from_file_location(
+        "baton_batch", Path(__file__).with_name("baton_batch.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _stands_down() -> bool:
@@ -762,13 +852,21 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except Exception:
         payload = {}
+    try:      # an L2 note shown this turn and no tool call after it: the turn ended (row 40)
+        _batch().followed(str(payload.get("session_id") or ""), None)
+    except Exception:
+        pass
 
     # Already handed the turn back once — do not do it again. Only count what came of it.
     if payload.get("stop_hook_active"):
         try:
-            second_try(payload)
+            lost = second_try(payload)
         except Exception:
-            pass
+            lost = None
+        if lost:          # a message for the human, not a hand-back: never twice in a turn
+            sys.stdout.buffer.write(json.dumps({"systemMessage": lost},
+                                               ensure_ascii=False).encode("utf-8"))
+            sys.stdout.flush()
         return 0
 
     root, name = config()
@@ -802,6 +900,11 @@ def main() -> int:
                              if v[0] not in flagged], root)
     except Exception:
         claims = []           # a lesson that cannot count must not cost the session
+    try:
+        passes = first_asks([v for v in tests_entries(root, name, since) if v[0] not in flagged],
+                            root, lesson="L4")
+    except Exception:
+        passes = []           # the same
     rewritten = [f for f in REWRITTEN if f"rewrite:{f}" not in asked]
     # Row 35: a folder the walk stopped in may hold newer work than it saw. Not a hand-back --
     # the agent cannot settle it in this turn -- but never a silent pass: said once a session.
@@ -810,8 +913,11 @@ def main() -> int:
     if unread:
         note = {"systemMessage": unread_note(unread)}
         _remember(session, _already_asked(session) | {f"unread:{f}" for f in unread})
+    if LOST or FORGOT:    # row 37: to the human, once (the memory has moved on); never a hand-back
+        note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"),
+                                                         lost_note(LOST, FORGOT))))}
     if (not stale and not open_ended and not ahead and not typed and not thin and not claims
-            and not rewritten):
+            and not passes and not rewritten):
         if note:
             sys.stdout.buffer.write(json.dumps(note, ensure_ascii=False).encode("utf-8"))
             sys.stdout.flush()
@@ -888,6 +994,20 @@ def main() -> int:
             "counted as caught. If the word is not a claim here, say so in one line. "
             f"(Asked once per entry. Counted: caught {rec.get('caught', 0)} of "
             f"{rec.get('fired', 0)} asked.)")
+    if passes:
+        rec = _ss().lessons_load().get("L4", {})
+        listed = "\n".join(f"  - {f}: \"{h[3:60].strip()}\" says " + ", ".join(w[:3])
+                           for f, h, w in passes)
+        parts.append(
+            f"Baton, lesson L4 -- the newest entry in these {name} files says tests pass:\n"
+            f"{listed}\n\n"
+            "List it in a short section at the top of the entry, before the others: `### Claims to "
+            "verify` (or `### За проверка`), one line with the command that showed it and the "
+            "result line it printed -- the human reads that section, not the prose. If the claim "
+            "later proves wrong, the new entry's section says `refuted: <the claim>`; only that is "
+            "counted as caught. If it is not a claim here, say so in one line. "
+            f"(Asked once per entry. Counted: caught {rec.get('caught', 0)} of "
+            f"{rec.get('fired', 0)} asked.)")
     if rewritten:
         parts.append(
             f"Baton: an older entry changed in the {name} of " + ", ".join(rewritten) + " -- "
@@ -902,24 +1022,35 @@ def main() -> int:
     return 0
 
 
-def _beat() -> None:
-    """When this hook last ran, for /baton-doctor: a plugin can be installed and enabled and
+def _beat(crash: BaseException | None = None) -> None:
+    """When this hook last FINISHED, for /baton-doctor: a plugin can be installed and enabled and
     still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
-    One small file per hook, next to the other state. Never raises."""
+    One small file per hook, next to the other state. A run that raised leaves
+    `baton.beat.<hook>.crashed` instead: the time and the exception's class -- no message, no
+    path. Until v3.20.0 the beat was written before main() ran, so a crash still showed ✅
+    (ZA-OPRAVYANE row 36, Pawan Singh Rathore, 22.10). Never raises."""
     try:
         data = os.environ.get("CLAUDE_PLUGIN_DATA")
         folder = Path(data) if data else Path(__file__).resolve().parent
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"baton.beat.{Path(__file__).stem}").write_text(
-            datetime.now().isoformat(timespec="seconds"), "utf-8")
+        beat, now = folder / f"baton.beat.{Path(__file__).stem}", datetime.now()
+        # To the microsecond: a crash and a finish in the same second still have an order.
+        if crash is None:
+            beat.write_text(now.isoformat(), "utf-8")
+        else:
+            beat.with_name(beat.name + ".crashed").write_text(
+                f"{now.isoformat()} {type(crash).__name__}", "utf-8")
     except Exception:
         pass
 
 
 if __name__ == "__main__":
     try:
-        _beat()
-        sys.exit(main())
-    except Exception:
-        # A hook must never break the session it is trying to help.
+        code = main()
+    except Exception as exc:
+        # A hook must never break the session it is trying to help -- but the crash is left
+        # for /baton-doctor and the next SessionStart (row 36).
+        _beat(exc)
         sys.exit(0)
+    _beat()
+    sys.exit(code)

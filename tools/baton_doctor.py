@@ -3,7 +3,9 @@
 
     python3 tools/baton_doctor.py
 
-Each hook leaves one small file when it runs (`baton.beat.<hook>`, since v3.12.0): in the
+Each hook leaves one small file when it finishes (`baton.beat.<hook>`, since v3.12.0; written
+before the hook's work until v3.20.0), and `baton.beat.<hook>.crashed` -- the time and the
+exception's class -- when it raised: in the
 plugin's data folder (${CLAUDE_PLUGIN_DATA}, which /baton-doctor passes in), or next to the
 hooks of a script install. A plugin can be installed and enabled and still never run -- no
 Python, no Git Bash on Windows -- and nothing on the screen says so. Reads only; sends nothing.
@@ -48,6 +50,15 @@ def last_run(where: Path, stem: str) -> datetime | None:
         return None
 
 
+def crashed(where: Path, stem: str) -> tuple[datetime, str] | None:
+    """When the hook last raised, and the exception's class (since v3.20.0)."""
+    try:
+        when, _, kind = (where / f"baton.beat.{stem}.crashed").read_text("utf-8").strip().partition(" ")
+        return datetime.fromisoformat(when), kind or "unknown error"
+    except (OSError, ValueError):
+        return None
+
+
 def ago(when: datetime, now: datetime) -> str:
     sec = int((now - when).total_seconds())
     for size, unit in ((86400, "day"), (3600, "hour"), (60, "minute")):
@@ -73,15 +84,38 @@ def handback(where: Path) -> str | None:
             "and let through, since it never asks twice.)")
 
 
+def lesson_l2(where: Path) -> str | None:
+    """Does the L2 note change what comes next? Counted since v3.20.0 (ZA-OPRAVYANE row 40)."""
+    path = Path(os.environ.get("BATON_LESSONS_STATE") or where / "baton.lessons.json")
+    try:
+        rec = json.loads(path.read_text("utf-8")).get("L2") or {}
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not rec:
+        return None
+    after = rec.get("checked_after", 0) + rec.get("no_check_after", 0)
+    return (f"Lesson L2 (a failed read) since {rec.get('since', '?')}: fired "
+            f"{rec.get('fired', 0)}, shown {rec.get('shown', 0)}; followed by a check: "
+            f"{rec.get('checked_after', 0)} of {after}.\n   (A proxy, not proof: \"a check\" is a "
+            "read in the agent's next tool calls; it may have been planned anyway.)")
+
+
 def main() -> int:
     where, now = folder(), datetime.now()
     print(f"Baton doctor -- heartbeats in {where}\n")
     seen = {stem: last_run(where, stem) for stem, _, _ in HOOKS}
-    started = seen["baton_session_start"] is not None
+    crashes = {stem: c for stem, _, _ in HOOKS
+               for c in [crashed(where, stem)] if c and (seen[stem] is None or c[0] > seen[stem])}
+    started = seen["baton_session_start"] is not None or "baton_session_start" in crashes
     for stem, event, when in HOOKS:
         t = seen[stem]
-        if t:
-            mark, state = "✅", f"last ran {t:%Y-%m-%d %H:%M} ({ago(t, now)})"
+        if stem in crashes:
+            c, kind = crashes[stem]
+            last = f"{t:%Y-%m-%d %H:%M}" if t else "never"
+            mark, state = "❌", (f"CRASHED {c:%Y-%m-%d %H:%M} ({ago(c, now)}): {kind}; "
+                                 f"last finished {last}")
+        elif t:
+            mark, state = "✅", f"last finished {t:%Y-%m-%d %H:%M} ({ago(t, now)})"
         elif started:
             # SessionStart ran, so the hooks work; this one has not had its moment yet.
             mark, state = "⏳", "not yet"
@@ -92,7 +126,16 @@ def main() -> int:
     counted = handback(where)
     if counted:
         print(counted + "\n")
-    if not any(seen.values()):
+    l2 = lesson_l2(where)
+    if l2:
+        print(l2 + "\n")
+    if crashes:
+        names = ", ".join(event for stem, event, _ in HOOKS if stem in crashes)
+        print(f"🔴 Crashed on its last run: {names}. A hook never breaks the session, so it\n"
+              "   exited 0 and its check did not happen. Run it by hand to see the traceback:\n"
+              "   echo '{}' | python3 <the hooks folder>/<hook>.py")
+        return 1
+    if not any(seen.values()):     # nothing finished, and nothing crashed (said above)
         print("🔴 Installed but not running: no Baton hook has left a heartbeat here.\n"
               "   Check that Python 3.8+ runs (`python3 --version`); on Windows, that Git for\n"
               "   Windows is installed (`where bash`). A hook from before v3.12.0 leaves no\n"

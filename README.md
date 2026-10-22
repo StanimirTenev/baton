@@ -354,7 +354,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.19.0]
+[baton:board v3.20.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -429,6 +429,12 @@ the author's machine: 21 of the 195 entries since 10 October would have been ask
 borderline (a reply labelled public, twice; a note to write about something publicly; a
 project required to be public; one more of the kind); 5 use the word in another sense -- public sources, public data, public contracting
 authorities -- and are answered in one line.
+
+**A claim that tests pass is listed with the command that showed it** (since v3.20.0, lesson L4
+below). The same section, the same once-per-entry ask, for "tests pass", "all green", "N passed"
+and „тестовете минават/минаха“: one line with the command and the result line it printed. An entry
+that said "did not run pytest … All tests pass." had the right shape and passed the check above;
+now it is asked about. It cannot tell a true claim from a false one either.
 
 ## The task header
 
@@ -681,10 +687,20 @@ python3 tools/baton_doctor.py
 
 Installed is not running. A plugin can be installed and enabled and still never run -- no
 Python 3.8+, or on Windows no Git for Windows -- and nothing on the screen says so. Since
-v3.12.0 every hook leaves a heartbeat when it runs (`baton.beat.<hook>`, in the plugin's data
+v3.12.0 every hook leaves a heartbeat (`baton.beat.<hook>`, in the plugin's data
 folder or next to the script-installed hooks), and `/baton-doctor` (`/baton:baton-doctor` as a
-plugin) shows when each last ran. No heartbeat at all: **installed but not running**. It reads
+plugin) shows when each last finished. No heartbeat at all: **installed but not running**. It reads
 only and sends nothing.
+
+**A crash is shown, not a ✅** (since v3.20.0, ZA-OPRAVYANE row 36). Until then the heartbeat was
+written before the hook did its work, so a hook that crashed still showed ✅ "last ran just now"
+-- the health check proved the hook started, not that it finished. Now the heartbeat is written
+after the work, and a run that raised leaves `baton.beat.<hook>.crashed` instead: the time and the
+exception's class, nothing else (no message, no path). The doctor marks that hook ❌ CRASHED and
+exits 1, and the next SessionStart tells the agent to say it in one line. A hook still never breaks
+the session: it exits 0 either way, which is why this is the only place a crash shows. **What it
+cannot see:** a hook killed at Claude Code's time limit (20 s, PostToolBatch 10 s) leaves neither
+file -- it shows as its last finish.
 
 It also shows whether Stop's hand-back does any work -- the one number that says it (ZA-OPRAVYANE
 row 27, from a question about how often the agent writes the entry only because it was made to).
@@ -692,6 +708,13 @@ Stop counts, by folder, in `baton.lessons.json`: entries the agent **wrote unask
 turns **handed back** for unrecorded work, and of those how many were **recorded on the second
 try** and how many **passed without one** -- Stop never asks twice, so an agent that ignores the
 note gets through, and until now that left no trace.
+
+And since v3.20.0, for lesson L2, how often its note was **shown** (it is said at most once every
+30 minutes, and counted every time the situation arises: `fired`), and how often a shown note was
+**followed by a check**: the agent's next tool calls in that session include a read. Anything else
+-- a write, or the turn ending first -- counts as not followed. **This is a proxy, not proof.** The
+second read may have been planned anyway, and a sentence written without one may be right; it says
+whether the next step looked like a check, not whether the note caused it.
 
 ## After compaction: the agent writes the logbook first
 
@@ -739,8 +762,19 @@ Two Stop checks came from that evening, both mechanical:
   newest one completed or its heading corrected, or -- in a logbook kept oldest-first -- one
   added at the end. A change to anything below the newest entry does not, and Stop says once
   that an older entry changed: the logbook is a record, so what was wrong gets a new entry at
-  the top. **What it does not catch:** a rewrite of the newest entry itself, and a rewrite by a
-  session before this one (it is remembered, not reported).
+  the top. **What it does not catch:** a rewrite of the newest entry itself -- by decision, it is
+  the same edit as completing or correcting it -- and a rewrite by a session before this one (it
+  is remembered, not reported).
+- **History that disappears is said** (since v3.20.0, ZA-OPRAVYANE row 37). A logbook Baton had
+  seen that is gone, a folder gone with it, or a logbook holding fewer entries than last time (the
+  newest one deleted used to count as a change at the top, the work recorded; now it does not) --
+  Stop tells the human once, in a message the agent does not write, and the board says it if
+  SessionStart sees it first. So does Baton's own memory (`baton.bodies.json`) when it is gone or
+  unreadable while the lessons register shows Stop has looked before: until each logbook has been
+  seen again, a rewrite cannot be told from a new entry. Baton keeps no copy of a logbook. **What
+  it does not catch:** both state files deleted together, and a logbook deleted from a folder
+  with no other file in it (the walk does not look at such a folder). A record the agent cannot
+  touch has to live outside its reach -- a remote it holds no key for, or another machine.
 
 
 ```
@@ -790,7 +824,8 @@ the situation arose, `caught` when the mistake happened. The counters are in
   which tool makes it impossible: `tools/baton_entry.py --title`, which stamps the time itself,
   named by its full path on this machine (the plugin's folder, or the repository the install
   script recorded) since v3.17.0.
-- **L2 — an empty result is a failed read** (`baton_batch.py`, PostToolBatch). After a read —
+- **L2 — an empty result, or an error instead of one, is a failed read** (`baton_batch.py`,
+  PostToolBatch). After a read —
   web, a shell command that searches or fetches, or an MCP tool whose name says it reads
   (`search`, `query`, `get`, `list`, `read`, `fetch`…, and no `create`/`update`/`delete`…;
   a name that says neither is left alone; in a shell command the body of a heredoc is text being
@@ -798,7 +833,18 @@ the situation arose, `caught` when the mistake happened. The counters are in
   that `sed`, `echo`, `printf`, `awk`, `perl` or `python -c` carries; quotes that `ssh` or
   `bash -c` runs, and a `$( )` inside double quotes, still count) — returns nothing, one line reaches
   the agent before its next sentence: name the check that would have found it before saying
-  something is absent. At most once every 30 minutes; counted every time.
+  something is absent. At most once every 30 minutes; counted every time (`fired`), and since
+  v3.20.0 `shown` apart. Since v3.20.0 an **error that comes back instead of a result** counts
+  too: a short result whose every line is an error line -- `grep: x: No such file or directory`,
+  `The server returned HTTP 404`, `getaddrinfo ENOTFOUND`, `error:`/`fatal:` lines. Kept narrow on
+  purpose: a result that carries anything else (a grep hit that mentions "not found", pytest
+  output) is left alone, and so is `ls`/`stat` saying a path is not there -- that is the check for
+  absence, not a failed read. Replayed on the 5,213 reads in the transcripts on the author's
+  machine (22 October 2026): 11 new fires, each a read that returned an error (WebFetch 403/404,
+  a DNS failure, an MCP 400, grep on a missing file); none was a result. **Still not seen:** a
+  half-loaded page that returns navigation text -- the plausible half-result, the worse case.
+  After a shown note, whether the next step was a read is counted (see `/baton-doctor`) -- a
+  proxy, not proof that the note worked.
 - **L3 — a claim that something is public or private is checked against the source** (Stop,
   since v3.18.0; see *What you get*). `fired`: Stop asked for the claims section -- once per
   entry, in whichever session sees it first. `caught`: **only a proven error** -- a line that
@@ -808,12 +854,24 @@ the situation arose, `caught` when the mistake happened. The counters are in
   written anywhere else -- a heading, the prose -- nor a refutation with no listed claim below
   it. The marker is not matched to the claim's text: the line says which claim, the human
   reads it.
+- **L4 — a claim that tests pass is listed with the command that showed it** (Stop, since
+  v3.20.0; ZA-OPRAVYANE row 38). The shape check passed an entry that said "did not run pytest …
+  All tests pass." (Apurv Khare, 22 October 2026): it measures sections and length, not truth.
+  So, as for L3: when the newest entry this session wrote says tests pass ("tests pass/passed",
+  "all green", "N passed", „тестовете минават/минаха“) and its claims section at the top does not
+  list that, Stop asks once per entry to list it there, with the command and the result line it
+  printed. Not read as a claim: inline code (a pasted result line is the evidence), the phrase in
+  quotes (talked about), "N failed, M passed" (a run that failed), „минават през“ (go through).
+  Measured on the 1,347 dated entries of the author's logbooks: 25 match, all 25 a claim that
+  tests passed (the first patterns matched 35; the 10 dropped were mentions). `caught` as for L3:
+  a `refuted:` line about a tests claim in a later entry's claims section. It does not check that
+  the command is there, nor that it ran -- it puts the claim where a reader checks it.
 
 SessionStart says something only when a lesson has earned it: caught twice in 14 days (it is
 not holding — propose the next rung: a check on the result, or a tool that makes the mistake
 impossible), or silent for 60 days (ask whether to retire it). For L3 a catch is the opposite
 fact -- a listed claim shown wrong means the section did its work -- so two of them say that,
-with the two numbers, and propose nothing.
+with the two numbers, and propose nothing. The same holds for L4.
 
 ## The board
 
@@ -1396,6 +1454,35 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.20.0** — a crash is shown; history that disappears is said; "tests pass" goes in the claims
+
+- **A hook that crashed shows as crashed, not ✅.** The heartbeat `/baton-doctor` reads was
+  written before the hook did its work, so after a crash it said "last ran just now" (found on a
+  copy with a fault injected, after a question from Pawan Singh Rathore). It is now written after
+  the work; a run that raised leaves `baton.beat.<hook>.crashed` -- time and exception class, no
+  message, no path -- and the doctor (❌, exit 1) and the next SessionStart say it. The
+  PostToolBatch hook had no top-level guard: a malformed batch was a traceback and exit 1; now it
+  exits 0 and the crash is recorded, as for the others. A hook killed at the time limit leaves
+  neither file.
+- **History that disappears is said, once, to the human.** A logbook Baton had seen that is gone,
+  a logbook holding fewer entries than last time, and Baton's own memory of the logbooks gone or
+  unreadable (Marcelo Dantas: "the agent should not control the record of its own actions"). The
+  newest entry deleted no longer counts as the work recorded. Not caught: the newest entry
+  rewritten -- by decision, the same edit as completing it -- and both state files deleted
+  together. The real fix, a record outside the agent's reach, is outside Baton.
+- **Lesson L4: "tests pass" is listed with the command that showed it.** As L3 does for public
+  and private, an entry that says tests pass is asked once to list the claim under `### Claims to
+  verify` with the command and its result line (Apurv Khare: "did not run pytest … All tests
+  pass." passed the shape check). Matched 25 of 1,347 real entries, all 25 such claims.
+- **L2 sees an error instead of a result**, not only an empty one: a short result whose every line
+  is an error line (`No such file or directory`, HTTP 4xx/5xx, a DNS failure). On 5,213 recorded
+  reads: 11 new fires, all failed reads (Oliver Veits). `ls` saying a path is not there is left
+  alone; a half-loaded page is still not seen. `shown` is counted apart from `fired`.
+- **L2 has a measure, and it is a proxy.** After a shown note, whether the agent's next tool calls
+  include a read is counted -- "followed by a check: N of M" in `/baton-doctor` (Ramón Pérez
+  Coronado: how many of the fires changed what the agent wrote next?). It says what the next step
+  looked like, not that the note caused it.
 
 **v3.19.0** — the hooks under 2 s on a large task root; a hand-back counted by the logbook
 
@@ -2457,7 +2544,7 @@ What the hooks read, all on this machine: the task folders and their logbooks; t
 transcript (`transcript_path`) — its first timestamp, for when the session began, and its
 last answer's token count, for the restart reminder; at session start, the previous transcript
 in the same project folder — the messages the human typed and its times, to set beside the
-entries written then; and the text of tool results, for an empty read (lesson L2). Nothing of it leaves the machine. The review tools send only with the
+entries written then; and the text of tool results, for an empty or failed read (lesson L2). Nothing of it leaves the machine. The review tools send only with the
 key given to Baton by `tools/baton_key.py` — never a key found in the environment or in
 another tool's files.
 
