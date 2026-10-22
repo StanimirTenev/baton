@@ -1092,6 +1092,8 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except Exception:
         payload = {}
+    if not isinstance(payload, dict):     # `[]`, `null`: no payload, not a crash (row 67)
+        payload = {}
     try:      # an L2 note shown this turn and no tool call after it: the turn ended (row 40)
         _batch().followed(str(payload.get("session_id") or ""), None)
     except Exception:

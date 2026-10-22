@@ -296,6 +296,8 @@ def main() -> int:
         payload = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace") or "{}")
     except Exception:
         return 0
+    if not isinstance(payload, dict):     # `[]`, `null`: no payload, not a crash (row 67)
+        return 0
     prompt = str(payload.get("prompt") or "")
     session = str(payload.get("session_id") or "")
     if not prompt.strip():

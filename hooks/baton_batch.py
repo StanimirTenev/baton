@@ -175,7 +175,10 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except Exception:
         return 0
-    calls = payload.get("tool_calls") or []
+    if not isinstance(payload, dict):     # `[]`, `null`: no payload, not a crash (row 67)
+        return 0
+    calls = payload.get("tool_calls")
+    calls = [c for c in calls if isinstance(c, dict)] if isinstance(calls, list) else []
     session = str(payload.get("session_id") or "")
     failed = [(c, "empty" if is_empty(c) else "error") for c in calls
               if is_read(c) and (is_empty(c) or is_error(c))]

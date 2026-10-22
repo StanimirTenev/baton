@@ -90,9 +90,11 @@ def test_the_next_session_start_says_it(tmp_path):
 
 
 def test_a_malformed_batch_exits_0_and_is_recorded(tmp_path):
-    """baton_batch.py had no top-level guard: `{"tool_calls":[1]}` was a traceback and exit 1."""
+    """baton_batch.py had no top-level guard: `{"tool_calls":[1]}` was a traceback and exit 1.
+    Since row 67 (v3.22.0) a call of another shape is skipped, so the guard is shown with a fault
+    injected instead; the malformed batch itself is tests/test_stdin_shape.py."""
     data = tmp_path / "data"
-    out = _run(ROOT / "hooks" / "baton_batch.py", _env(tmp_path, data), b'{"tool_calls":[1]}')
+    out = _run(_broken_copy(tmp_path, "baton_batch"), _env(tmp_path, data), b'{"tool_calls":[1]}')
     assert out.returncode == 0, out.stderr
     assert out.stderr == b""
-    assert (data / "baton.beat.baton_batch.crashed").read_text("utf-8").endswith(" AttributeError")
+    assert (data / "baton.beat.baton_batch.crashed").read_text("utf-8").endswith(" RuntimeError")
