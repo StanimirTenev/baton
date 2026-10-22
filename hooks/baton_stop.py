@@ -1088,6 +1088,42 @@ def second_try(payload: dict) -> str | None:
     return lost_note(LOST, FORGOT) if LOST or FORGOT else None
 
 
+def answer_check(payload: dict) -> str | None:
+    """The entry written in answer to a hand-back (ZA-OPRAVYANE row 55, 22.10): the moment an agent
+    writes an entry just to get past, and the one entry nothing checked -- this pass only counted,
+    and the next session's Stop skips an entry saved before it began. The first pass's quality
+    checks (hollow, L1, L3, L4), said once to the human; never a second hand-back."""
+    root, name = config()
+    if not root.is_dir():
+        return None
+    since = session_started(str(payload.get("transcript_path") or ""))
+    session = str(payload.get("session_id") or "")
+    asked = _already_asked(session)
+    said = []
+    try:
+        said += [f"{t} (L1)" for t in hand_typed_hours(root, name, since=since)]
+    except Exception:
+        pass
+    try:
+        thin = [h for h in hollow_entries(root, name, since) if f"hollow:{h[0]}:{h[1]}" not in asked]
+        said += [f"{f}: \"{h[3:60].strip()}\" looks hollow -- " + "; ".join(r) for f, h, r in thin]
+        _remember(session, _already_asked(session) | {f"hollow:{f}:{h}" for f, h, _ in thin})
+    except Exception:
+        pass
+    for lesson, find, what in (("L3", visibility_entries, "says something is public or private"),
+                               ("L4", tests_entries, "says tests pass")):
+        try:
+            said += [f"{f}: \"{h[3:60].strip()}\" {what} ({', '.join(w[:3])}) and does not list it "
+                     f"under `### Claims to verify` ({lesson})"
+                     for f, h, w in first_asks(find(root, name, since), root, lesson=lesson)]
+        except Exception:
+            pass
+    if not said:
+        return None
+    return ("Baton, on the entry written in answer to the hand-back (a turn is handed back once, so "
+            "this is not asked of the agent): " + "; ".join(said) + ".")
+
+
 def _batch():
     """The PostToolBatch hook's module: lesson L2 and what came after its note."""
     spec = importlib.util.spec_from_file_location(
@@ -1130,6 +1166,10 @@ def main() -> int:
         except Exception:
             lost = None
         fix_check(config()[1])        # the hand-back's answer lands here (row 44)
+        try:
+            checked = answer_check(payload)
+        except Exception:
+            checked = None            # a quality check that cannot read must not cost the session
         try:      # the entry the hand-back asked for may say tests pass: its pinned run (row 43)
             root, name = config()
             tested = _ss().tests_results() + (pinned_runs(
@@ -1137,7 +1177,7 @@ def main() -> int:
                 str(payload.get("session_id") or ""))[0] if root.is_dir() else [])
         except Exception:
             tested = []
-        lost = " ".join(filter(None, (lost, *tested)))
+        lost = " ".join(filter(None, (lost, checked, *tested)))
         if lost:          # a message for the human, not a hand-back: never twice in a turn
             sys.stdout.buffer.write(json.dumps({"systemMessage": lost},
                                                ensure_ascii=False).encode("utf-8"))

@@ -91,7 +91,8 @@ def test_a_hand_back_recorded_on_the_second_try_is_counted(tmp_path):
     _work(folder)
     assert _stop(env, tr).get("decision") == "block"
     _entry(book, "written after the hand-back")
-    assert _stop(env, tr, active=True) == {}
+    # Not handed back again; since row 55 its one-line entry is said to the human as hollow.
+    assert "decision" not in _stop(env, tr, active=True)
     c = _counts(env)
     assert c.get("recorded_after") == 1 and c.get("passed", 0) == 0, c
     _stop(env, tr)

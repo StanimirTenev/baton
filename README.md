@@ -385,7 +385,10 @@ transcript), the turn is handed back with a note naming it. The test is delibera
 a session that touched no task folder is never interrupted (the next session start sets its
 messages beside the entries written then -- see *A session that touched no task folder*), and
 `stop_hook_active` is honoured so it can block at most once per turn; what came of each
-hand-back is counted (see `/baton-doctor`). Older unrecorded work — from a session that ended
+hand-back is counted (see `/baton-doctor`). The entry written in answer to a hand-back gets the
+same quality checks as any other -- hollow, L1, L3, L4 -- on that second pass, said to the human
+in one message and never handed back again (since v3.22.0, ZA-OPRAVYANE row 55: it was the one
+entry nothing checked). Older unrecorded work — from a session that ended
 without its entry — is listed on the board under 📝 instead of stopping every session after
 it. Without a readable transcript Stop falls back to every folder, as before v3.10.1; a resumed
 session counts from its original start.
