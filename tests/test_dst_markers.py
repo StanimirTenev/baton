@@ -40,7 +40,9 @@ def _markers(data, kind="crashed"):
         mark = data / "baton.beat.baton_stop.crashed"
         mark.write_text(f"{SECOND_PASS} PermissionError", "utf-8")
     else:
-        mark = data / "baton.beat.baton_stop.started.999999"   # no such process
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()                                            # a pid that is surely not running
+        mark = data / f"baton.beat.baton_stop.started.{gone.pid}"
         mark.write_text(SECOND_PASS, "utf-8")
     os.utime(mark, (1792891200, 1792891200))                  # 01:20 UTC, 30 minutes later
     (data / "baton.beat.baton_session_start").write_text(FIRST_PASS, "utf-8")

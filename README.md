@@ -1557,7 +1557,7 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 
 ## Versions
 
-**v3.22.0** — fifteen gaps from a hostile probe of the hooks; three fixes promised publicly
+**v3.22.0** — thirteen of fifteen gaps from a hostile probe of the hooks; three fixes promised publicly
 
 - **A crash in the hour after the clocks go back is shown, not ✅.** Markers held local time and
   were ordered as text, so on 25.10.2026 a crash at 03:20 sorted before a finish at 03:50 written
@@ -1580,12 +1580,12 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 - **Stop reads `## 22.10.2026 15:30` as an entry** (row 58); L3 and L4 read every entry the session
   wrote, not only the top one (row 59); L4 reads "tests are passing", "CI is green", „тестове
   минават“ (row 60: on 1,417 real entries 33 → 35 matches, both new ones real claims).
-- **Smaller:** a human's own hook with "baton_" in its command no longer switches the plugin off
+- Smaller: a human's own hook with "baton_" in its command no longer switches the plugin off
   (row 61); deleting the hour no longer counts as L1 followed (row 62); a folder named `report
   (v2)` keeps its name in Stop's counts (row 63); `tools/baton_entry.py` writes into a logbook
   with a BOM, without a header or without entries (row 65); stdin that is not a JSON object is no
   payload, not a crash (row 67).
-- **Not in this version:** work that arrives with its old modification time (`wget`, `cp -p`,
+- Not in this version: work that arrives with its old modification time (`wget`, `cp -p`,
   `rsync -a`) is still not seen (row 56) -- reading ctime breaks how the suite fakes file ages
   and needs a decision; confidential tasks on the board (row 66) are the human's call.
 
