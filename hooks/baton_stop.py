@@ -1169,6 +1169,11 @@ def main() -> int:
     if unread:
         note = {"systemMessage": unread_note(unread)}
         _remember(session, _already_asked(session) | {f"unread:{f}" for f in unread})
+    locked = [f for f in _ss().UNREADABLE if f"locked:{f}" not in asked]    # row 54, the same way
+    if locked:
+        note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"),
+                                                         _ss().unreadable_note(locked))))}
+        _remember(session, _already_asked(session) | {f"locked:{f}" for f in locked})
     if LOST or FORGOT:    # row 37: to the human, once (the memory has moved on); never a hand-back
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"),
                                                          lost_note(LOST, FORGOT))))}

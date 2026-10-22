@@ -90,16 +90,40 @@ def not_tasks(root: Path) -> list[str]:
     return [ln.strip().rstrip("/") for ln in lines if ln.strip() and not ln.strip().startswith("#")]
 
 
+UNREADABLE: list = []   # task folders that could not be listed (row 54): named, never a crash
+
+
 def task_folders(root: Path) -> list[Path]:
     """The task folders under `root`, sorted: every folder but a dotted one or one the root's
-    `.batonignore` names. Every hook and tool asks this one function."""
+    `.batonignore` names. Every hook and tool asks this one function.
+
+    A folder that cannot be listed (owned by root -- a docker volume, a mounted share) is left out
+    and put in UNREADABLE: `is_file()` re-raises PermissionError, and one such folder crashed the
+    board and every Stop check, for every task (ZA-OPRAVYANE row 54, 22.10)."""
     import fnmatch
     skip = not_tasks(root)
     try:
         found = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
     except OSError:
         return []
-    return sorted(p for p in found if not any(fnmatch.fnmatch(p.name, g) for g in skip))
+    out = []
+    UNREADABLE.clear()
+    for p in sorted(p for p in found if not any(fnmatch.fnmatch(p.name, g) for g in skip)):
+        try:
+            with os.scandir(p) as it:
+                for entry in it:
+                    entry.is_file()
+                    break
+            out.append(p)
+        except OSError:
+            UNREADABLE.append(p.name)
+    return out
+
+
+def unreadable_note(names: list) -> str:
+    return (f"Baton could not read these task folders (permission denied?), so nothing in them is "
+            f"checked: {', '.join(names)}. Make them readable, or name them in the root's "
+            ".batonignore if they are not tasks.")
 
 
 def plugin() -> bool:
@@ -1968,6 +1992,7 @@ def main() -> int:
 
     unlogged = unlogged_work(root, name)
     if (not blocks and not frozen and not finished and not stale and not unlogged and not UNREAD
+            and not UNREADABLE
             and not LOST):
         return _notices_only(notices, start_line())
 
@@ -1993,6 +2018,8 @@ def main() -> int:
             + "\n(Write the entry it is missing, or add the file to the folder's .batonignore.)")
     if UNREAD:
         blocks.append("✂️ " + UNREAD[0])
+    if UNREADABLE:
+        blocks.append("🔒 " + unreadable_note(UNREADABLE))
     if LOST:
         blocks.append("🕳️ " + LOST[0] + " (Said once; tell the human.)")
     if frozen:
