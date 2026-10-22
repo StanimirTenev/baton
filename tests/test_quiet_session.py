@@ -17,6 +17,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "baton_session_start.py"
 
@@ -25,7 +27,7 @@ def _ts(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _setup(tmp_path, entry_at: datetime, messages=5):
+def _setup(tmp_path, entry_at: datetime, messages=5, first=None):
     home = tmp_path / "home"
     project = home / ".claude" / "projects" / "-p"
     project.mkdir(parents=True)
@@ -34,7 +36,8 @@ def _setup(tmp_path, entry_at: datetime, messages=5):
     for i in range(messages):
         at = start + timedelta(minutes=10 * i)
         lines.append({"type": "user", "timestamp": _ts(at),
-                      "message": {"role": "user", "content": f"decide the price, option {i}"}})
+                      "message": {"role": "user", "content": first if first and not i
+                                  else f"decide the price, option {i}"}})
         lines.append({"type": "user", "timestamp": _ts(at), "message": {"role": "user", "content": [
             {"type": "tool_result", "tool_use_id": "x", "content": "ok"}]}})
         lines.append({"type": "assistant", "timestamp": _ts(at), "message": {"content": "sure"}})
@@ -96,3 +99,44 @@ def test_not_after_compaction_or_on_resume(tmp_path):
 def test_a_short_exchange_is_not_a_finding(tmp_path):
     env, own = _setup(tmp_path, datetime.now() - timedelta(days=3), messages=2)
     assert "messages from the human" not in _ctx(env, own)
+
+
+# -- ZA-OPRAVYANE row 48 (Haddad, Sidhu, 22.10, said publicly): a pasted key was quoted verbatim ----
+
+SECRETS = [
+    "FAKE_sk-probe-0000-not-a-real-secret",                       # the probe of 22.10
+    "sk-ant-api03-AbCdEfGh1234567890",
+    "sk-or-v1-0123456789abcdef0123",
+    "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "github_pat_11ABCDEFG0123456789_abcdefghijk",
+    "AKIAIOSFODNN7EXAMPLE",
+    "xoxb-1234567890-abcdefghij",
+    "AIzaSyA1234567890abcdefghijklmnopqrstu",
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N",
+    "token=hunter2hunter2",
+    "PASSWORD: correct-horse-battery",
+    "Bearer abcdef0123456789",
+    "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    "dGhpcyBpcyBhIGxvbmcgYmFzZTY0IHNlY3JldCB2YWx1ZQ2",
+]
+
+
+@pytest.mark.parametrize("secret", SECRETS)
+def test_a_secret_shaped_string_is_masked_before_it_is_quoted(tmp_path, secret):
+    env, own = _setup(tmp_path, datetime.now() - timedelta(days=3),
+                      first=f"use {secret} for it")
+    ctx = _ctx(env, own)
+    assert "5 messages from the human" in ctx, ctx
+    assert "[masked] for it" in ctx, ctx
+    for part in secret.replace(":", " ").replace("=", " ").split():
+        if len(part) >= 8:
+            assert part not in ctx, f"{part} quoted verbatim"
+
+
+@pytest.mark.parametrize("text", ["merge the task-folder-renaming branch today",
+                                  "ask-for-review on ~/zadachi/baton-plugin/izdavane-3.22.0 please",
+                                  "the token is in the vault, ask the human",
+                                  "skip the 2026-10-22 entry"])
+def test_ordinary_words_are_not_masked(tmp_path, text):
+    env, own = _setup(tmp_path, datetime.now() - timedelta(days=3), first=text)
+    assert text[:70] in _ctx(env, own)

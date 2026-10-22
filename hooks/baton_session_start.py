@@ -1497,6 +1497,32 @@ def _local_time(stamp) -> datetime | None:
         return None
 
 
+# What a pasted key looks like (ZA-OPRAVYANE row 48, Bernard Haddad and Bachittarjeet Singh Sidhu,
+# 22.10, said publicly): quiet_session quotes the human's messages into the new session's context,
+# and a fake key pasted into one came back verbatim. Masked before the 70-character cut, so a key
+# cut in half is still seen whole. Shapes, not a proof: a key of no known shape and under 32
+# characters is still quoted.
+_SECRET = re.compile(
+    r"(?<![A-Za-z])sk-[A-Za-z0-9_-]{8,}"                          # OpenAI, Anthropic, OpenRouter
+    r"|\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"   # GitHub
+    r"|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"                              # AWS
+    r"|\bxox[abprs]-[A-Za-z0-9-]{10,}"                             # Slack
+    r"|\bAIza[0-9A-Za-z_-]{30,}"                                   # Google
+    r"|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"   # a JWT
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+    r"|(?i:\b(?:api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*\S+)"
+    r"|(?i:\bbearer\s+[A-Za-z0-9._~+/-]{8,}=*)"
+    r"|\b[0-9a-fA-F]{32,}\b"                                       # long hex
+    # long base64: upper, lower and a digit, no separators (a file name like
+    # Biznes-plan-DORA-dokument-2026-09-20 is not one; on the real logbooks, 22.10)
+    r"|(?<![A-Za-z0-9+=])(?=[A-Za-z0-9+=]*\d)(?=[A-Za-z0-9+=]*[a-z])(?=[A-Za-z0-9+=]*[A-Z])"
+    r"[A-Za-z0-9+=]{32,}")
+
+
+def mask_secrets(text: str) -> str:
+    return _SECRET.sub("[masked]", text)
+
+
 def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
     """The last session in this project said things and wrote no entry: say so, once."""
     mine = Path(str(own.get("transcript_path") or ""))
@@ -1565,7 +1591,7 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
                 entries += start.date() <= day.date() <= end.date()
     if entries:
         return None
-    shown = "; ".join(f"\"{t[:70]}\"" for t in said[:5]) + (" ..." if len(said) > 5 else "")
+    shown = "; ".join(f"\"{mask_secrets(t)[:70]}\"" for t in said[:5]) + (" ..." if len(said) > 5 else "")
     return (f"📝 The last session in this project ({start:%Y-%m-%d %H:%M}–{end:%H:%M}) had "
             f"{len(said)} messages from the human and 0 logbook entries headed in that time"
             + (f" (counted in its last {QUIET_MAX_BYTES >> 20} MB)" if cut else "") + ". Stop asks only about files, so "

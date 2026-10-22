@@ -801,6 +801,14 @@ the logbook entries whose heading falls inside its time (15 minutes' slack). Thr
 more and no entry: the agent is told so, with the first five messages quoted, and asks the human
 once whether any of it should be recorded. Said once per session.
 
+**Secret-shaped strings are masked before a message is quoted** (since v3.22.0, ZA-OPRAVYANE
+row 48, after Bernard Haddad and Bachittarjeet Singh Sidhu): a fake key pasted into a message came
+back verbatim in the new session's context. Now `sk-…`, GitHub (`ghp_…`, `github_pat_…`), AWS
+(`AKIA…`), Slack (`xox…`), Google (`AIza…`) keys, a JWT, a private-key header, `key=`/`token=`/
+`password:` and the value after it, `Bearer …`, 32+ hex characters, and 32+ base64 characters with
+upper case, lower case and a digit read `[masked]` -- before the 70-character cut, so a key cut in
+half is still seen whole. Shapes, not a proof: a short key of no known shape is still quoted.
+
 A message is one the human typed: the agent's turns multiply in loops and subagents, and tool
 results and command output are nobody's word. **What it cannot do:** say which task the
 messages belonged to, or tell a decision from small talk -- it names the messages and the human
