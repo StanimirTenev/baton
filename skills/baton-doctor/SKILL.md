@@ -8,7 +8,7 @@ description: Check that Baton's hooks actually run on this machine, not only tha
 A plugin can be installed and enabled and still never run: no Python 3.8+, or on Windows no
 Git for Windows (the hooks start through Git Bash). Nothing on the screen says so. Since
 v3.12.0 every hook leaves a heartbeat (since v3.20.0 when it finishes, and a crash marker when
-it raises); this reads them. It reads only and sends
+it raises; since v3.21.0 a start mark, so a run killed from outside shows); this reads them. It reads only and sends
 nothing.
 
 Output in the human's language. Commands and hook names stay as they are.
@@ -33,6 +33,10 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
 - **❌ CRASHED / 🔴 Crashed on its last run** — the hook raised; it exited 0, as a hook must, so
   its check did not happen and nothing else said so. Give the time and the exception class as
   shown, and the command the doctor prints to see the traceback.
+- **❌ DID NOT FINISH / 🔴 Did not finish its last run** (since v3.21.0) — the hook started and was
+  stopped from outside: killed, or at Claude Code's time limit. Give the start time as shown; it is
+  a question ("killed or timed out?"), not a diagnosis. If it repeats, the doctor prints how to
+  time the hook by hand.
 - **🔴 SessionStart has never run** — the board and the rules are not reaching the agent.
 - **✅ Running** — say when SessionStart last ran. A hook marked ⏳ not yet is one whose moment
   has not come yet (Stop needs a finished turn, PostToolBatch a tool call) -- not a failure, so

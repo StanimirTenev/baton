@@ -86,6 +86,17 @@ def test_the_forms_that_trigger():
         assert bs.tests_words(text), text
 
 
+def test_n_of_n_passes_is_a_claim():
+    """Row 42 (the probe for the v2 reply to Apurv, 22.10): the honest entry said "5/5 passes"
+    and was not asked -- the pattern knew "N passed", not "N/N passes". Only N/N: "3/5 passed"
+    is a run that failed, as "1 failed, 9 passed" is."""
+    for text in ("5/5 passes, output in run.log.", "12/12 passed", "5 / 5 tests pass",
+                 "ran it 3 times: 3/3 passed"):
+        assert bs.tests_words(text), text
+    for text in ("3/5 passed", "3/5 passes", "15/5 passes", "1.5/5 passes"):
+        assert not bs.tests_words(text), text
+
+
 def test_mentions_that_are_not_a_claim():
     for text in ("`pytest -q` printed `544 passed`",               # code: the evidence itself
                  "hollow passes „did not run pytest … All tests pass.“",   # the phrase quoted

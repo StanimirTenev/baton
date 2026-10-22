@@ -5,7 +5,8 @@
 
 Each hook leaves one small file when it finishes (`baton.beat.<hook>`, since v3.12.0; written
 before the hook's work until v3.20.0), and `baton.beat.<hook>.crashed` -- the time and the
-exception's class -- when it raised: in the
+exception's class -- when it raised; since v3.21.0 each run also marks its start
+(`baton.beat.<hook>.started.<pid>`), and a mark left behind is a run killed from outside: in the
 plugin's data folder (${CLAUDE_PLUGIN_DATA}, which /baton-doctor passes in), or next to the
 hooks of a script install. A plugin can be installed and enabled and still never run -- no
 Python, no Git Bash on Windows -- and nothing on the screen says so. Reads only; sends nothing.
@@ -60,6 +61,29 @@ def crashed(where: Path, stem: str) -> tuple[datetime, str] | None:
         return None
 
 
+def stopped(where: Path, stem: str) -> datetime | None:
+    """When a run that did not finish began (since v3.21.0, ZA-OPRAVYANE row 41). Each run writes
+    `baton.beat.<hook>.started.<pid>` before its work and removes it when it finishes or crashes;
+    one left behind whose process is gone, or older than any hook's limit, was stopped from outside
+    -- killed, or timed out. A run still going in another session is not counted."""
+    import time
+    found = []
+    for mark in where.glob(f"baton.beat.{stem}.started.*"):
+        try:
+            pid = mark.name.rsplit(".", 1)[1]
+            gone = time.time() - mark.stat().st_mtime > 120
+            if not gone and os.name != "nt":      # on Windows os.kill(pid, 0) is not a probe
+                try:
+                    os.kill(int(pid), 0)
+                except ProcessLookupError:
+                    gone = True
+            if gone:
+                found.append(datetime.fromisoformat(mark.read_text("utf-8").strip()))
+        except (OSError, ValueError):
+            continue
+    return max(found) if found else None
+
+
 def ago(when: datetime, now: datetime) -> str:
     sec = int((now - when).total_seconds())
     for size, unit in ((86400, "day"), (3600, "hour"), (60, "minute")):
@@ -109,10 +133,21 @@ def main() -> int:
     seen = {stem: last_run(where, stem) for stem, _, _ in HOOKS}
     crashes = {stem: c for stem, _, _ in HOOKS for c in [crashed(where, stem)]
                if c and (seen[stem] is None or c[0] > seen[stem])}
-    started = seen["baton_session_start"] is not None or "baton_session_start" in crashes
+    killed = {stem: k for stem, _, _ in HOOKS for k in [stopped(where, stem)]
+              if k and (seen[stem] is None or k > seen[stem])
+              and (stem not in crashes or k > crashes[stem][0])}
+    for stem in killed:
+        crashes.pop(stem, None)
+    started = (seen["baton_session_start"] is not None or "baton_session_start" in crashes
+               or "baton_session_start" in killed)
     for stem, event, when in HOOKS:
         t = seen[stem]
-        if stem in crashes:
+        if stem in killed:
+            last = f"{t:%Y-%m-%d %H:%M}" if t else "never"
+            mark, state = "❌", (f"DID NOT FINISH: started {killed[stem]:%Y-%m-%d %H:%M} "
+                                 f"({ago(killed[stem], now)}), killed or timed out?; "
+                                 f"last finished {last}")
+        elif stem in crashes:
             c, kind = crashes[stem]
             last = f"{t:%Y-%m-%d %H:%M}" if t else "never"
             mark, state = "❌", (f"CRASHED {c:%Y-%m-%d %H:%M} ({ago(c, now)}): {kind}; "
@@ -132,11 +167,19 @@ def main() -> int:
     l2 = lesson_l2(where)
     if l2:
         print(l2 + "\n")
+    if killed:
+        names = ", ".join(event for stem, event, _ in HOOKS if stem in killed)
+        print(f"🔴 Did not finish its last run: {names}. It was stopped from outside -- killed, or\n"
+              "   at Claude Code's time limit (20 s, PostToolBatch 10 s) -- so its check did not\n"
+              "   happen, and a killed process leaves no other trace. If it repeats, time it by\n"
+              "   hand: time (echo '{}' | python3 <the hooks folder>/<hook>.py)")
     if crashes:
         names = ", ".join(event for stem, event, _ in HOOKS if stem in crashes)
         print(f"🔴 Crashed on its last run: {names}. A hook never breaks the session, so it\n"
               "   exited 0 and its check did not happen. Run it by hand to see the traceback:\n"
               "   echo '{}' | python3 <the hooks folder>/<hook>.py")
+        return 1
+    if killed:
         return 1
     if not any(seen.values()):     # nothing finished, and nothing crashed (said above)
         print("🔴 Installed but not running: no Baton hook has left a heartbeat here.\n"

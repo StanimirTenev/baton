@@ -181,7 +181,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.20.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.21.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -289,14 +289,62 @@ def crashed_hooks() -> list[str]:
     return out
 
 
+def stopped_start(folder: Path, stem: str) -> str | None:
+    """The newest start mark of a run that is gone without finishing or crashing (row 41): its
+    pid is not running, or it is older than any hook's limit. None when there is none."""
+    import time
+    found = []
+    for mark in folder.glob(f"baton.beat.{stem}.started.*"):
+        try:
+            pid = mark.name.rsplit(".", 1)[1]
+            gone = time.time() - mark.stat().st_mtime > 120
+            if not gone and os.name != "nt" and pid != str(os.getpid()):
+                try:
+                    os.kill(int(pid), 0)
+                except ProcessLookupError:
+                    gone = True
+            if gone:
+                found.append(mark.read_text("utf-8").strip())
+        except (OSError, ValueError):
+            continue
+    return max(found) if found else None
+
+
+def stopped_hooks() -> list[str]:
+    """The hooks whose last run was stopped from outside: a start mark left behind, newer than
+    the last finish and the last crash. A killed process writes nothing else."""
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    folder = Path(data) if data else Path(__file__).resolve().parent
+    out = []
+    for stem, event in HOOK_EVENTS:
+        when = stopped_start(folder, stem)
+        if not when:
+            continue
+        later = []
+        for name in (f"baton.beat.{stem}", f"baton.beat.{stem}.crashed"):
+            try:
+                later.append((folder / name).read_text("utf-8").strip().partition(" ")[0])
+            except OSError:
+                pass
+        if all(when > t for t in later):
+            out.append(f"{event}, started at {when.replace('T', ' ')[:16]}")
+    return out
+
+
 def crash_notice() -> str | None:
-    found = crashed_hooks()
-    if not found:
+    found, stopped = crashed_hooks(), stopped_hooks()
+    out = []
+    if found:
+        out.append("🔴 Baton: a hook crashed on its last run, so its check did not happen -- "
+                   + "; ".join(found) + ". A hook never breaks the session, so nothing else said so.")
+    if stopped:
+        out.append("🔴 Baton: a hook did not finish its last run (killed or timed out?), so its "
+                   "check did not happen -- " + "; ".join(stopped) + ". Claude Code stops a hook "
+                   "at its time limit (20 s, PostToolBatch 10 s) and nothing else says so.")
+    if not out:
         return None
-    return ("🔴 Baton: a hook crashed on its last run, so its check did not happen -- "
-            + "; ".join(found) + ". A hook never breaks the session, so nothing else said so. "
-            f"Tell the human in one line; {command('baton-doctor')} shows when each hook last "
-            "finished.")
+    return (" ".join(out) + f" Tell the human in one line; {command('baton-doctor')} shows when "
+            "each hook last finished.")
 
 
 def _state_file() -> Path:
@@ -369,6 +417,97 @@ def lesson_event(state: dict, lesson: str, kind: str, now: datetime | None = Non
     rec[f"{kind}_dates"] = [d for d in rec.get(f"{kind}_dates", []) if d >= cutoff] + \
         [now.isoformat(timespec="minutes")]
     return rec
+
+
+# -- The pinned test command (L4, since v3.21.0; ZA-OPRAVYANE row 43) --------------------------
+#
+# A human pins a test command for a task folder in baton.local.json ("tests"). When the newest
+# entry says tests pass, Stop starts that command in the background after the turn
+# (baton_stop.py --run-tests); the runner leaves one record per folder, baton.tests.<folder>.json.
+# Whoever comes next -- Stop or SessionStart -- sets its result beside the claim, once.
+
+def tests_file(name: str) -> Path:
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in name)[:80] or "_"
+    return _local_file(f"baton.tests.{safe}.json")
+
+
+def tests_save(path: Path, rec: dict) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(rec, ensure_ascii=False, indent=1), "utf-8")
+    tmp.replace(path)
+
+
+def tests_verdict(rec: dict) -> str:
+    """What the run said, by its exit code: 'failed (exit 1)', 'no tests ran (exit 5)'..."""
+    verdict, code = rec.get("verdict", "?"), rec.get("exit")
+    if verdict == "timed out":
+        return f"timed out after {rec.get('timeout_s', '?')} s"
+    return f"{verdict} (exit {code})" if code is not None else verdict
+
+
+def tests_results(now: datetime | None = None) -> list[str]:
+    """One sentence per pinned run that ended and has not been said yet; marked as said. A run
+    that disagrees with the claim -- failed, or ran no tests -- counts as L4 caught. A run gone
+    without a result is said as that: nothing is known about the claim."""
+    now = now or datetime.now()
+    out, caught = [], 0
+    for path in sorted(_local_file("baton.local.json").parent.glob("baton.tests.*.json")):
+        try:
+            rec = json.loads(path.read_text("utf-8"))
+        except Exception:
+            continue
+        if rec.get("reported"):
+            continue
+        folder, entry = rec.get("name", "?"), str(rec.get("entry", ""))[3:60].strip()
+        cmd = f"`{rec.get('command', '')}` (in {rec.get('cwd', '?')})"
+        if rec.get("state") == "running":
+            try:
+                started = datetime.fromisoformat(rec["started"])
+                budget = float(rec.get("timeout_s") or 0)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (now - started).total_seconds() <= budget + 120:
+                continue                          # still running, as far as can be told
+            out.append(f"Baton, lesson L4: the pinned test run for {folder} (started "
+                       f"{started:%H:%M}, for the entry \"{entry}\") never finished -- the runner "
+                       f"was stopped from outside. Nothing is known about the claim. {cmd}")
+        elif rec.get("state") == "done":
+            when = str(rec.get("finished", ""))[11:16]
+            said = (f"{tests_verdict(rec)} in {rec.get('seconds', '?')} s at {when} -- {cmd} "
+                    f"printed: {rec.get('line') or '(nothing)'}")
+            if rec.get("verdict") == "passed":
+                out.append(f"Baton, lesson L4: the pinned tests for {folder} agree with the entry "
+                           f"\"{entry}\": {said}.")
+            else:
+                agrees = rec.get("verdict") not in ("failed", "no tests ran")
+                caught += not agrees
+                out.append(f"Baton, lesson L4: the entry \"{entry}\" in {folder} says tests pass; "
+                           f"the pinned test command {'could not say' if agrees else 'says otherwise'}"
+                           f": {said}." + ("" if agrees else " Counted as caught.")
+                           + (f" Full output: {rec['log']}" if rec.get("log") else ""))
+        else:
+            continue
+        rec["reported"] = True
+        try:
+            tests_save(path, rec)
+        except Exception:
+            pass
+    if caught:
+        state = lessons_load()
+        for _ in range(caught):
+            lesson_event(state, "L4", "caught", now)
+        lessons_save(state)
+    return out
+
+
+def tests_notice() -> str | None:
+    try:
+        said = tests_results()
+    except Exception:
+        return None
+    if not said:
+        return None
+    return " ".join(said) + " Tell the human in one line per result, with the command as shown."
 
 
 def lessons_notice(now: datetime | None = None) -> str | None:
@@ -1642,7 +1781,7 @@ def main() -> int:
         return _emit(compacted(own), COMPACT_LINE, block="compact")
     cleared = own.get("source") == "clear"
     root, name = config()
-    notices = [n for n in (crash_notice(), whats_new_notice(), update_notice(date.today()),
+    notices = [n for n in (crash_notice(), tests_notice(), whats_new_notice(), update_notice(date.today()),
                            lessons_notice(), review_notice(), feedback_notice(date.today())) if n]
     folders = task_folders(root) if root.is_dir() else []
     if folders:
@@ -1837,6 +1976,41 @@ def main() -> int:
     return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external)))
 
 
+def _start() -> None:
+    """Mark that this run began: `baton.beat.<hook>.started.<pid>`, holding the time. Removed when
+    the run finishes or crashes (in `_beat`). A hook killed at its time limit -- SIGTERM, then
+    SIGKILL -- writes neither file of `_beat`, and the doctor showed the last finish as ✅
+    (ZA-OPRAVYANE row 41, 22.10); a mark left behind is that run. One per pid: two sessions can
+    run the same hook at once, and one still running is not one killed. Never raises."""
+    try:
+        from datetime import datetime
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = Path(data) if data else Path(__file__).resolve().parent
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"baton.beat.{Path(__file__).stem}.started.{os.getpid()}").write_text(
+            datetime.now().isoformat(), "utf-8")
+    except Exception:
+        pass
+
+
+def _clear_starts(folder: Path) -> None:
+    """This run's start mark, and those of runs that are gone: this finish is newer than them."""
+    import time
+    for mark in folder.glob(f"baton.beat.{Path(__file__).stem}.started.*"):
+        try:
+            pid = mark.name.rsplit(".", 1)[1]
+            gone = pid == str(os.getpid()) or time.time() - mark.stat().st_mtime > 120
+            if not gone and os.name != "nt":      # on Windows os.kill(pid, 0) is not a probe
+                try:
+                    os.kill(int(pid), 0)
+                except ProcessLookupError:
+                    gone = True
+            if gone:
+                mark.unlink()
+        except (OSError, ValueError):
+            continue
+
+
 def _beat(crash: BaseException | None = None) -> None:
     """When this hook last FINISHED, for /baton-doctor: a plugin can be installed and enabled and
     still never run (no Python, no Git Bash on Windows), and nothing on the screen says so.
@@ -1855,11 +2029,13 @@ def _beat(crash: BaseException | None = None) -> None:
         else:
             beat.with_name(beat.name + ".crashed").write_text(
                 f"{now.isoformat()} {type(crash).__name__}", "utf-8")
+        _clear_starts(folder)
     except Exception:
         pass
 
 
 if __name__ == "__main__":
+    _start()
     try:
         code = main()
     except Exception as exc:

@@ -354,7 +354,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.20.0]
+[baton:board v3.21.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -434,7 +434,45 @@ authorities -- and are answered in one line.
 below). The same section, the same once-per-entry ask, for "tests pass", "all green", "N passed"
 and „тестовете минават/минаха“: one line with the command and the result line it printed. An entry
 that said "did not run pytest … All tests pass." had the right shape and passed the check above;
-now it is asked about. It cannot tell a true claim from a false one either.
+now it is asked about. It cannot tell a true claim from a false one either. Since v3.21.0 "5/5
+passes" is read as the claim too (N/N only: "3/5 passed" is a run that failed).
+
+**A pinned test command sets the actual result beside the claim** (since v3.21.0, ZA-OPRAVYANE
+row 43, after Apurv Khare: "tests pass" should come from a hook that re-runs them). The listed
+line above is the agent's word: a made-up `pytest -q: 12 passed` passes it. So a human can pin
+the command once, per task folder, in `baton.local.json` (the plugin's data folder, or next to
+the script-installed hooks):
+
+```json
+{"tests": {"my-task": {"command": "python3 -m pytest -q tests", "cwd": "~/src/my-repo", "timeout_s": 600}}}
+```
+
+`my-task` is the task folder's name; `cwd` defaults to the task folder, `timeout_s` to 600. When
+the newest entry this session wrote in that folder says tests pass, Stop starts the pinned
+command **in the background, after the turn** -- detached, its output to
+`baton.tests.<folder>.log` next to the settings, under its own budget -- and returns at once; it
+says so to the human in one line. Once per entry, one run at a time per folder. The verdict is
+the **exit code**: 0 passed; 5 with `pytest` in the command, **no tests ran** (pytest's code for
+"nothing collected" -- `-k` that matches nothing prints "575 deselected" and no "failed"; other
+runners may use 5 differently); any other code, failed; over the budget, timed out (the process
+group is killed); a `cwd` that is not there, could not start. The record
+(`baton.tests.<folder>.json`) keeps the command, the folder it ran in, the exit code, the
+duration and the last line it printed. The next Stop says the result beside the claim, once, in a
+message the agent does not write; if the session ended first, the next SessionStart puts it on the
+board for the agent to say in one line.
+**A run that failed or ran no tests while the entry says tests pass counts as L4 caught.**
+
+**What runs, and from where:** only the string under `"tests"` in `baton.local.json`, through
+the shell (`sh -c`; `cmd /c` on Windows), as you, with the session's environment minus
+Baton's own variables (`BATON_*`, `CLAUDE_PLUGIN_*`). Never a
+command from a logbook, from the model's words, from the repository (AGENTS.md, a Makefile) or
+from the hook's arguments: the runner is told which folder, and reads the command itself. With
+nothing pinned, nothing runs and L4 is as before. A pin without a `command` is said once and
+nothing runs. **Limits:** the file is on disk, and an agent with write access to it can change
+the pin -- every result names the command that ran, so a changed one shows, but Baton does not
+stop it. The verdict is as good as the command: a pin that runs one file says nothing about the
+rest. A result arrives a turn late, and a run that outlives its budget plus two minutes without a
+record is said as "never finished", with nothing known about the claim.
 
 ## The task header
 
@@ -698,9 +736,18 @@ written before the hook did its work, so a hook that crashed still showed ✅ "l
 after the work, and a run that raised leaves `baton.beat.<hook>.crashed` instead: the time and the
 exception's class, nothing else (no message, no path). The doctor marks that hook ❌ CRASHED and
 exits 1, and the next SessionStart tells the agent to say it in one line. A hook still never breaks
-the session: it exits 0 either way, which is why this is the only place a crash shows. **What it
-cannot see:** a hook killed at Claude Code's time limit (20 s, PostToolBatch 10 s) leaves neither
-file -- it shows as its last finish.
+the session: it exits 0 either way, which is why this is the only place a crash shows.
+
+**A run killed from outside is shown too** (since v3.21.0, ZA-OPRAVYANE row 41). A hook killed at
+Claude Code's time limit (20 s, PostToolBatch 10 s) -- SIGTERM, then SIGKILL -- wrote neither file,
+and the doctor showed ✅ from the run before. Now each run writes `baton.beat.<hook>.started.<pid>`
+(the time) before its work and removes it when it finishes or crashes. A mark left behind, newer
+than the last finish and the last crash, whose process is gone -- or older than two minutes, past
+any hook's limit -- is a run that did not finish: the doctor marks it ❌ DID NOT FINISH (killed or
+timed out?) and exits 1, and the next SessionStart says it. One mark per pid, so the same hook
+running in two sessions at once is not taken for a kill. **What it cannot see:** a kill followed
+by a finish of the same hook is history, as a crash is; and on Windows, where a process cannot be
+probed safely, a killed run shows only after two minutes.
 
 It also shows whether Stop's hand-back does any work -- the one number that says it (ZA-OPRAVYANE
 row 27, from a question about how often the agent writes the entry only because it was made to).
@@ -865,7 +912,12 @@ the situation arose, `caught` when the mistake happened. The counters are in
   Measured on the 1,347 dated entries of the author's logbooks: 25 match, all 25 a claim that
   tests passed (the first patterns matched 35; the 10 dropped were mentions). `caught` as for L3:
   a `refuted:` line about a tests claim in a later entry's claims section. It does not check that
-  the command is there, nor that it ran -- it puts the claim where a reader checks it.
+  the command is there, nor that it ran -- it puts the claim where a reader checks it. Since
+  v3.21.0 "N/N passes" counts too (row 42); measured again on the 1,382 dated entries of the
+  author's logbooks: 29 match before and after the change, all claims, and the only four "N/N
+  pass" in them are the phrase quoted. And since v3.21.0, where a human has pinned a test command
+  for the folder (see *What you get*), its result is set beside the claim, and a run that failed
+  or ran no tests is counted `caught` -- the one catch here that is measured, not written.
 
 SessionStart says something only when a lesson has earned it: caught twice in 14 days (it is
 not holding — propose the next rung: a check on the result, or a tool that makes the mistake
@@ -1454,6 +1506,24 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.21.0** — a killed hook is shown; a pinned test command answers "tests pass"
+
+- **A hook killed at its time limit shows as not finished, not ✅.** A run stopped from outside
+  (SIGTERM, then SIGKILL) wrote nothing, and `/baton-doctor` showed the run before it (row 41, the
+  limit v3.20.0 stated). Each run now marks its start under its own pid and clears it when it
+  finishes or crashes; a mark left behind from a process that is gone is ❌ DID NOT FINISH (killed
+  or timed out?), and the next SessionStart says it. A run of the same hook still going in
+  another session is not taken for one killed.
+- **A test command pinned by a human sets the actual result beside "tests pass".** Pinned once per
+  task folder in `baton.local.json` (`"tests"`), it runs in the background after a turn whose
+  entry says tests pass, under its own budget, and is judged by exit code -- pytest's 5 is "no
+  tests ran", not passed. The next Stop or SessionStart says the result once, to the human; a
+  failed run beside a passing claim counts as L4 caught (Apurv Khare: "tests pass" should come
+  from a hook that re-runs them). Nothing runs without the pin, and never a command from a
+  logbook, the model or the repository.
+- **L4 reads "5/5 passes"** -- the honest entry of the probe was not asked. N/N only; "3/5 passed"
+  no longer reads as "5 passed". On 1,382 real entries: 29 matches before and after, all claims.
 
 **v3.20.0** — a crash is shown; history that disappears is said; "tests pass" goes in the claims
 
@@ -2510,6 +2580,7 @@ having been done.
 | `BATON_HOME` | where task folders live (default `~/tasks`) |
 | `CLAUDE_CONFIG_DIR` | config directory to install into (default `~/.claude`) |
 | `BATON_LOGBOOK` | name of the logbook file (default `LOGBOOK.md`) — set it to a word in your own language if you prefer |
+| `"tests"` in `baton.local.json` | a test command a human pins per task folder, run after a turn whose entry says tests pass (L4, since v3.21.0; see *What you get*). Only in the file, never from an environment variable |
 
 `BATON_HOME=~/work ./install.sh` bakes that path into the installed hooks.
 
@@ -2538,7 +2609,9 @@ without any of this, which is the point.
 | `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; folders listed as confidential are refused before anything is sent |
 
 `tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
-schedule except the opt-in update check above.
+schedule except the opt-in update check above. The one command the hooks run that is not their
+own is a test command **you** pinned in `baton.local.json` (lesson L4, since v3.21.0): run on this
+machine after a turn whose entry says tests pass, and never without that pin.
 
 What the hooks read, all on this machine: the task folders and their logbooks; the session's
 transcript (`transcript_path`) — its first timestamp, for when the session began, and its

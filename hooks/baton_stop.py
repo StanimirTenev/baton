@@ -18,6 +18,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -651,8 +652,13 @@ def visibility_words(text: str) -> list[str]:
 # claimed), "минават през" (go through), and "1 failed, 9 passed" (a run that failed). Code spans
 # are not read: a pasted result line is the evidence, not the claim. It cannot tell a true
 # claim from a false one; it puts the claim and its command where a reader checks them.
+# v3.21.0, row 42: "5/5 passes" -- the honest entry of the probe -- was not asked. N/N only, and
+# "3/5 passed" no longer reads as "5 passed": like "1 failed, 9 passed", a run that failed.
+# Measured on the 1,382 dated entries here (22.10): 29 match before and after, all claims; the
+# four "N/N pass" in the logbooks are the phrase quoted, talked about.
 _TESTS = re.compile(r"(?i)(?<![\w-])((?:all\s+)?tests?\s+(?:all\s+)?pass(?:es|ed)?|all\s+green"
-                    r"|(?<!failed, )(?<![\d,.])\d[\d,]*\s+passed"
+                    r"|(?<!failed, )(?<![\d,./])\d[\d,]*\s+passed"
+                    r"|(?<![\d,./])(?P<n>\d+)\s*/\s*(?P=n)\s+(?:tests?\s+)?pass(?:es|ed)?"
                     r"|тестовете\s+(?:минават|минаха)(?!\s+през)|минаха\s+(?:всички\s+)?тестовете)"
                     r"(?![\w-])")
 _QUOTE = re.compile(r"[„“\"«][^„“”\"«»\n]{1,160}[“”\"»]")
@@ -707,6 +713,141 @@ def tests_entries(root: Path, name: str, since: float | None) -> list[tuple]:
         if words and not listed:
             out.append((folder.name, heading, list(dict.fromkeys(words))))
     return out
+
+
+# L4, the pinned command (v3.21.0, ZA-OPRAVYANE row 43; Apurv Khare, 22.10: "tests pass should
+# come from a hook that re-runs them"). Inside Stop a re-run does not fit -- Baton's own suite is
+# 38 s against Stop's 20 s, and a hook killed at its limit leaves no verdict (row 41) -- and a
+# command chosen by the model proves little ("10 passed" on another file; `-k` matching nothing is
+# exit 5). Decided by the human: a command pinned once in baton.local.json, by a human, run after
+# the turn in the background, under its own budget, judged by its exit code. Never one from a
+# logbook, the model or the repository: the runner is given a folder, and reads the command itself.
+TESTS_TIMEOUT_S = 600
+
+
+def pinned_tests(folder: Path) -> tuple[dict | None, str | None]:
+    """The test command a human pinned for this task folder -- `"tests": {"<folder>": {"command":
+    "...", "cwd": "...", "timeout_s": 600}}` in baton.local.json -- and what is wrong with the pin,
+    if anything. (None, None): nothing pinned, and L4 is as it was."""
+    try:
+        cfg = json.loads(_local_file("baton.local.json").read_text("utf-8-sig"))
+    except Exception:
+        return None, None
+    pins = cfg.get("tests") if isinstance(cfg, dict) else None
+    if not isinstance(pins, dict) or folder.name not in pins:
+        return None, None
+    pin = pins[folder.name]
+    if not isinstance(pin, dict) or not isinstance(pin.get("command"), str) \
+            or not pin["command"].strip():
+        return None, f"`tests` → `{folder.name}` in baton.local.json has no `command`"
+    budget = pin.get("timeout_s", TESTS_TIMEOUT_S)
+    if isinstance(budget, bool) or not isinstance(budget, (int, float)) or budget <= 0:
+        return None, f"`tests` → `{folder.name}` → `timeout_s` is not a number of seconds"
+    cwd = Path(str(pin.get("cwd") or folder)).expanduser()
+    return {"command": pin["command"], "cwd": str(cwd), "timeout_s": budget}, None
+
+
+def pinned_runs(root: Path, name: str, since: float | None, session: str) -> tuple[list, set]:
+    """Start the pinned command, in the background, for each newest entry this session wrote that
+    says tests pass -- once per entry, never while a run for the folder is going. Returns what to
+    tell the human, and the folders whose run has started."""
+    said, started = [], set()
+    asked = _already_asked(session)
+    for folder, _text, (heading, body) in _changed_tops(root, name, since):
+        if not tests_words(heading + "\n" + body):
+            continue
+        pin, problem = pinned_tests(folder)
+        if problem:
+            if f"pin:{folder.name}" not in asked:
+                said.append(f"Baton: {problem}; nothing was run.")
+                _remember(session, _already_asked(session) | {f"pin:{folder.name}"})
+            continue
+        if not pin:
+            continue
+        path = _ss().tests_file(folder.name)
+        try:
+            rec = json.loads(path.read_text("utf-8"))
+        except Exception:
+            rec = {}
+        if rec.get("entry") == heading:
+            continue                              # this entry has had its run
+        if rec.get("state") == "running":
+            try:
+                age = (datetime.now() - datetime.fromisoformat(rec["started"])).total_seconds()
+                if age <= float(rec.get("timeout_s") or 0) + 120:
+                    continue                      # one run at a time; the next Stop starts this one
+            except (KeyError, TypeError, ValueError):
+                pass
+        _ss().tests_save(path, {"name": folder.name, "folder": str(folder), "entry": heading,
+                                "state": "running", "started": datetime.now().isoformat(), **pin})
+        detach = ({"creationflags": 0x00000008 | 0x00000200} if os.name == "nt"   # DETACHED, NEW_GROUP
+                  else {"start_new_session": True})
+        # Not this process's pipes: Claude Code waits for them to close, and would wait for the tests.
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--run-tests", str(folder)],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, **detach)
+        started.add(folder.name)
+        said.append(f"Baton: the newest entry in {folder.name} says tests pass; running the pinned "
+                    f"test command after this turn, up to {pin['timeout_s']} s: `{pin['command']}` "
+                    f"(in {pin['cwd']}). Its result is said here next time.")
+    return said, started
+
+
+def run_tests(folder_arg: str) -> int:
+    """The background runner (`baton_stop.py --run-tests <folder>`). Runs the command pinned for
+    that folder -- read here, from baton.local.json, never from the arguments -- in its own process
+    group, within its budget, and records the verdict by exit code: 0 passed; 5 from pytest, no
+    tests ran; another code, failed; over budget, timed out (the group is killed)."""
+    folder = Path(folder_arg)
+    pin, _problem = pinned_tests(folder)
+    if not pin:
+        return 0
+    path = _ss().tests_file(folder.name)
+    try:
+        rec = json.loads(path.read_text("utf-8"))
+    except Exception:
+        rec = {}
+    log = path.with_suffix(".log")
+    rec.update({"name": folder.name, "folder": str(folder), **pin,
+                "started": rec.get("started") or datetime.now().isoformat()})
+    t0, code, verdict = time.time(), None, None
+    group = {"creationflags": 0x00000200} if os.name == "nt" else {"start_new_session": True}
+    # The session's environment without Baton's own: run as the pin, Baton's suite read the hook's
+    # CLAUDE_PLUGIN_DATA and BATON_HOME instead of its own, and 12 tests failed (22.10).
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("BATON_", "CLAUDE_PLUGIN_"))}
+    try:
+        with open(log, "wb") as out:
+            proc = subprocess.Popen(pin["command"], shell=True, cwd=pin["cwd"], env=env,
+                                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                                    **group)
+            try:
+                code = proc.wait(timeout=pin["timeout_s"])
+            except subprocess.TimeoutExpired:
+                verdict = "timed out"
+                if os.name == "nt":
+                    subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                                   capture_output=True)
+                else:
+                    import signal
+                    os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+    except Exception as exc:
+        verdict = f"could not start: {type(exc).__name__}"
+    if verdict is None:
+        verdict = ("passed" if code == 0 else
+                   "no tests ran" if code == 5 and "pytest" in pin["command"] else "failed")
+    try:
+        with open(log, "rb") as fh:
+            fh.seek(max(0, os.path.getsize(log) - 4096))
+            tail = fh.read().decode("utf-8", "replace").splitlines()
+        line = next((ln.strip() for ln in reversed(tail) if ln.strip()), "")[:200]
+    except OSError:
+        line = ""
+    rec.update({"state": "done", "finished": datetime.now().isoformat(),
+                "seconds": round(time.time() - t0, 1), "exit": None if verdict == "timed out"
+                else code, "verdict": verdict, "line": line, "log": str(log), "reported": False})
+    _ss().tests_save(path, rec)
+    return 0
 
 
 def _all_entries(text: str) -> list[tuple[str, str]]:
@@ -905,6 +1046,12 @@ def main() -> int:
                             root, lesson="L4")
     except Exception:
         passes = []           # the same
+    try:      # L4 against a pinned command (row 43): results that came in, runs to start
+        tested = _ss().tests_results()
+        more, running = pinned_runs(root, name, since, session)
+        tested += more
+    except Exception:
+        tested, running = [], set()   # a run that cannot start must not cost the session
     rewritten = [f for f in REWRITTEN if f"rewrite:{f}" not in asked]
     # Row 35: a folder the walk stopped in may hold newer work than it saw. Not a hand-back --
     # the agent cannot settle it in this turn -- but never a silent pass: said once a session.
@@ -916,6 +1063,8 @@ def main() -> int:
     if LOST or FORGOT:    # row 37: to the human, once (the memory has moved on); never a hand-back
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"),
                                                          lost_note(LOST, FORGOT))))}
+    if tested:
+        note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), *tested)))}
     if (not stale and not open_ended and not ahead and not typed and not thin and not claims
             and not passes and not rewritten):
         if note:
@@ -1006,7 +1155,9 @@ def main() -> int:
             "result line it printed -- the human reads that section, not the prose. If the claim "
             "later proves wrong, the new entry's section says `refuted: <the claim>`; only that is "
             "counted as caught. If it is not a claim here, say so in one line. "
-            f"(Asked once per entry. Counted: caught {rec.get('caught', 0)} of "
+            + (f"For {', '.join(sorted(running))}, the test command a human pinned runs after "
+               "this turn, and its result is set beside the claim. " if running else "")
+            + f"(Asked once per entry. Counted: caught {rec.get('caught', 0)} of "
             f"{rec.get('fired', 0)} asked.)")
     if rewritten:
         parts.append(
@@ -1020,6 +1171,41 @@ def main() -> int:
                                         **note}, ensure_ascii=False).encode("utf-8"))
     sys.stdout.flush()
     return 0
+
+
+def _start() -> None:
+    """Mark that this run began: `baton.beat.<hook>.started.<pid>`, holding the time. Removed when
+    the run finishes or crashes (in `_beat`). A hook killed at its time limit -- SIGTERM, then
+    SIGKILL -- writes neither file of `_beat`, and the doctor showed the last finish as ✅
+    (ZA-OPRAVYANE row 41, 22.10); a mark left behind is that run. One per pid: two sessions can
+    run the same hook at once, and one still running is not one killed. Never raises."""
+    try:
+        from datetime import datetime
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = Path(data) if data else Path(__file__).resolve().parent
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"baton.beat.{Path(__file__).stem}.started.{os.getpid()}").write_text(
+            datetime.now().isoformat(), "utf-8")
+    except Exception:
+        pass
+
+
+def _clear_starts(folder: Path) -> None:
+    """This run's start mark, and those of runs that are gone: this finish is newer than them."""
+    import time
+    for mark in folder.glob(f"baton.beat.{Path(__file__).stem}.started.*"):
+        try:
+            pid = mark.name.rsplit(".", 1)[1]
+            gone = pid == str(os.getpid()) or time.time() - mark.stat().st_mtime > 120
+            if not gone and os.name != "nt":      # on Windows os.kill(pid, 0) is not a probe
+                try:
+                    os.kill(int(pid), 0)
+                except ProcessLookupError:
+                    gone = True
+            if gone:
+                mark.unlink()
+        except (OSError, ValueError):
+            continue
 
 
 def _beat(crash: BaseException | None = None) -> None:
@@ -1040,11 +1226,18 @@ def _beat(crash: BaseException | None = None) -> None:
         else:
             beat.with_name(beat.name + ".crashed").write_text(
                 f"{now.isoformat()} {type(crash).__name__}", "utf-8")
+        _clear_starts(folder)
     except Exception:
         pass
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--run-tests":
+        try:                                  # the background test runner: not a run of Stop
+            sys.exit(run_tests(sys.argv[2]))
+        except Exception:
+            sys.exit(0)
+    _start()
     try:
         code = main()
     except Exception as exc:
