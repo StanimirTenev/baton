@@ -354,7 +354,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.21.0]
+[baton:board v3.22.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1556,6 +1556,38 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.22.0** — fifteen gaps from a hostile probe of the hooks; three fixes promised publicly
+
+- **A crash in the hour after the clocks go back is shown, not ✅.** Markers held local time and
+  were ordered as text, so on 25.10.2026 a crash at 03:20 sorted before a finish at 03:50 written
+  half an hour earlier (row 64). They are now ordered by the files' own times.
+- **Per-session state is no longer in the shared temp folder.** It held task names and entry
+  headings, 0644 in /tmp; now `sessions/` beside Baton's other state, each file 0600 (row 53).
+- **The pinned test command gets an allowlist, not the session's environment** -- three made-up
+  identity variables reached it (row 47, Bernard Haddad). Extra names go in the pin's `"env"`.
+- **A pasted key is masked before the quiet-session note quotes the human** (row 48, Bernard Haddad,
+  Bachittarjeet Singh Sidhu): `sk-…`, GitHub, AWS, Slack, Google keys, JWTs, `token=`, long hex
+  and base64 read `[masked]`. Shapes, not a proof.
+- **`BATON_SOURCE` works without `baton.local.json`**, as the README said (row 50, Benjamin
+  Brachert); the drift check compared nothing.
+- **One unreadable task folder no longer takes the board and every Stop check with it.** It is
+  left out and named (row 54).
+- **The entry written in answer to a hand-back gets the quality checks too** -- hollow, L1, L3,
+  L4 -- said to the human, never a second hand-back (row 55).
+- **A `.batonignore` saved in the same session as the work it hides is said** (row 57); the board
+  no longer offers it as the way out.
+- **Stop reads `## 22.10.2026 15:30` as an entry** (row 58); L3 and L4 read every entry the session
+  wrote, not only the top one (row 59); L4 reads "tests are passing", "CI is green", „тестове
+  минават“ (row 60: on 1,417 real entries 33 → 35 matches, both new ones real claims).
+- **Smaller:** a human's own hook with "baton_" in its command no longer switches the plugin off
+  (row 61); deleting the hour no longer counts as L1 followed (row 62); a folder named `report
+  (v2)` keeps its name in Stop's counts (row 63); `tools/baton_entry.py` writes into a logbook
+  with a BOM, without a header or without entries (row 65); stdin that is not a JSON object is no
+  payload, not a crash (row 67).
+- **Not in this version:** work that arrives with its old modification time (`wget`, `cp -p`,
+  `rsync -a`) is still not seen (row 56) -- reading ctime breaks how the suite fakes file ages
+  and needs a decision; confidential tasks on the board (row 66) are the human's call.
 
 **v3.21.0** — a killed hook is shown; a pinned test command answers "tests pass"
 
