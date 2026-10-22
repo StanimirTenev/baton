@@ -97,7 +97,12 @@ def write_entry(path, entry: str, next_line: str | None = None,
             raise ValueError("with a title the entry is the body only -- it already has a heading")
         entry = f"## {datetime.now():%Y-%m-%d %H:%M} — {title.strip()}\n\n{entry.strip()}\n"
     file = Path(path)
-    text = file.read_text(encoding="utf-8")
+    # Read as the hooks read (ZA-OPRAVYANE row 65): a BOM (PowerShell 5.1, Notepad) was "the front
+    # matter broke". It is kept on the way back, never added.
+    raw = file.read_bytes()
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    text = raw.decode("utf-8-sig")
+    header = text.startswith("---")
 
     # 🔴 Three defects from an external review of v2.14.0, all here:
     #   * the file was written BEFORE these checks ran, so a rejected entry was
@@ -127,13 +132,22 @@ def write_entry(path, entry: str, next_line: str | None = None,
                 f"a match further down the file is refused rather than rewritten.")
         text = header.replace(old_line, next_line, 1) + text[head_end:]
 
-    first = re.search(r'^## \d{4}-', text, re.M)
-    if not first:
-        raise ValueError("no dated entry to insert in front of")
-    text = text[:first.start()] + entry.strip() + "\n\n" + text[first.start():]
+    first = re.search(r'^## (?:\d{4}-|\d{1,2}\.\d{1,2}\.\d{4})', text, re.M)
+    if first:
+        at = first.start()
+    elif header:          # a new logbook, no entry yet: right under its header (row 65)
+        end = text.find("\n---", 3)
+        close = text.find("\n", end + 1) if end >= 0 else -1
+        cut = len(text) if close < 0 else close + 1
+        head = text[:cut].rstrip("\n") + "\n\n"
+        text, at = head + text[cut:].lstrip("\n"), len(head)
+    else:                 # no header, no entry: after whatever is there
+        text = text.rstrip("\n") + "\n\n" if text.strip() else ""
+        at = len(text)
+    text = text[:at] + entry.strip() + "\n\n" + text[at:]
 
     lines = text.split("\n")
-    if not (lines[0] == "---" and "---" in lines[1:12]):
+    if header and not (lines[0] == "---" and "---" in lines[1:12]):
         raise ValueError("the front matter broke")
     # The `^---##` case is covered by the general check below -- `\S` matches the
     # dash. A separate assert for it survived every mutation, which means no test
@@ -144,7 +158,7 @@ def write_entry(path, entry: str, next_line: str | None = None,
             f"heading glued mid-file, invisible to a heading read: {glued[:3]}")
 
     tmp = file.with_suffix(file.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8-sig" if bom else "utf-8")
     tmp.replace(file)               # atomic: never a half-written logbook
 
     print(f"written: {path}")
