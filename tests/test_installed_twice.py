@@ -100,3 +100,25 @@ def test_the_message_names_the_settings_file_this_session_reads(tmp_path):
     env["CLAUDE_CONFIG_DIR"] = str(cfg)
     out = _run("baton_session_start.py", env, {})
     assert str(cfg / "settings.json") in out and "~/.claude/settings.json" not in out
+
+
+def test_a_hook_of_the_humans_own_named_baton_is_not_a_second_install(tmp_path):
+    """ZA-OPRAVYANE row 61 (swarm D, 22.10; probe G09): any hook command holding "baton_" -- a
+    script ~/bin/my_baton_notes.sh, a folder ~/baton_backup/ -- was taken for the installer's,
+    and all four plugin hooks stood down for good, the board saying Baton is installed twice."""
+    env = _env(tmp_path, installer=False)
+    settings = Path(env["HOME"]) / ".claude" / "settings.json"
+    for command in ("bash ~/bin/my_baton_notes.sh", "rsync -a ~/notes ~/baton_backup/",
+                    "python3 ~/tools/baton_stop.py.bak"):
+        settings.write_text(json.dumps({"hooks": {"PostToolUse": [{"matcher": "Write", "hooks": [
+            {"type": "command", "command": command}]}]}}))
+        assert "installed twice" not in _run("baton_session_start.py", env, {}), command
+        assert "decision" in _run("baton_stop.py", env, {}), command
+
+
+def test_the_installers_older_one_string_form_is_still_found(tmp_path):
+    env = _env(tmp_path, installer=False)
+    settings = Path(env["HOME"]) / ".claude" / "settings.json"
+    settings.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [
+        {"type": "command", "command": "python3 \"/home/x/.claude/baton/hooks/baton_stop.py\""}]}]}}))
+    assert "installed twice" in _run("baton_session_start.py", env, {})

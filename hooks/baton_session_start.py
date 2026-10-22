@@ -151,12 +151,14 @@ def installed_twice() -> bool:
     except Exception:
         return False
     # A plugin's own hooks come from its hooks.json, never from settings.json: any Baton
-    # entry there is the installer's.
+    # entry there is the installer's -- one of its four files by name. Any "baton_" in a
+    # command was taken for it: a human's ~/bin/my_baton_notes.sh switched the plugin off (row 61).
     for groups in (settings.get("hooks") or {}).values():
         for group in groups or []:
             for h in group.get("hooks", []) or []:
                 blob = str(h.get("command", "")) + " " + " ".join(map(str, h.get("args") or []))
-                if "baton_" in blob:
+                if re.search(r"(?:^|[\\/\s\"'])baton_(?:session_start|stop|prompt|batch)\.py(?![\w.])",
+                             blob):
                     return True
     return False
 
