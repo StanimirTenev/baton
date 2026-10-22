@@ -95,3 +95,21 @@ def test_a_hook_in_the_source_that_was_never_installed_is_reported(tmp_path, mon
     (src / "baton_prompt.py").write_text("# prompt\n", encoding="utf-8")
     mod = _load(_install(tmp_path, source=src))
     assert mod.install_drift() == ["baton_prompt.py (not installed)"]
+
+
+def test_baton_source_alone_is_enough(tmp_path, monkeypatch):
+    """ZA-OPRAVYANE row 50 (Benjamin Brachert, 22.10, said publicly): the README says `source` in
+    baton.local.json "or BATON_SOURCE", but with no settings file source_dir() returned None before
+    it read the variable, and nothing was compared."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "baton_session_start.py").write_text("# a teammate's edit\n", encoding="utf-8")
+    hookdir = _install(tmp_path, source=None)
+    (hookdir / "baton.local.json").unlink()
+    shutil.copy(HOOK, src / "baton_stop.py")
+    (hookdir / "baton_stop.py").write_text(HOOK.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setenv("BATON_SOURCE", str(src))
+    mod = _load(hookdir)
+    assert mod.install_drift() == ["baton_session_start.py"]
+    (hookdir / "baton.local.json").write_text("{not json", encoding="utf-8")   # broken: the same
+    assert _load(hookdir).install_drift() == ["baton_session_start.py"]

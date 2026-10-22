@@ -635,11 +635,12 @@ def source_dir() -> Path | None:
     Optional and absent for anyone who installed from a release: then there is nothing
     to compare against and nothing is reported.
     """
-    try:
-        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
-    except Exception:
-        return None
-    raw = os.environ.get("BATON_SOURCE") or cfg.get("source")
+    raw = os.environ.get("BATON_SOURCE")       # read first: with no settings file it was never
+    if not raw:                                # read at all (row 50, Benjamin Brachert, 22.10)
+        try:
+            raw = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig")).get("source")
+        except Exception:
+            return None
     return Path(raw).expanduser() if raw else None
 
 
