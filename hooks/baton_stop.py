@@ -1166,6 +1166,14 @@ def answer_check(payload: dict) -> str | None:
             "this is not asked of the agent): " + "; ".join(said) + ".")
 
 
+def _folder_of(item: str) -> str:
+    """The folder a listed item names -- "<folder> (newest: x)", "<folder> (no <logbook> at all;
+    newest: x)", "<folder> (top entry: ...)". The first " (" was taken for its end, so `report (v2)`
+    became `report` and the hand-back was counted against the wrong name (row 63)."""
+    m = re.match(r"(.*?) \((?:newest: |no .*? at all; newest: |top entry: )", item)
+    return m.group(1) if m else item
+
+
 def _batch():
     """The PostToolBatch hook's module: lesson L2 and what came after its note."""
     spec = importlib.util.spec_from_file_location(
@@ -1236,7 +1244,7 @@ def main() -> int:
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     if since is not None:         # without a session start, an entry cannot be called this one's
-        stale_names = {f.split(" (")[0] for f in stale}
+        stale_names = {_folder_of(f) for f in stale}
         _count(unasked=sum(1 for f in GREW if f not in stale_names
                            and (root / f / name).stat().st_mtime >= since))
     open_ended = [f for f in undefined(root, name) if f not in asked]
@@ -1245,8 +1253,8 @@ def main() -> int:
         typed = hand_typed_hours(root, name, since=since)
     except Exception:
         typed = []            # a lesson that cannot count must not cost the session
-    typed = [t for t in typed if not any(t.startswith(f.split(" (")[0] + ":") for f in ahead)]
-    flagged = {f.split(" (")[0] for f in stale}
+    typed = [t for t in typed if not any(t.startswith(_folder_of(f) + ":") for f in ahead)]
+    flagged = {_folder_of(f) for f in stale}
     try:
         thin = [h for h in hollow_entries(root, name, since)
                 if h[0] not in flagged and f"hollow:{h[0]}:{h[1]}" not in asked]
@@ -1319,7 +1327,7 @@ def main() -> int:
             "If the change was incidental and genuinely needs no entry, say so in one "
             "line and finish.")
         _count(handed_back=len(stale))
-        _remember(session, _already_asked(session) | {"blocked:" + f.split(" (")[0] for f in stale})
+        _remember(session, _already_asked(session) | {"blocked:" + _folder_of(f) for f in stale})
     if open_ended:
         listed = "\n".join(f"  - {folder}" for folder in open_ended)
         parts.append(
