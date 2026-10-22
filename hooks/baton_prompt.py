@@ -28,7 +28,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 from pathlib import Path
 
 MAX_TASKS = 3
@@ -187,8 +186,25 @@ def touched(root: Path, logbook: str, prompt: str) -> list[tuple[str, str, str]]
     return found
 
 
+def _state_dir() -> Path:
+    """Per-session state (ZA-OPRAVYANE row 53): `sessions/` beside Baton's other state --
+    ${CLAUDE_PLUGIN_DATA} for the plugin, next to the hooks for install.sh. It was the shared temp
+    folder, written 0644, holding task names and entry headings any local user could read."""
+    base = os.environ.get("BATON_STATE_DIR")
+    return Path(base) if base else _local_file("sessions")
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Write a state file only its owner can read (0600), a file an older version left too."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with os.fdopen(os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w",
+                   encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(path, 0o600)
+
+
 def _state(session: str) -> Path:
-    base = Path(os.environ.get("BATON_STATE_DIR") or tempfile.gettempdir())
+    base = _state_dir()
     safe = "".join(ch for ch in session if ch.isalnum() or ch in "-_")[:80] or "nosession"
     return base / f"baton-prompt-{safe}.json"
 
@@ -252,8 +268,7 @@ def restart_due(session: str, tokens: int) -> bool:
         said = -1
     try:
         if level != said:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(level), "utf-8")
+            _write_private(path, json.dumps(level))
     except Exception:
         pass
     return level > said
@@ -330,9 +345,7 @@ def main() -> int:
     sys.stdout.flush()
     if new:
         try:
-            path = _state(session)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(sorted(seen | {t[0] for t in new})), "utf-8")
+            _write_private(_state(session), json.dumps(sorted(seen | {t[0] for t in new})))
         except Exception:
             pass
     return 0

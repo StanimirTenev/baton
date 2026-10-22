@@ -20,7 +20,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -976,8 +975,25 @@ def fix_check(name: str, now: datetime | None = None) -> None:
         pass          # counting is a courtesy; never a reason to fail the session
 
 
+def _state_dir() -> Path:
+    """Per-session state (ZA-OPRAVYANE row 53): `sessions/` beside Baton's other state --
+    ${CLAUDE_PLUGIN_DATA} for the plugin, next to the hooks for install.sh. It was the shared temp
+    folder, written 0644, holding task names and entry headings any local user could read."""
+    base = os.environ.get("BATON_STATE_DIR")
+    return Path(base) if base else _local_file("sessions")
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Write a state file only its owner can read (0600), a file an older version left too."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with os.fdopen(os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w",
+                   encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(path, 0o600)
+
+
 def _state(session: str) -> Path:
-    base = Path(os.environ.get("BATON_STATE_DIR") or tempfile.gettempdir())
+    base = _state_dir()
     safe = "".join(ch for ch in session if ch.isalnum() or ch in "-_")[:80] or "nosession"
     return base / f"baton-stop-{safe}.json"
 
@@ -991,9 +1007,11 @@ def _already_asked(session: str) -> set:
 
 def _remember(session: str, asked: set) -> None:
     try:
-        path = _state(session)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(sorted(asked)), "utf-8")
+        _write_private(_state(session), json.dumps(sorted(asked)))
+        # The temp folder was cleaned by the system; this one is not. A week is past any session.
+        for old in _state_dir().glob("baton-*.json"):
+            if time.time() - old.stat().st_mtime > 7 * 86400:
+                old.unlink()
     except Exception:
         pass          # state is a courtesy; never a reason to fail the session
 

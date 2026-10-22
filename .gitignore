@@ -9,3 +9,4 @@ hooks/baton.beat.*
 hooks/baton.board.html
 hooks/baton.memlint.json
 hooks/baton.tests.*
+hooks/sessions/

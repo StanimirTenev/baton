@@ -20,7 +20,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -144,7 +143,10 @@ def _ss():
 # turn ending first (Stop), counts `no_check_after`. A proxy, not proof: the second read may have
 # been planned anyway, and a sentence written without one may be right.
 def _pending(session: str) -> Path:
-    base = Path(os.environ.get("BATON_STATE_DIR") or tempfile.gettempdir())
+    # Not the shared temp folder (row 53): beside Baton's other state, as in Stop and the prompt hook.
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    base = Path(os.environ.get("BATON_STATE_DIR")
+                or (Path(data) if data else Path(__file__).resolve().parent) / "sessions")
     safe = "".join(ch for ch in session if ch.isalnum() or ch in "-_")[:80] or "nosession"
     return base / f"baton-l2-{safe}.json"
 
@@ -201,8 +203,11 @@ def main() -> int:
         ss.lesson_event(state, "L2", "shown", now)
         ss.lessons_save(state)
         try:
-            _pending(session).parent.mkdir(parents=True, exist_ok=True)
-            _pending(session).write_text(now.isoformat(timespec="seconds"), "utf-8")
+            path = _pending(session)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with os.fdopen(os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w",
+                           encoding="utf-8") as f:
+                f.write(now.isoformat(timespec="seconds"))
         except OSError:
             pass          # the measure is a courtesy; the note still goes out
         what = " and ".join(dict.fromkeys("an empty result" if k == "empty" else
