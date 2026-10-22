@@ -447,7 +447,8 @@ the script-installed hooks):
 {"tests": {"my-task": {"command": "python3 -m pytest -q tests", "cwd": "~/src/my-repo", "timeout_s": 600}}}
 ```
 
-`my-task` is the task folder's name; `cwd` defaults to the task folder, `timeout_s` to 600. When
+`my-task` is the task folder's name; `cwd` defaults to the task folder, `timeout_s` to 600,
+`env` (a list of variable names to pass on) to none. When
 the newest entry this session wrote in that folder says tests pass, Stop starts the pinned
 command **in the background, after the turn** -- detached, its output to
 `baton.tests.<folder>.log` next to the settings, under its own budget -- and returns at once; it
@@ -463,8 +464,12 @@ board for the agent to say in one line.
 **A run that failed or ran no tests while the entry says tests pass counts as L4 caught.**
 
 **What runs, and from where:** only the string under `"tests"` in `baton.local.json`, through
-the shell (`sh -c`; `cmd /c` on Windows), as you, with the session's environment minus
-Baton's own variables (`BATON_*`, `CLAUDE_PLUGIN_*`). Never a
+the shell (`sh -c`; `cmd /c` on Windows), as you, with **only a short list of the session's
+environment variables** (since v3.22.0, ZA-OPRAVYANE row 47, after Bernard Haddad): the board's
+list (`BOARD_ENV` -- path, home, temp, locale, display) without `CLAUDE_PLUGIN_DATA`, plus `USER`,
+`LOGNAME`, `USERNAME`, `SHELL`, `TERM`, `VIRTUAL_ENV`, plus the names the pin lists under `"env"`
+(`"env": ["DATABASE_URL"]` -- names, never values). Before, it got everything except Baton's own
+variables, and three made-up identity variables (email, org ID, OAuth token) reached it. Never a
 command from a logbook, from the model's words, from the repository (AGENTS.md, a Makefile) or
 from the hook's arguments: the runner is told which folder, and reads the command itself. With
 nothing pinned, nothing runs and L4 is as before. A pin without a `command` is said once and

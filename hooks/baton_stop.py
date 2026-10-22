@@ -726,6 +726,11 @@ def tests_entries(root: Path, name: str, since: float | None) -> list[tuple]:
 # the turn in the background, under its own budget, judged by its exit code. Never one from a
 # logbook, the model or the repository: the runner is given a folder, and reads the command itself.
 TESTS_TIMEOUT_S = 600
+# What the pinned command gets from the session's environment (ZA-OPRAVYANE row 47, Bernard Haddad,
+# 22.10): the board's list (BOARD_ENV, without CLAUDE_PLUGIN_DATA), what a shell and a virtualenv
+# expect, and the names the pin lists under "env". It was everything but BATON_* and
+# CLAUDE_PLUGIN_*: three made-up identity variables (email, org ID, OAuth token) reached it intact.
+RUN_ENV = ("USER", "LOGNAME", "USERNAME", "SHELL", "TERM", "VIRTUAL_ENV")
 
 
 def pinned_tests(folder: Path) -> tuple[dict | None, str | None]:
@@ -746,8 +751,11 @@ def pinned_tests(folder: Path) -> tuple[dict | None, str | None]:
     budget = pin.get("timeout_s", TESTS_TIMEOUT_S)
     if isinstance(budget, bool) or not isinstance(budget, (int, float)) or budget <= 0:
         return None, f"`tests` → `{folder.name}` → `timeout_s` is not a number of seconds"
+    names = pin.get("env", [])
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        return None, f"`tests` → `{folder.name}` → `env` is not a list of variable names"
     cwd = Path(str(pin.get("cwd") or folder)).expanduser()
-    return {"command": pin["command"], "cwd": str(cwd), "timeout_s": budget}, None
+    return {"command": pin["command"], "cwd": str(cwd), "timeout_s": budget, "env": names}, None
 
 
 def pinned_runs(root: Path, name: str, since: float | None, session: str) -> tuple[list, set]:
@@ -815,9 +823,10 @@ def run_tests(folder_arg: str) -> int:
                 "started": rec.get("started") or datetime.now().isoformat()})
     t0, code, verdict = time.time(), None, None
     group = {"creationflags": 0x00000200} if os.name == "nt" else {"start_new_session": True}
-    # The session's environment without Baton's own: run as the pin, Baton's suite read the hook's
+    # Only RUN_ENV's names, never Baton's own: run as the pin, Baton's suite read the hook's
     # CLAUDE_PLUGIN_DATA and BATON_HOME instead of its own, and 12 tests failed (22.10).
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("BATON_", "CLAUDE_PLUGIN_"))}
+    allowed = (set(_ss().BOARD_ENV) - {"CLAUDE_PLUGIN_DATA"}) | set(RUN_ENV) | set(pin["env"])
+    env = {k: v for k, v in os.environ.items() if k in allowed}
     try:
         with open(log, "wb") as out:
             proc = subprocess.Popen(pin["command"], shell=True, cwd=pin["cwd"], env=env,

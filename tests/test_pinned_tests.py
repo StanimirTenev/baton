@@ -161,11 +161,42 @@ def test_the_command_does_not_get_batons_own_variables(tmp_path):
     assert rec["verdict"] == "passed" and rec["line"] == "[]", rec
 
 
+def test_the_command_gets_an_allowlist_not_the_session(tmp_path, monkeypatch):
+    """ZA-OPRAVYANE row 47 (Bernard Haddad, 22.10, said publicly): the command got the session's
+    environment minus Baton's own, and three made-up identity variables reached it intact. Now the
+    board's list (BOARD_ENV) and a shell's basics, plus names the pin lists under "env"."""
+    for k in ("PROBE_EMAIL", "PROBE_ORG_ID", "PROBE_OAUTH_TOKEN"):
+        monkeypatch.setenv(k, "made-up")
+    probe = "import os; print(sorted(k for k in os.environ if k.startswith('PROBE_')), 'PATH' in os.environ)"
+    _setup(tmp_path, _entry(), {"login": {"command": f"{PY} -c \"{probe}\"", "cwd": str(tmp_path)}})
+    _stop(tmp_path)
+    rec = _result(tmp_path)
+    assert rec["verdict"] == "passed" and rec["line"] == "[] True", rec
+
+
+def test_a_name_the_pin_lists_is_passed(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROBE_ORG_ID", "made-up")
+    monkeypatch.setenv("PROBE_OAUTH_TOKEN", "made-up")
+    probe = "import os; print(sorted(k for k in os.environ if k.startswith('PROBE_')))"
+    _setup(tmp_path, _entry(), {"login": {"command": f"{PY} -c \"{probe}\"", "cwd": str(tmp_path),
+                                          "env": ["PROBE_ORG_ID"]}})
+    _stop(tmp_path)
+    rec = _result(tmp_path)
+    assert rec["verdict"] == "passed" and rec["line"] == "['PROBE_ORG_ID']", rec
+
+
+def test_a_pin_whose_env_is_not_a_list_of_names_is_said(tmp_path):
+    _setup(tmp_path, _entry(), {"login": {"command": "true", "env": "PROBE_ORG_ID"}})
+    said = _stop(tmp_path)[0].get("systemMessage", "")
+    assert "`env`" in said and "nothing was run" in said, said
+
+
 def test_pytest_exit_5_is_no_tests_ran_not_passed(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     _setup(tmp_path, _entry(), {"login": {"command": f"{PY} -m pytest -q -p no:cacheprovider "
-                                                     "-k zzz_none .", "cwd": str(empty)}})
+                                                     "-k zzz_none .", "cwd": str(empty),
+                                          "env": ["PYTHONUSERBASE"]}})    # HOME moved (row 47)
     _stop(tmp_path)
     rec = _result(tmp_path, wait=30)
     assert rec["exit"] == 5 and rec["verdict"] == "no tests ran", rec
