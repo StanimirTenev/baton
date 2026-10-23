@@ -305,3 +305,17 @@ def test_no_pin_means_l4_as_before(tmp_path):
     assert first.get("reason", "").startswith("Baton, lesson L4")
     assert "pinned" not in first["reason"]
     assert "systemMessage" not in first
+
+
+def test_stop_gives_the_runner_the_session_start_and_the_last_counts(tmp_path):
+    """Rows 52 and 77: the runner needs when the session began (test files edited since) and the
+    last run's counts (fewer tests, more skipped); Stop rewrote the record without them."""
+    cmd = f"{PY} -c \"print('3 passed in 0.1s')\""
+    _setup(tmp_path, _entry(), {"login": {"command": cmd, "cwd": str(tmp_path)}})
+    (tmp_path / "data" / "baton.tests.login.json").write_text(json.dumps(
+        {"entry": "## older", "state": "done", "command": cmd, "counts": {"total": 5, "set_aside": 0}}),
+        "utf-8")
+    _stop(tmp_path)
+    rec = _result(tmp_path)
+    assert isinstance(rec.get("since"), float), rec
+    assert rec["verdict"] == "passed, with 2 fewer tests than the last run (5 -> 3)", rec

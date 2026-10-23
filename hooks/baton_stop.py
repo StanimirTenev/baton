@@ -886,8 +886,11 @@ def pinned_runs(root: Path, name: str, since: float | None, session: str) -> tup
                     continue                      # one run at a time; the next Stop starts this one
             except (KeyError, TypeError, ValueError):
                 pass
+        last = {"counts": rec["counts"]} if rec.get("counts") and rec.get("command") == pin["command"] \
+            else {}                               # the last run's counts: row 77's baseline
         _ss().tests_save(path, {"name": folder.name, "folder": str(folder), "entry": heading,
-                                "state": "running", "started": datetime.now().isoformat(), **pin})
+                                "state": "running", "started": datetime.now().isoformat(),
+                                "since": since, **last, **pin})
         detach = ({"creationflags": 0x00000008 | 0x00000200} if os.name == "nt"   # DETACHED, NEW_GROUP
                   else {"start_new_session": True})
         # Not this process's pipes: Claude Code waits for them to close, and would wait for the tests.
@@ -918,6 +921,74 @@ def ran_nothing(text: str) -> bool:
     return bool(_NO_TESTS.search(text)) or bool(_GO_NONE.search(text) and not _GO_RAN.search(text))
 
 
+# A pass with the failing test skipped, xfailed or deleted is exit 0 too (ZA-OPRAVYANE row 77; a
+# post of 01.10: "An AI coding agent hit a failing test, deleted it, and reported the task done").
+# The runner keeps how many tests ran and how many were set aside, and compares them with the last
+# run of the same command: fewer tests, or more set aside, is not "passed". The first run has no
+# last run: a test deleted before it is not seen, a skip is said.
+_PYTEST_COUNT = re.compile(r"(\d+) (passed|failed|skipped|xfailed|xpassed|errors?)\b")
+
+
+def test_counts(text: str) -> dict | None:
+    """{"total", "set_aside"} from what pytest, unittest, jest or `go test -v` printed; None."""
+    m = list(re.finditer(r"(?m)^Ran (\d+) tests? in ", text))           # unittest
+    if m:
+        tail = text[m[-1].end():]
+        aside = sum(int(n) for n in re.findall(r"(?:skipped|expected failures)=(\d+)", tail))
+        return {"total": int(m[-1].group(1)), "set_aside": aside}
+    m = list(re.finditer(r"(?m)^Tests:\s+(.*)$", text))                    # jest
+    if m:
+        got = {w: int(n) for n, w in re.findall(r"(\d+) (\w+)", m[-1].group(1))}
+        if "total" in got:
+            return {"total": got["total"], "set_aside": got.get("skipped", 0) + got.get("todo", 0)}
+    go = {k: len(re.findall(rf"(?m)^\s*--- {k}: ", text)) for k in ("PASS", "FAIL", "SKIP")}
+    if any(go.values()):                                                   # go test -v
+        return {"total": sum(go.values()), "set_aside": go["SKIP"]}
+    for line in [ln for ln in text.splitlines() if ln.strip()][-5:][::-1]:  # pytest's summary
+        got = {}
+        for n, w in _PYTEST_COUNT.findall(line):
+            got[w.rstrip("s") if w.startswith("error") else w] = int(n)
+        if got:
+            return {"total": sum(got.values()), "set_aside": got.get("skipped", 0) + got.get("xfailed", 0)}
+    return None
+
+
+def passed_as(counts: dict | None, last: dict | None) -> str:
+    """The verdict of a run that exited 0 and ran tests, against the last run's counts."""
+    if not counts:
+        return "passed"
+    if last and counts["total"] < last.get("total", 0):
+        return (f"passed, with {last['total'] - counts['total']} fewer tests than the last run "
+                f"({last['total']} -> {counts['total']})")
+    if counts["set_aside"] > (last.get("set_aside", 0) if last else 0):
+        return (f"passed, with {counts['set_aside']} skipped or xfailed"
+                + (f" (the last run: {last.get('set_aside', 0)})" if last else ""))
+    return "passed"
+
+
+# Row 52 (Martin Gonella, 22.10): an agent that rewrites the expected value makes the pinned run
+# pass. Not a verdict -- a test edited may be a test fixed -- but said beside the result: the test
+# files saved in the pin's folder since the session began.
+_TEST_FILE = re.compile(r"^(?:test_.*\.py|.*_test\.(?:py|go)|conftest\.py|.*\.(?:test|spec)\.[cm]?[jt]sx?)$")
+
+
+def edited_tests(cwd: Path, since: float) -> list[str]:
+    out, count = [], 0
+    for dirpath, dirnames, filenames in os.walk(cwd):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+        for name in filenames:
+            count += 1
+            if count > WALK_CAP:
+                return sorted(out)
+            full = os.path.join(dirpath, name)
+            try:
+                if _TEST_FILE.match(name) and os.stat(full).st_mtime >= since:
+                    out.append(os.path.relpath(full, cwd).replace(os.sep, "/"))
+            except OSError:
+                continue
+    return sorted(out)
+
+
 def run_tests(folder_arg: str) -> int:
     """The background runner (`baton_stop.py --run-tests <folder>`). Runs the command pinned for
     that folder -- read here, from baton.local.json, never from the arguments -- in its own process
@@ -933,6 +1004,7 @@ def run_tests(folder_arg: str) -> int:
     except Exception:
         rec = {}
     log = path.with_suffix(".log")
+    last = rec.get("counts") if rec.get("command") == pin["command"] else None
     rec.update({"name": folder.name, "folder": str(folder), **pin,
                 "started": rec.get("started") or datetime.now().isoformat()})
     t0, code, verdict = time.time(), None, None
@@ -966,8 +1038,17 @@ def run_tests(folder_arg: str) -> int:
     except OSError:
         text = ""
     line = next((ln.strip() for ln in reversed(text.splitlines()) if ln.strip()), "")[:200]
+    counts = test_counts(text)
     if verdict is None:
-        verdict = ("no tests ran" if ran_nothing(text) else "passed" if code == 0 else "failed")
+        verdict = ("no tests ran" if ran_nothing(text) else passed_as(counts, last) if code == 0
+                   else "failed")
+    if counts:
+        rec["counts"] = counts
+    if isinstance(rec.get("since"), (int, float)):
+        try:
+            rec["tests_edited"] = edited_tests(Path(pin["cwd"]), rec["since"])
+        except Exception:
+            pass
     rec.update({"state": "done", "finished": datetime.now().isoformat(),
                 "seconds": round(time.time() - t0, 1), "exit": None if verdict == "timed out"
                 else code, "verdict": verdict, "line": line, "log": str(log), "reported": False})

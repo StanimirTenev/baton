@@ -477,7 +477,16 @@ vitest's "No test files found", and `go test` when every package is `[no test fi
 `[no tests to run]` -- whatever the code (`go test` exits 0 there, jest 1); otherwise 0 passed,
 any other code failed; over the budget, timed out (the process group is killed); a `cwd` that is
 not there, could not start. Another runner that exits 0 having run nothing is still "passed": the
-output is read for these runners' sentences only. The record
+output is read for these runners' sentences only. **A pass is not "passed" when the failing test was set
+aside** (since v3.23.0, row 77): the runner keeps how many tests ran and how many were skipped or
+xfailed (pytest's summary, unittest's `Ran N tests` and `OK (skipped=N)`, jest's `Tests:` line,
+`go test -v`'s `--- SKIP`), and compares them with the **last run of the same command**: fewer
+tests is "passed, with N fewer tests than the last run"; more skipped or xfailed, "passed, with N
+skipped or xfailed". Both are said as "could not say", not as caught. The first run has nothing to
+compare with: a skip is said, a test deleted before it is not seen. And **test files saved since
+the session began** in the pin's folder (`test_*.py`, `*_test.py`, `*_test.go`, `conftest.py`,
+`*.test.js`, `*.spec.ts`...) are named beside the result (row 52, after Martin Gonella): a pass
+after the expected value was rewritten shows the tests as they now stand, not the claim. The record
 (`baton.tests.<folder>.json`) keeps the command, the folder it ran in, the exit code, the
 duration and the last line it printed. The next Stop says the result beside the claim, once, in a
 message the agent does not write; if the session ended first, the next SessionStart puts it on the

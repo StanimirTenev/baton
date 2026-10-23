@@ -519,6 +519,11 @@ def tests_results(now: datetime | None = None) -> list[str]:
             when = str(rec.get("finished", ""))[11:16]
             said = (f"{tests_verdict(rec)} in {rec.get('seconds', '?')} s at {when} -- {cmd} "
                     f"printed: {rec.get('line') or '(nothing)'}")
+            edited = rec.get("tests_edited") or []
+            if edited:        # row 52: a pass after the tests were edited proves the edited tests
+                said += ("; test files saved in that folder since the session began: "
+                         + ", ".join(edited[:5]) + (", ..." if len(edited) > 5 else "")
+                         + " -- a pass shows the tests as they now stand")
             if rec.get("verdict") == "passed":
                 out.append(f"Baton, lesson L4: the pinned tests for {folder} agree with the entry "
                            f"\"{entry}\": {said}.")
