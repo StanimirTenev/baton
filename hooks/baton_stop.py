@@ -1217,9 +1217,11 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        payload = {}
-    if not isinstance(payload, dict):     # `[]`, `null`: no payload, not a crash (row 67)
-        payload = {}
+        payload = None
+    # Broken JSON, `[]`, `null`: no payload, not a crash (row 67) -- and no run (row 70). Read as
+    # `{}` it had no session start, so every folder's old debt was handed back to this turn.
+    if not isinstance(payload, dict):
+        return 0
     try:      # an L2 note shown this turn and no tool call after it: the turn ended (row 40)
         _batch().followed(str(payload.get("session_id") or ""), None)
     except Exception:

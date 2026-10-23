@@ -9,6 +9,7 @@ shape is no payload, and a tool call of another shape is skipped.
 from __future__ import annotations
 
 import json
+import time
 import os
 import subprocess
 import sys
@@ -59,3 +60,21 @@ def test_a_good_call_beside_a_bad_one_still_counts(tmp_path):
     out = _run(tmp_path, "baton_batch",
                json.dumps({"session_id": "s", "tool_calls": [None, "x", call]}).encode())
     assert "lesson L2" in out.stdout.decode("utf-8")
+
+
+@pytest.mark.parametrize("raw", [b"[]", b"null", b"{", b""], ids=["list", "null", "broken", "empty"])
+def test_stop_without_an_object_runs_nothing(tmp_path, raw):
+    """ZA-OPRAVYANE row 70 (22.10): Stop read such stdin as `{}` and went on -- no session start,
+    so every folder's work older than this session was handed back to this turn."""
+    folder = tmp_path / "tasks" / "old-debt"
+    folder.mkdir(parents=True)
+    (folder / "LOGBOOK.md").write_text("## 2026-10-01 10:00 — start\n", "utf-8")
+    work = folder / "draft.md"
+    work.write_text("x\n", "utf-8")
+    t = time.time() - 3600
+    os.utime(folder / "LOGBOOK.md", (t - 60, t - 60))
+    os.utime(work, (t, t))
+    out = _run(tmp_path, "baton_stop", raw)
+    assert out.stdout == b"", out.stdout
+    # The control: an object without a transcript is still read as before.
+    assert b'"block"' in _run(tmp_path, "baton_stop", b"{}").stdout
