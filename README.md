@@ -1493,7 +1493,7 @@ each of those confidently and uselessly. Use it to order reading and to cross-ch
 against a document; not to decide what the claim should be.
 
 ⚠️ Measured on one kind of candidate, n=40. A threshold does not transfer — measure it again
-on arXiv rows or code hits, the same way `baton-pregled` says.
+on arXiv rows or code hits, the same way `baton_review` says.
 
 ## The corpus, and saying what is in it
 
