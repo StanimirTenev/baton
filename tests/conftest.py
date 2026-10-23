@@ -29,3 +29,5 @@ def _baton_state_outside_the_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_LESSONS_STATE", str(tmp_path / ".baton.lessons.json"))
     # The memory lint's remembered lines (row 29), the same way.
     monkeypatch.setenv("BATON_MEMLINT_STATE", str(tmp_path / ".baton.memlint.json"))
+    # The doctor reads the machine's managed settings (row 78): not this machine's, in a test.
+    monkeypatch.setenv("BATON_MANAGED_DIR", str(tmp_path / ".managed"))

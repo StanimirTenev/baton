@@ -4,7 +4,8 @@ crashed three of the four hooks.
 SessionStart checked `isinstance(payload, dict)`; Stop, UserPromptSubmit and PostToolBatch called
 `payload.get(...)` straight after json.load -- and PostToolBatch `c.get` on each tool call. Each
 exited 0 with a `.crashed` marker, so that turn's check did not happen. Now a payload of another
-shape is no payload, and a tool call of another shape is skipped.
+shape is no payload, and a tool call of another shape is skipped. Since row 70 (v3.23.0) Stop does
+not go on with no payload at all: it exits.
 """
 from __future__ import annotations
 
