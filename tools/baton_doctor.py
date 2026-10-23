@@ -163,9 +163,66 @@ def lesson_fixes(where: Path) -> str | None:
             "tool calls):\n" + "\n".join(lines))
 
 
+# `"disableAllHooks": true` in any settings file Claude Code reads switches every hook off, Baton's
+# with them, and the heartbeats of the last run still said ✅ Running (ZA-OPRAVYANE row 78, after
+# Amir Raza and Kumar V., 23.10: a line an agent can write silences the hook that watches it).
+# The value that counts is the one left after settings precedence: managed, then project local,
+# then shared project, then user (code.claude.com/docs/en/hooks, "Disable or remove hooks";
+# docs/en/settings, "Settings precedence"). `--settings` on the command line sits between managed
+# and local and cannot be seen from here.
+SCOPES = {"user": 0, "project": 1, "local": 2, "managed": 3}
+MANAGED = {"darwin": "/Library/Application Support/ClaudeCode",
+           "win32": r"C:\Program Files\ClaudeCode"}
+
+
+def settings_files() -> list:
+    """(scope, path) of each settings file Claude Code reads for a session started here."""
+    claude = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    here = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    # The local file sits at the repository root in a git repository (Claude Code v2.1.211+).
+    roots = [here] + [p for p in (here, *here.parents) if (p / ".git").exists()][:1]
+    out = [("user", claude / "settings.json")]
+    for root in dict.fromkeys(roots):
+        out += [("project", root / ".claude" / "settings.json"),
+                ("local", root / ".claude" / "settings.local.json")]
+    managed = Path(os.environ.get("BATON_MANAGED_DIR") or MANAGED.get(sys.platform, "/etc/claude-code"))
+    out.append(("managed", managed / "managed-settings.json"))
+    try:
+        out += [("managed", f) for f in sorted((managed / "managed-settings.d").glob("*.json"))]
+    except OSError:
+        pass
+    return out
+
+
+def hooks_disabled() -> tuple[list, bool]:
+    """Every file that sets disableAllHooks, with its value; and whether the value in force is true."""
+    found = []
+    for scope, path in settings_files():
+        try:
+            data = json.loads(path.read_text("utf-8-sig"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and "disableAllHooks" in data:
+            found.append((scope, path, data["disableAllHooks"]))
+    if not found:
+        return [], False
+    top = max(SCOPES[s] for s, _, _ in found)
+    return found, any(v is True for s, _, v in found if SCOPES[s] == top)
+
+
 def main() -> int:
     where, now = folder(), datetime.now()
     print(f"Baton doctor -- heartbeats in {where}\n")
+    found, disabled = hooks_disabled()
+    if disabled:
+        print("🔴 ALL HOOKS ARE SWITCHED OFF: \"disableAllHooks\": true is the value in force, so\n"
+              "   no Baton hook runs -- the heartbeats below are from before it was set.")
+    for scope, path, value in found:
+        print(f"   disableAllHooks: {json.dumps(value)} in {path} ({scope})")
+    if found:
+        print("   (Precedence: managed > project local > shared project > user. A --settings flag\n"
+              "   on the command line is not visible here.)\n" + ("   Remove the line, or set it to "
+              "false, and start a new session.\n" if disabled else ""))
     seen = {stem: last_run(where, stem) for stem, _, _ in HOOKS}
     beat = {stem: order(where / f"baton.beat.{stem}", seen[stem]) for stem, _, _ in HOOKS}
     crashes = {stem: c for stem, _, _ in HOOKS for c in [crashed(where, stem)]
@@ -199,6 +256,8 @@ def main() -> int:
             mark, state = "⏳", "not yet"
         else:
             mark, state = "❌", "NEVER RAN"
+        if disabled and mark != "❌":
+            mark = "⛔"            # whatever it did last, it does not run now
         print(f"  {mark} {event:<17} {state}   -- runs {when}")
     print()
     counted = handback(where)
@@ -223,6 +282,8 @@ def main() -> int:
               "   echo '{}' | python3 <the hooks folder>/<hook>.py")
         return 1
     if killed:
+        return 1
+    if disabled:
         return 1
     if not any(seen.values()):     # nothing finished, and nothing crashed (said above)
         print("🔴 Installed but not running: no Baton hook has left a heartbeat here.\n"

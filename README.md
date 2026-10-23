@@ -758,6 +758,18 @@ folder or next to the script-installed hooks), and `/baton-doctor` (`/baton:bato
 plugin) shows when each last finished. No heartbeat at all: **installed but not running**. It reads
 only and sends nothing.
 
+**Switched off** (since v3.23.0, ZA-OPRAVYANE row 78, after Amir Raza and Kumar V.): one line,
+`"disableAllHooks": true`, in a settings file Claude Code reads turns every hook off, Baton's too,
+and the doctor read the last heartbeats and said ✅. It now reads that key in the user file
+(`~/.claude/settings.json`, or under `CLAUDE_CONFIG_DIR`), the project's `.claude/settings.json`
+and `.claude/settings.local.json` (in the folder it is run from, and at its git repository's
+root), and the managed `managed-settings.json` and `managed-settings.d/*.json`; names every file
+that sets it; takes the value precedence leaves (managed > local > project > user); and when it is
+true, marks each hook ⛔, says **ALL HOOKS ARE SWITCHED OFF** and exits 1. It cannot see a
+`--settings` flag on the command line, nor an MDM or server-managed policy. An agent that can
+write a settings file can still switch Baton off; the doctor makes that visible when asked, it
+does not prevent it.
+
 **A crash is shown, not a ✅** (since v3.20.0, ZA-OPRAVYANE row 36). Until then the heartbeat was
 written before the hook did its work, so a hook that crashed still showed ✅ "last ran just now"
 -- the health check proved the hook started, not that it finished. Now the heartbeat is written

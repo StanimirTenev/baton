@@ -69,3 +69,61 @@ def test_doctor_finds_the_plugin_heartbeats_when_the_variable_arrives_empty(tmp_
                          capture_output=True, text=True, env=env)
     assert out.returncode == 0, out.stdout
     assert "baton-baton" in out.stdout and "Running" in out.stdout
+
+
+def _disabled(tmp_path, files: dict, cwd: str = "proj"):
+    """ZA-OPRAVYANE row 78 (Amir Raza, Kumar V., 23.10): `"disableAllHooks": true` silences every
+    hook and the doctor said ✅ Running from the heartbeats of the last run. `files` maps a path
+    under tmp_path to that file's settings."""
+    data = tmp_path / "data"
+    subprocess.run([sys.executable, str(ROOT / "hooks" / "baton_session_start.py")],
+                   input=b"{}", capture_output=True, env=_env(tmp_path, data))
+    proj = tmp_path / "proj"
+    proj.mkdir(exist_ok=True)
+    for rel, body in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(json.dumps(body), "utf-8")
+    env = dict(_env(tmp_path, data), CLAUDE_CONFIG_DIR=str(tmp_path / "home" / ".claude"),
+               BATON_MANAGED_DIR=str(tmp_path / "managed"))
+    env.pop("CLAUDE_PROJECT_DIR", None)
+    (tmp_path / cwd).mkdir(parents=True, exist_ok=True)
+    return subprocess.run([sys.executable, str(ROOT / "tools" / "baton_doctor.py")], cwd=tmp_path / cwd,
+                          capture_output=True, text=True, env=env)
+
+
+def test_switched_off_in_user_settings_is_said_and_not_running(tmp_path):
+    out = _disabled(tmp_path, {"home/.claude/settings.json": {"disableAllHooks": True}})
+    assert out.returncode == 1, out.stdout
+    assert "SWITCHED OFF" in out.stdout and "settings.json (user)" in out.stdout
+    assert "✅" not in out.stdout and "⛔ SessionStart" in out.stdout
+
+
+def test_switched_off_in_local_settings(tmp_path):
+    out = _disabled(tmp_path, {"proj/.claude/settings.local.json": {"disableAllHooks": True}})
+    assert out.returncode == 1 and "(local)" in out.stdout, out.stdout
+
+
+def test_a_project_false_overrides_a_user_true(tmp_path):
+    out = _disabled(tmp_path, {"home/.claude/settings.json": {"disableAllHooks": True},
+                               "proj/.claude/settings.json": {"disableAllHooks": False}})
+    assert out.returncode == 0 and "SWITCHED OFF" not in out.stdout, out.stdout
+    assert "disableAllHooks: true" in out.stdout and "disableAllHooks: false" in out.stdout
+
+
+def test_managed_true_wins_over_a_local_false(tmp_path):
+    out = _disabled(tmp_path, {"proj/.claude/settings.local.json": {"disableAllHooks": False},
+                               "managed/managed-settings.d/10-policy.json": {"disableAllHooks": True}})
+    assert out.returncode == 1 and "(managed)" in out.stdout, out.stdout
+
+
+def test_nothing_set_is_not_mentioned(tmp_path):
+    out = _disabled(tmp_path, {"home/.claude/settings.json": {"theme": "dark"}})
+    assert out.returncode == 0 and "disableAllHooks" not in out.stdout, out.stdout
+
+
+def test_the_local_file_at_the_repository_root_from_a_subfolder(tmp_path):
+    """In a git repository Claude Code keeps the local file at the root, whatever the folder."""
+    (tmp_path / "proj" / ".git").mkdir(parents=True)
+    out = _disabled(tmp_path, {"proj/.claude/settings.local.json": {"disableAllHooks": True}},
+                    cwd="proj/src/deep")
+    assert out.returncode == 1 and "(local)" in out.stdout, out.stdout

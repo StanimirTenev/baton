@@ -27,6 +27,9 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
 
 ## Read it to the human
 
+- **🔴 ALL HOOKS ARE SWITCHED OFF** (since v3.23.0) — `"disableAllHooks": true` is in force in a
+  settings file the doctor names; no Baton hook runs, whatever the heartbeats say. Name the file
+  and ask the human whether it was meant; never remove the line without their yes.
 - **🔴 Installed but not running** — no hook left a heartbeat. Check `python3 --version` (3.8 or
   later) and, on Windows, `where bash`. A hook older than v3.12.0 leaves none either: a new
   session first, then ask again.
