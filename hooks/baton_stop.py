@@ -691,6 +691,72 @@ def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
     return out
 
 
+# The repository a task's code lives in (ZA-OPRAVYANE row 73; Rim Elouragini, 23.10: "the file is
+# a claim, the repo is the evidence"). Stop compares the task folder's files with its logbook; a
+# repository elsewhere was never looked at -- an entry "parser fixed and committed", the repo with
+# no commit and an uncommitted change newer than the entry, and Stop passed. The header's `code:`
+# field (`kod:`) already names it, as `<path>@<ref>`. For each logbook this session wrote in, what
+# that repository holds newer than the logbook -- uncommitted files, commits -- is named to the
+# human, once a session per folder. Nothing is judged: a commit after the entry may be the one it
+# describes. Only folders written in this session: git on every `code:` repository at every Stop
+# would not fit its 20 s.
+CODE_GIT_TIMEOUT_S = 3
+
+
+def code_changes(root: Path, name: str, since: float | None) -> list[tuple]:
+    """(folder, repository, what is newer than the logbook) for the folders this session wrote in
+    whose header names a `code:` repository; `what` is None when git could not say."""
+    out = []
+    for folder, text, _top in _changed_tops(root, name, since):
+        try:
+            raw = str(_parser()(text).get("code", "")).strip()
+        except Exception:
+            continue
+        if not raw:
+            continue
+        repo = Path((raw.rpartition("@")[0] if "@" in raw else raw).strip()).expanduser()
+        if not (repo / ".git").exists():
+            continue                  # SessionStart says that one, every session (kod_drift)
+        logged = (folder / name).stat().st_mtime
+
+        def git(*args):
+            done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
+                                  timeout=CODE_GIT_TIMEOUT_S)
+            if done.returncode != 0:
+                raise OSError(done.stderr.strip()[:80])
+            return done.stdout
+        try:
+            files = []
+            for line in git("status", "--porcelain", "--untracked-files=all").splitlines():
+                rel = line[3:].split(" -> ")[-1].strip('"')
+                try:
+                    if os.stat(repo / rel).st_mtime > logged:
+                        files.append(rel)
+                except OSError:
+                    files.append(rel)                     # deleted since: newer by definition
+            commits = []
+            try:
+                log = git("log", "-10", "--format=%h %ct %s")
+            except OSError:
+                log = ""                                  # a repository with no commit yet
+            for line in log.splitlines():
+                sha, ct, subject = (line.split(" ", 2) + ["", ""])[:3]
+                if ct.isdigit() and int(ct) > logged:
+                    commits.append(f"{sha} {subject[:50]}")
+        except (OSError, subprocess.SubprocessError):
+            out.append((folder.name, repo, None))
+            continue
+        if files or commits:
+            what = []
+            if files:
+                what.append(f"{len(files)} uncommitted: " + ", ".join(files[:3])
+                            + (", ..." if len(files) > 3 else ""))
+            if commits:
+                what.append(f"{len(commits)} commit(s): " + "; ".join(commits[:3]))
+            out.append((folder.name, repo, "; ".join(what)))
+    return out
+
+
 # Lesson L3: a claim about what is public or private is checked against the source. 2026-10-17
 # 11:20, borsa-analiz: "`gh` says StanimirTenev/market-swarm is PUBLIC" -- private, always had
 # been, and no `gh` output in that session said otherwise; caught by the human two hours later,
@@ -1411,6 +1477,18 @@ def main() -> int:
         tested += more
     except Exception:
         tested, running = [], set()   # a run that cannot start must not cost the session
+    try:          # row 73: the repository a `code:` field names, beside the entry
+        code = [c for c in code_changes(root, name, since) if f"code:{c[0]}" not in asked]
+    except Exception:
+        code = []
+    if code:
+        said = "; ".join(
+            f"{f}: {repo} holds {what}" if what else f"{f}: git could not read {repo}"
+            for f, repo, what in code)
+        tested.append(f"Baton: the `code:` repository of a logbook written this session has changes "
+                      f"newer than the logbook -- {said}. The entry is the claim and the repository "
+                      "the evidence: read them side by side. (Said once a session per folder.)")
+        _remember(session, _already_asked(session) | {f"code:{c[0]}" for c in code})
     rewritten = [f for f in REWRITTEN if f"rewrite:{f}" not in asked]
     # Row 35: a folder the walk stopped in may hold newer work than it saw. Not a hand-back --
     # the agent cannot settle it in this turn -- but never a silent pass: said once a session.

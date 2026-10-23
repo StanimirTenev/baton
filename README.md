@@ -670,6 +670,16 @@ a commit that is not an ancestor — five different facts, five different lines.
 quietly passes on what it could not read is worse than no check, because it is then
 trusted.
 
+**At the end of a turn, too** (since v3.23.0, ZA-OPRAVYANE row 73, after Rim Elouragini: "the
+file is a claim, the repo is the evidence"). Stop compares a task folder's files with its logbook;
+a repository elsewhere was never looked at, so an entry saying "parser fixed and committed" passed
+while the repository held no commit and an uncommitted change newer than the entry. Now, for each
+logbook this session wrote in whose header has `code:`, Stop asks git what that repository holds
+newer than the logbook -- uncommitted files, commits -- and names them to the human, once a session
+per folder. Nothing is judged and nothing is handed back: a commit after the entry may be exactly
+the one it describes. Only folders written in this session, and git gets 3 s per call; a folder
+with no `code:` field, or one not written in this session, is not looked at.
+
 ## Shelf life
 
 A record does not go wrong by being old. It goes wrong by being old and still reading exactly
