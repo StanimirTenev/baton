@@ -30,8 +30,11 @@ PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
 # The board reaches the human as Markdown, which has no coloured text; the dot is the colour.
 PRIORITY_DOT = {"high": "🔴", "medium": "🟡", "low": "🟢"}
 
+# ISO or day first, as Stop's _HEADING reads them: `## 22.10.2026 15:30 — x` showed its whole
+# heading on the board, date and all, as if it had no title (ZA-OPRAVYANE row 69, 22.10).
 DATED_HEADING = re.compile(
-    r"^\d{4}-\d\d-\d\d(?:[ T]\d\d:\d\d)?\s*[\u2014\u2013-]\s*(?P<title>.+)$"
+    r"^(?:\d{4}-\d\d-\d\d|\d{1,2}\.\d{1,2}\.\d{4})(?:[ T]\d{1,2}:\d\d)?\s*[\u2014\u2013-]\s*"
+    r"(?P<title>.+)$"
 )
 
 
@@ -1496,7 +1499,10 @@ QUIET_SLACK = timedelta(minutes=15)   # an entry written just after the last mes
 QUIET_MAX_BYTES = 16 * 1024 * 1024
 _STAMP = re.compile(rb'"timestamp":\s*"([^"]+)"')
 _USER = re.compile(rb'"type":\s*"user"')
-_ENTRY_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}):(\d{2}))?", re.M)
+# Both forms (row 69): an entry headed `## 22.10.2026 15:30` in the session's time was not counted,
+# and the session was called quiet.
+_ENTRY_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})(?:[ T](\d{1,2}):(\d{2}))?",
+                            re.M)
 
 
 def _human(obj: dict) -> str | None:
@@ -1608,7 +1614,7 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
     for f in folders:
         for m in _ENTRY_HEADING.finditer(read_head(f / logbook)):
             try:
-                day = datetime.strptime(m.group(1), "%Y-%m-%d")
+                day = datetime.strptime(m.group(1), "%Y-%m-%d" if "-" in m.group(1) else "%d.%m.%Y")
             except ValueError:
                 continue
             if m.group(2):

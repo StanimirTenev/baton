@@ -50,7 +50,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-HEADING = re.compile(r'^## (\d{4}-\d{2}-\d{2})(?: (\d{2}):(\d{2}))?')
+# ISO or day first (row 69): `## 22.10.2026 15:30` is how the human writes a date elsewhere.
+DATE = r'(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})'
+HEADING = re.compile(r'^## (' + DATE + r')(?: (\d{2}):(\d{2}))?')
 AHEAD_MINUTES = 15       # below this, say nothing: clocks and timezones drift
 
 
@@ -71,7 +73,8 @@ def _hours_ahead(entry: str) -> str | None:
         return None
     try:
         stamp = datetime.strptime(
-            f"{match.group(1)} {match.group(2)}:{match.group(3)}", "%Y-%m-%d %H:%M")
+            f"{match.group(1)} {match.group(2)}:{match.group(3)}",
+            "%Y-%m-%d %H:%M" if "-" in match.group(1) else "%d.%m.%Y %H:%M")
     except ValueError:
         return None
     minutes = (stamp - datetime.now()).total_seconds() / 60
@@ -152,7 +155,7 @@ def write_entry(path, entry: str, next_line: str | None = None,
     # The `^---##` case is covered by the general check below -- `\S` matches the
     # dash. A separate assert for it survived every mutation, which means no test
     # pinned it, so it is gone rather than kept as decoration.
-    glued = re.findall(r'\S(## \d{4}-\d{2}-\d{2}[^\n]{0,40})', _without_code(text))
+    glued = re.findall(r'\S(## ' + DATE + r'[^\n]{0,40})', _without_code(text))
     if glued:
         raise ValueError(
             f"heading glued mid-file, invisible to a heading read: {glued[:3]}")
