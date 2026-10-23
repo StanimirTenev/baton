@@ -174,3 +174,27 @@ def test_an_entry_from_before_the_session_does_not_name_files_for_this_one(tmp_p
     _folder(tmp_path, "report", latest + "\n" + old)
     out = bs.hollow_entries(tmp_path, "LOGBOOK.md", _since())
     assert out and "names none" in out[0][2][0]
+
+
+def _claimed(tmp_path, entry: str, age: float):
+    """GOOD's entry headed now (lesson L1), report-draft.md saved `age` seconds ago."""
+    now = datetime.now()
+    folder = _folder(tmp_path, "report", entry.replace("2026-10-01 10:00", f"{now:%Y-%m-%d %H:%M}"))
+    os.utime(folder / "report-draft.md", (time.time() - age, time.time() - age))
+    return bs.hollow_entries(tmp_path, "LOGBOOK.md", _since())
+
+
+def test_an_entry_says_it_changed_a_file_no_save_shows(tmp_path):
+    """ZA-OPRAVYANE row 76 (Kyle Bartlett, 22.09): no file saved this session, so nothing was
+    asked -- "Wrote report-draft.md" passed with report-draft.md two days old."""
+    out = _claimed(tmp_path, GOOD, 2 * 86400)
+    assert out and any("says it changed report-draft.md" in r for r in out[0][2]), out
+
+
+def test_the_same_entry_with_the_file_saved_now_passes(tmp_path):
+    assert _claimed(tmp_path, GOOD, 30) == []
+
+
+def test_naming_an_old_file_without_changing_it_is_not_asked(tmp_path):
+    entry = GOOD.replace("Wrote report-draft.md", "Read report-draft.md and agreed")
+    assert _claimed(tmp_path, entry, 2 * 86400) == []

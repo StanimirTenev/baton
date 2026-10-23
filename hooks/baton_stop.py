@@ -601,9 +601,35 @@ def _names(rel: str) -> set:
     return {n for n in (p.name, p.stem, *p.parent.parts) if len(n) >= MIN_NAME_CHARS}
 
 
-def hollow(body: str, files: list[str], session_text: str | None = None) -> list[str]:
+# The reverse case (ZA-OPRAVYANE row 76; Kyle Bartlett, 22.09: "An agent that found nothing to do
+# writes you the same confident paragraph as one that did the work"). A session that saved no file
+# in the folder was asked nothing, so "Rewrote parse_date() in parser.py" passed with parser.py two
+# days old. Asked only then -- no file saved here this session -- and only for a file of the folder
+# whose full name stands on a line with a verb of change: measured 23.10 on the 36 top entries of
+# the author's logbooks, 0 asked; without the verb, 2 (files cited as sources); asked whenever the
+# file is older, 2 more (a name, cbom.json, that many subfolders hold).
+_CHANGED = re.compile(r"(?i)\b(?:(?:re)?(?:wr[oi]te|written|fix|chang|updat|edit|creat|renam|refactor|"
+                      r"replac|remov|delet|patch|rework|implement)\w*|add(?:s|ed|ing)?|mov(?:e|es|ed|ing))\b"
+                      r"|поправ|пренаписа|промен|добав|написа|създад|обнов|изтри|преименува|замен|махна")
+
+
+def claimed_untouched(folder: Path, logbook: str, body: str) -> list[str]:
+    """Work files of the folder the entry says it changed. Asked only when no file of the folder
+    was saved this session, so none of them was."""
+    lines = [ln for ln in body.splitlines() if _CHANGED.search(ln)]
+    out = []
+    for rel, path in (work_files(folder, logbook) if lines else ()):
+        name = Path(rel).name
+        if len(name) >= MIN_NAME_CHARS and any(name in ln for ln in lines):
+            out.append(rel.replace(os.sep, "/"))
+    return sorted(out)
+
+
+def hollow(body: str, files: list[str], session_text: str | None = None,
+           claimed: list[str] = ()) -> list[str]:
     """Why an entry body looks written only to pass. Empty when nothing measurable is wrong.
-    The files may be named anywhere in `session_text` (this session's entries), else in `body`."""
+    The files may be named anywhere in `session_text` (this session's entries), else in `body`.
+    `claimed`: files it says it changed that were not saved this session, when none was."""
     reasons = []
     sections = re.split(r"(?m)^### .*$", body)[1:]
     filled = sum(1 for s in sections if s.strip())
@@ -617,6 +643,10 @@ def hollow(body: str, files: list[str], session_text: str | None = None) -> list
     if files and not any(n in where for f in files for n in _names(f)):
         shown = ", ".join(files[:3]) + (", ..." if len(files) > 3 else "")
         reasons.append(f"names none of the files saved here this session ({shown})")
+    if claimed and not files:
+        shown = ", ".join(claimed[:3]) + (", ..." if len(claimed) > 3 else "")
+        reasons.append(f"says it changed {shown}, and no file in this folder was saved this "
+                       "session -- if the change is somewhere else, name where")
     return reasons
 
 
@@ -653,8 +683,9 @@ def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
     newest entry looks hollow."""
     out = []
     for folder, text, top in _changed_tops(root, name, since):
-        reasons = hollow(top[1], touched_since(folder, name, since),
-                         session_entries(text, since))
+        files = touched_since(folder, name, since)
+        reasons = hollow(top[1], files, session_entries(text, since),
+                         [] if files else claimed_untouched(folder, name, top[1]))
         if reasons:
             out.append((folder.name, top[0], reasons))
     return out

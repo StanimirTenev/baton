@@ -404,8 +404,12 @@ changed a logbook's body, Stop also reads its newest entry and hands the turn ba
 if it looks hollow. It measures two things and judges nothing: the entry has at least three `###`
 sections, each with text, and 200 characters or more; and it names at least one of the files
 saved in the folder this session -- by name, stem, or a folder it sits in -- anywhere in this
-session's entries. A conversation that touched no file is not asked to name one. **What it does
-not catch:** an entry with the right shape that is wrong. A full entry saying a repository was
+session's entries. A conversation that touched no file is not asked to name one -- but since
+v3.23.0 (ZA-OPRAVYANE row 76, after Kyle Bartlett) it is asked when its entry says it changed a
+file of the folder ("Rewrote parse_date() in parser.py": the file's full name on a line with a verb
+of change -- wrote, fixed, changed, updated, added, removed..., or the Bulgarian ones) and no file
+of the folder was saved this session; on the author's 36 top entries, none was asked. A change
+made in another repository is said in one line. **What it does not catch:** an entry with the right shape that is wrong. A full entry saying a repository was
 public when it was private passes; that one was caught by a person, two hours later. Over the
 logbooks on the author's machine in the ten days before release, seven top entries would have
 been asked about -- short notes without sections; the agent answers in one line when one is
