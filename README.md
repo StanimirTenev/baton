@@ -356,7 +356,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.22.0]
+[baton:board v3.23.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1610,6 +1610,28 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.23.0** — gaps found by a probe of LinkedIn's questions, a public reply and the last release
+
+- **`/baton-doctor` sees `"disableAllHooks": true`.** One line in a settings file switches every
+  hook off, and the doctor said ✅ from the last heartbeats. It now reads the key at every scope,
+  names the file, marks the hooks ⛔ and exits 1 (row 78, Amir Raza, Kumar V.).
+- **A pinned run that ran no test is not "passed".** The verdict reads what the runner printed:
+  `go test` with no test files (exit 0), unittest's NO TESTS RAN, jest's No tests found; and exit 5
+  from a path that held "pytest" is no longer "no tests ran" (rows 74, 75, Kyle Bartlett).
+- **A pass with the failing test skipped, xfailed or deleted is not "passed".** Counts are
+  compared with the last run of the same command; test files edited in the session are named beside
+  the result (rows 77, 52). The first run has no baseline.
+- **Stop names what a `code:` repository holds newer than the logbook** -- uncommitted files,
+  commits -- once a session, for logbooks written in it (row 73, Rim Elouragini).
+- **An entry that says it changed a file, in a session that saved none, is asked about** (row 76,
+  Kyle Bartlett). On the author's 36 top entries, none was.
+- **The installer leaves a human's own hook alone** when its command holds "baton_" (row 68); it
+  rewrote it into Baton's.
+- Smaller: Stop given broken JSON or a non-object does nothing (row 70; it handed back old debt);
+  SessionStart and the entry tool read `## 22.10.2026 15:30` headings (row 69); "fixed after the
+  lesson" reads the entry Stop asked about, not the newest (row 71); the copy check compares the
+  skills (row 51), and `BATON_SOURCE` compares a plugin's copy too (row 72).
 
 **v3.22.0** — thirteen of fifteen gaps from a hostile probe of the hooks; three fixes promised publicly
 
