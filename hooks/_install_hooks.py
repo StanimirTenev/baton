@@ -14,6 +14,7 @@ quoting, no space-in-path breakage, no PowerShell-vs-bash difference.
 """
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -87,9 +88,12 @@ def main() -> int:
         "PostToolBatch": os.path.join(hookdir, "baton_batch.py"),
     }
 
+    # One of the four hook files by name, as installed_twice reads it (row 61). Any "baton_" in a
+    # command was taken for Baton's, and a human's ~/bin/my_baton_notes.sh was rewritten (row 68).
     def is_baton(h):
-        blob = str(h.get("command", "")) + " ".join(h.get("args", []) or [])
-        return "baton_" in blob
+        blob = str(h.get("command", "")) + " " + " ".join(map(str, h.get("args", []) or []))
+        return bool(re.search(
+            r"(?:^|[\\/\s\"'])baton_(?:session_start|stop|prompt|batch)\.py(?![\w.])", blob))
 
     hooks = data.setdefault("hooks", {})
     changed = False
