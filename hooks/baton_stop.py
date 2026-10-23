@@ -752,7 +752,8 @@ def code_changes(root: Path, name: str, since: float | None) -> list[tuple]:
                 what.append(f"{len(files)} uncommitted: " + ", ".join(files[:3])
                             + (", ..." if len(files) > 3 else ""))
             if commits:
-                what.append(f"{len(commits)} commit(s): " + "; ".join(commits[:3]))
+                more = " or more" if len(commits) == 10 else ""       # git log -10
+                what.append(f"{len(commits)}{more} commit(s): " + "; ".join(commits[:3]))
             out.append((folder.name, repo, "; ".join(what)))
     return out
 
