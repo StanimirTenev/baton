@@ -187,7 +187,7 @@ per-process scope PowerShell provides for exactly this.
 
 Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
 skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`, `baton-key`, `baton-doctor`), appends to
-`~/.claude/CLAUDE.md`, merges three entries into `~/.claude/settings.json`, and creates
+`~/.claude/CLAUDE.md`, merges four entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
 or a USB stick — can be removed afterwards. Run it twice and the second run reports that
 everything is already in place. Run it again with another task root or logbook
@@ -284,7 +284,9 @@ Two hooks hold the checkable half of it, so it does not depend on the agent reme
   finds `поста` and `постове`, not `построй`; a Latin alias takes only -s, -es, -y -> -ies, so `bot`
   does not find `both`) — gets that task's last entry and next step put in front of the agent, with
   "read the logbook first". Once per task per session; silent when nothing is named; never
-  blocks a message.
+  blocks a message. A task whose name or logbook holds a word from `review_confidential` is shown
+  with its `next:` like any other: that list is read only by the review tools, and this is
+  deliberate (decided 2026-10-22, ZA-OPRAVYANE row 66).
   The same hook watches the length of the session: every message re-sends the whole context,
   so a long session eats the usage limit. From ~200k tokens of context (read from the last
   answer's `usage` in the transcript) it has the agent write the logbook of every task touched
@@ -327,7 +329,7 @@ customers), the second skill runs a loop in which **research comes before the pl
    what changed since the last version and why. Long-lead "doors" (listings, partners,
    standards) are started first.
 5. **Human checkpoint.** You make the decisions. The open questions go into the next
-   round. The loop stops when nothing blocks the plan, or after three rounds.
+   round. The loop stops when nothing blocks the plan, or after two rounds.
 
 Agents work in English. The consolidated output comes back in your language. In its first
 real use, the first round changed the plan's core argument, and the second round changed
@@ -375,6 +377,10 @@ The groups mean overdue (a deadline within 3 days), on us, recurring, waiting on
 else, frozen and done. A task with no header falls back to the v1 line: its name, the date
 of its last entry, and that entry's title.
 
+Every task is on the board with its `next:` (or `done_when:`), including one whose name or text
+holds a word from `review_confidential`: that list keeps text from being sent by the review
+tools, and the hooks do not read it. Shown on purpose (decided 2026-10-22, ZA-OPRAVYANE row 66).
+
 > The board is written in English and shown to you in your language by the agent. Header
 > fields and values are English; the Bulgarian names Baton started with are still read
 > (see *The same header in Bulgarian* below).
@@ -387,7 +393,7 @@ messages beside the entries written then -- see *A session that touched no task 
 `stop_hook_active` is honoured so it can block at most once per turn; what came of each
 hand-back is counted (see `/baton-doctor`). The entry written in answer to a hand-back gets the
 same quality checks as any other -- hollow, L1, L3, L4 -- on that second pass, said to the human
-in one message and never handed back again (since v3.22.0, ZA-OPRAVYANE row 55: it was the one
+in one message (`systemMessage`) and never handed back again (since v3.22.0, ZA-OPRAVYANE row 55: it was the one
 entry nothing checked). Older unrecorded work — from a session that ended
 without its entry — is listed on the board under 📝 instead of stopping every session after
 it. Without a readable transcript Stop falls back to every folder, as before v3.10.1; a resumed
@@ -752,7 +758,7 @@ exits 1, and the next SessionStart tells the agent to say it in one line. A hook
 the session: it exits 0 either way, which is why this is the only place a crash shows.
 
 **A run killed from outside is shown too** (since v3.21.0, ZA-OPRAVYANE row 41). A hook killed at
-Claude Code's time limit (20 s, PostToolBatch 10 s) -- SIGTERM, then SIGKILL -- wrote neither file,
+Claude Code's time limit (20 s; PostToolBatch 10 s as a plugin) -- SIGTERM, then SIGKILL -- wrote neither file,
 and the doctor showed ✅ from the run before. Now each run writes `baton.beat.<hook>.started.<pid>`
 (the time) before its work and removes it when it finishes or crashes. A mark left behind, newer
 than the last finish and the last crash, whose process is gone -- or older than two minutes, past
@@ -1184,7 +1190,9 @@ $ baton_review.py --which qrp-benchmark
 🟡 unclear       0.50  kriterii_zavarshvane: benchmark against the paper — done (14/30)
 ```
 
-`--tasks` had flagged that task at 0.66; this says **which part**. A bare task name that
+`--tasks` had flagged that task at 0.66; this says **which part**. (That was the first run; the
+first two lines are no longer asked -- see below -- and fields print by their English names,
+`done_when:`.) A bare task name that
 holds a logbook wins over an index target; an index path still reaches the old mode.
 
 **`sastoyanie` and `na_hod` are not claims here.** Measured by running the mode over all 19
@@ -1211,11 +1219,11 @@ not on evidence of its own.
   claims, correctly, because its logbook is 562 characters and mentions none of it. So the
   logbook's size and entry count are printed, and a thin one is named as thin.
 
-⚠️ A logbook is **newest-first**, so the `TSYAL` cut keeps the newest entries — the evidence
+⚠️ A logbook is **newest-first**, so the `WHOLE_CHARS` cut keeps the newest entries — the evidence
 a header's currency is judged against. On the index corpus the same cut fell anywhere and
 failed claims innocently. Same cut, opposite meaning; the announcement says which.
 
-⚠️ `tvardeniya()` also extracts link text and trigger phrases as "claims"
+⚠️ `claims()` also extracts link text and trigger phrases as "claims"
 (`*history:* [sessions and commits](…)`). On the old index those were diluted by real ones; on
 the new one they are most of what is left. Flagged, not fixed.
 
@@ -1238,7 +1246,7 @@ the threshold between identical runs — 0.41 / 0.47 / 0.38 — so it was flagge
 three.
 
 So `--stale` and `--tasks` draw **three times and average** when the first draw lands in
-`SIVA = (0.35, 0.60)`, and print the draws next to the mean, because a mean shown alone is
+`GREY_BAND = (0.35, 0.60)`, and print the draws next to the mean, because a mean shown alone is
 indistinguishable from one draw. Outside the band a second draw buys a hundredth of a point
 and is not paid for. On a 45-row index this cost **$0.0040 instead of $0.0034**.
 
@@ -1259,7 +1267,7 @@ Two things the same probe measured, worth knowing before trusting the output:
 
 ### What the number is not
 
-`PRAG = 0.46` was measured by hand — 14 of 19 pointers checked personally, everything ≥0.47
+`THRESHOLD = 0.46` was measured by hand — 14 of 19 pointers checked personally, everything ≥0.47
 real and everything ≤0.45 false. ⚠️ That is **one corpus of 19 rows, one person's writing, one
 language.** It is a starting point. Run it on yours, check what it flags, move the number.
 
@@ -1563,7 +1571,8 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   were ordered as text, so on 25.10.2026 a crash at 03:20 sorted before a finish at 03:50 written
   half an hour earlier (row 64). They are now ordered by the files' own times.
 - **Per-session state is no longer in the shared temp folder.** It held task names and entry
-  headings, 0644 in /tmp; now `sessions/` beside Baton's other state, each file 0600 (row 53).
+  headings, 0644 in /tmp; now `sessions/` beside Baton's other state (`CLAUDE_PLUGIN_DATA` as a
+  plugin, next to the hooks with the install script), each file 0600, removed after 7 days (row 53).
 - **The pinned test command gets an allowlist, not the session's environment** -- three made-up
   identity variables reached it (row 47, Bernard Haddad). Extra names go in the pin's `"env"`.
 - **A pasted key is masked before the quiet-session note quotes the human** (row 48, Bernard Haddad,
@@ -1587,7 +1596,8 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
   payload, not a crash (row 67).
 - Not in this version: work that arrives with its old modification time (`wget`, `cp -p`,
   `rsync -a`) is still not seen (row 56) -- reading ctime breaks how the suite fakes file ages
-  and needs a decision; confidential tasks on the board (row 66) are the human's call.
+  and needs a decision. Confidential tasks stay on the board and in the prompt hook with their
+  `next:` (row 66): the human's decision, 22.10.
 
 **v3.21.0** — a killed hook is shown; a pinned test command answers "tests pass"
 
@@ -2694,7 +2704,7 @@ without any of this, which is the point.
 | the hooks, installed as a plugin | never | -- |
 | the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
-| `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; folders listed as confidential are refused before anything is sent |
+| `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; anything holding a word listed in `review_confidential` (in its path or its text) is held back before anything is sent |
 
 `tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
 schedule except the opt-in update check above. The one command the hooks run that is not their
