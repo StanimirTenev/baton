@@ -721,7 +721,9 @@ The machine did not.
 
 Set `source` in `baton.local.json` (or `BATON_SOURCE`) to the directory the hooks are developed
 in, and Baton compares its own bytes against it and reports a difference at session start. It is
-optional: an install from a release configures no source and nothing is reported.
+optional: an install from a release configures no source and nothing is reported. Since v3.23.0
+(ZA-OPRAVYANE row 51, after Benjamin Brachert) the skills are compared too: each
+`skills/<name>/SKILL.md` beside that directory against the copy in `~/.claude/skills/<name>/`.
 
 **As a plugin** (since v3.17.0) there is no source of ours; Claude Code installs the copy. Two
 questions are still answered at session start, without the network. Has Claude Code recorded
@@ -729,7 +731,10 @@ another install of Baton since this session started (`installed_plugins.json`)? 
 `claude plugin update` has taken effect on disk and not here, until a restart. And are the four
 running hooks and `hooks.json` byte for byte the catalog's copy of the same version (the
 marketplace clone Claude Code keeps)? A copy Claude Code did not install (`--plugin-dir`) is not
-compared, and nor is a catalog that has moved to another version.
+compared, and nor is a catalog that has moved to another version. If you develop Baton and run it
+as a plugin, set **the variable** `BATON_SOURCE` (not `source` in the plugin's `baton.local.json`)
+and the plugin's running hooks, `hooks.json` and skills are compared with your working copy as
+above (since v3.23.0, row 72; until then the variable was read only by the install script's copy).
 
 **What is not compared, as either install:** whether the catalog's copy is the newest release
 (that needs the network); `baton.local.json`, which has nothing to be compared with -- it is

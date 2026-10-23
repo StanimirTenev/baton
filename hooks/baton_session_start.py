@@ -687,14 +687,27 @@ def install_drift() -> list[str]:
     file it was built from and say when they differ, which is the same question asked
     somewhere it can actually be answered.
     """
-    if plugin():                    # Claude Code owns the plugin's copy
+    # Claude Code owns the plugin's copy, and plugin_drift compares it with the catalog. Only
+    # BATON_SOURCE, set by whoever develops Baton, compares it with a working copy: it was read
+    # as a plugin too, and nothing was compared (row 72). The file's `source` still stands down.
+    if plugin() and not os.environ.get("BATON_SOURCE"):
         return []
     src = source_dir()
     if src is None or not src.is_dir():
         return []
+    pairs = [(name, Path(__file__).with_name(name), src / name)
+             for name in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py",
+                          "baton_batch.py") + (("hooks.json",) if plugin() else ())]
+    # The skills too (row 51, Benjamin Brachert, 22.10: a changed SKILL.md compared as nothing):
+    # beside the hooks folder in the source; ~/.claude/skills for install.sh, the plugin's own.
+    skills = Path(__file__).resolve().parent.parent / "skills" if plugin() else claude_dir() / "skills"
+    try:
+        pairs += [(f"skills/{d.name}/SKILL.md", skills / d.name / "SKILL.md", d / "SKILL.md")
+                  for d in sorted((src.parent / "skills").iterdir()) if (d / "SKILL.md").is_file()]
+    except OSError:
+        pass
     out = []
-    for name in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py", "baton_batch.py"):
-        here, there = Path(__file__).with_name(name), src / name
+    for name, here, there in pairs:
         try:
             if there.is_file() and not here.is_file():
                 # In the source and not running: the silent case, and the worst one.

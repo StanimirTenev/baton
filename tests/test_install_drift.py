@@ -113,3 +113,64 @@ def test_baton_source_alone_is_enough(tmp_path, monkeypatch):
     assert mod.install_drift() == ["baton_session_start.py"]
     (hookdir / "baton.local.json").write_text("{not json", encoding="utf-8")   # broken: the same
     assert _load(hookdir).install_drift() == ["baton_session_start.py"]
+
+
+def _repo(tmp_path: Path, skills: dict) -> Path:
+    """A working copy: hooks/ (the `source`) beside skills/."""
+    src = tmp_path / "repo" / "hooks"
+    src.mkdir(parents=True)
+    shutil.copy(HOOK, src / "baton_session_start.py")
+    (src / "baton_stop.py").write_text("# stop\n", encoding="utf-8")
+    for name, text in skills.items():
+        (tmp_path / "repo" / "skills" / name).mkdir(parents=True)
+        (tmp_path / "repo" / "skills" / name / "SKILL.md").write_text(text, encoding="utf-8")
+    return src
+
+
+def test_a_changed_or_missing_skill_is_reported(tmp_path, monkeypatch):
+    """ZA-OPRAVYANE row 51 (Benjamin Brachert, 22.10): only the four hooks were compared; a
+    SKILL.md changed in the source and not copied gave []. install.sh copies skills to
+    ~/.claude/skills/<name>/SKILL.md."""
+    monkeypatch.delenv("BATON_SOURCE", raising=False)
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    cfg = tmp_path / "cfg"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    src = _repo(tmp_path, {"baton-plan": "new\n", "baton-task": "same\n", "baton-key": "k\n"})
+    for name, text in {"baton-plan": "old\n", "baton-task": "same\n"}.items():
+        (cfg / "skills" / name).mkdir(parents=True)
+        (cfg / "skills" / name / "SKILL.md").write_text(text, encoding="utf-8")
+    mod = _load(_install(tmp_path, source=src))
+    assert mod.install_drift() == ["skills/baton-key/SKILL.md (not installed)",
+                                   "skills/baton-plan/SKILL.md"]
+
+
+def _plugin(tmp_path: Path, monkeypatch) -> Path:
+    root = tmp_path / "cache" / "baton"
+    (root / "hooks").mkdir(parents=True)
+    shutil.copy(HOOK, root / "hooks" / "baton_session_start.py")
+    (root / "hooks" / "baton_stop.py").write_text("# stop\n", encoding="utf-8")
+    (root / "hooks" / "hooks.json").write_text("{}\n", encoding="utf-8")
+    (root / "skills" / "baton-plan").mkdir(parents=True)
+    (root / "skills" / "baton-plan" / "SKILL.md").write_text("released\n", encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(root))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+    return root
+
+
+def test_baton_source_compares_the_plugin_too(tmp_path, monkeypatch):
+    """ZA-OPRAVYANE row 72 (22.10): row 50 made BATON_SOURCE work without a settings file, and
+    as a plugin install_drift still returned [] before reading it."""
+    root = _plugin(tmp_path, monkeypatch)
+    src = _repo(tmp_path, {"baton-plan": "being written\n"})
+    (src / "hooks.json").write_text('{"hooks": {}}\n', encoding="utf-8")
+    monkeypatch.setenv("BATON_SOURCE", str(src))
+    assert _load(root / "hooks").install_drift() == ["hooks.json", "skills/baton-plan/SKILL.md"]
+
+
+def test_as_a_plugin_without_the_variable_nothing_is_compared(tmp_path, monkeypatch):
+    root = _plugin(tmp_path, monkeypatch)
+    src = _repo(tmp_path, {"baton-plan": "being written\n"})
+    monkeypatch.delenv("BATON_SOURCE", raising=False)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "baton.local.json").write_text(json.dumps({"source": str(src)}), "utf-8")
+    assert _load(root / "hooks").install_drift() == []
