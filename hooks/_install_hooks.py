@@ -86,14 +86,15 @@ def main() -> int:
         "Stop": os.path.join(hookdir, "baton_stop.py"),
         "UserPromptSubmit": os.path.join(hookdir, "baton_prompt.py"),
         "PostToolBatch": os.path.join(hookdir, "baton_batch.py"),
+        "StopFailure": os.path.join(hookdir, "baton_stop_failure.py"),
     }
 
-    # One of the four hook files by name, as installed_twice reads it (row 61). Any "baton_" in a
+    # One of the five hook files by name, as installed_twice reads it (row 61). Any "baton_" in a
     # command was taken for Baton's, and a human's ~/bin/my_baton_notes.sh was rewritten (row 68).
     def is_baton(h):
         blob = str(h.get("command", "")) + " " + " ".join(map(str, h.get("args", []) or []))
         return bool(re.search(
-            r"(?:^|[\\/\s\"'])baton_(?:session_start|stop|prompt|batch)\.py(?![\w.])", blob))
+            r"(?:^|[\\/\s\"'])baton_(?:session_start|stop(?:_failure)?|prompt|batch)\.py(?![\w.])", blob))
 
     hooks = data.setdefault("hooks", {})
     changed = False

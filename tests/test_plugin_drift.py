@@ -23,7 +23,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOKS = ("baton_session_start.py", "baton_stop.py", "baton_prompt.py", "baton_batch.py", "hooks.json")
+HOOKS = ("baton_session_start.py", "baton_stop.py", "baton_prompt.py", "baton_batch.py",
+         "baton_stop_failure.py", "hooks.json")
 
 
 def _copy(dest: Path, version: str) -> Path:

@@ -120,6 +120,7 @@ if ($DryRun) {
     Copy-Item (Join-Path $Repo "hooks\baton_stop.py") $HookDir -Force
     Copy-Item (Join-Path $Repo "hooks\baton_prompt.py") $HookDir -Force
     Copy-Item (Join-Path $Repo "hooks\baton_batch.py") $HookDir -Force
+    Copy-Item (Join-Path $Repo "hooks\baton_stop_failure.py") $HookDir -Force
     Say "hooks copied to $HookDir"
 }
 

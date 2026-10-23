@@ -154,13 +154,13 @@ def installed_twice() -> bool:
     except Exception:
         return False
     # A plugin's own hooks come from its hooks.json, never from settings.json: any Baton
-    # entry there is the installer's -- one of its four files by name. Any "baton_" in a
+    # entry there is the installer's -- one of its five files by name. Any "baton_" in a
     # command was taken for it: a human's ~/bin/my_baton_notes.sh switched the plugin off (row 61).
     for groups in (settings.get("hooks") or {}).values():
         for group in groups or []:
             for h in group.get("hooks", []) or []:
                 blob = str(h.get("command", "")) + " " + " ".join(map(str, h.get("args") or []))
-                if re.search(r"(?:^|[\\/\s\"'])baton_(?:session_start|stop|prompt|batch)\.py(?![\w.])",
+                if re.search(r"(?:^|[\\/\s\"'])baton_(?:session_start|stop(?:_failure)?|prompt|batch)\.py(?![\w.])",
                              blob):
                     return True
     return False
@@ -210,7 +210,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.23.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.24.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -294,7 +294,8 @@ def open_board(source, root: Path, logbook: str) -> None:
 
 
 HOOK_EVENTS = (("baton_session_start", "SessionStart"), ("baton_prompt", "UserPromptSubmit"),
-               ("baton_stop", "Stop"), ("baton_batch", "PostToolBatch"))
+               ("baton_stop", "Stop"), ("baton_batch", "PostToolBatch"),
+               ("baton_stop_failure", "StopFailure"))
 
 
 def marker_order(path: Path, when: str) -> tuple:
@@ -702,7 +703,8 @@ def install_drift() -> list[str]:
         return []
     pairs = [(name, Path(__file__).with_name(name), src / name)
              for name in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py",
-                          "baton_batch.py") + (("hooks.json",) if plugin() else ())]
+                          "baton_batch.py", "baton_stop_failure.py")
+             + (("hooks.json",) if plugin() else ())]
     # The skills too (row 51, Benjamin Brachert, 22.10: a changed SKILL.md compared as nothing):
     # beside the hooks folder in the source; ~/.claude/skills for install.sh, the plugin's own.
     skills = Path(__file__).resolve().parent.parent / "skills" if plugin() else claude_dir() / "skills"
@@ -778,7 +780,7 @@ def plugin_drift() -> str | None:
             return None             # the catalog moved on; whether to update is the human's call
         differ = []
         for hook in ("baton_session_start.py", "baton_stop.py", "baton_prompt.py",
-                     "baton_batch.py", "hooks.json"):
+                     "baton_batch.py", "baton_stop_failure.py", "hooks.json"):
             here, there = root / "hooks" / hook, release / "hooks" / hook
             try:
                 if here.read_bytes() != there.read_bytes():
@@ -2126,7 +2128,23 @@ def _beat(crash: BaseException | None = None) -> None:
             beat.with_name(beat.name + ".crashed").write_text(
                 f"{now.isoformat()} {type(crash).__name__}", "utf-8")
         _clear_starts(folder)
+        _prune_turns(folder)
     except Exception:
+        pass
+
+
+def _prune_turns(folder: Path, days: int = 14) -> None:
+    """The per-session turn records (`baton.turns/<session>`, row 49) of sessions quiet for two
+    weeks: the doctor reads the last week. Once a session, here. Never raises."""
+    import time
+    try:
+        for f in (folder / "baton.turns").iterdir():
+            try:
+                if time.time() - f.stat().st_mtime > days * 86400:
+                    f.unlink()
+            except OSError:
+                continue
+    except OSError:
         pass
 
 

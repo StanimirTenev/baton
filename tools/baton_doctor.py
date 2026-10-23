@@ -24,6 +24,7 @@ HOOKS = (
     ("baton_prompt", "UserPromptSubmit", "on every message"),
     ("baton_stop", "Stop", "at the end of every turn"),
     ("baton_batch", "PostToolBatch", "after the agent's tool calls"),
+    ("baton_stop_failure", "StopFailure", "when a turn ends on an API error"),
 )
 
 
@@ -91,6 +92,66 @@ def stopped(where: Path, stem: str) -> tuple | None:
         except (OSError, ValueError):
             continue
     return max(found) if found else None
+
+
+# Row 49 (Synthetixis, 22.10): each hook was looked at on its own, so a Stop last finished three
+# days ago, beside the others a minute ago, showed ✅. Since v3.24.0 UserPromptSubmit, PostToolBatch,
+# Stop and StopFailure each add a line to `baton.turns/<session>`: the time, the event, and for
+# StopFailure the error type. Per session: was its last activity followed by a Stop or a
+# StopFailure? Stop does not run when the human interrupts a turn, and an API error runs
+# StopFailure instead (code.claude.com/docs/en/hooks, 23.10), so a miss is a question. Stop can
+# run twice in a turn by design -- Baton's hand-back, then the pass with `stop_hook_active` true --
+# so Stops are not counted: any one ends the turn. Whether and when Claude Code resets that flag
+# is not documented, and nothing here depends on it. What follows what is read by the lines'
+# order in the file, not by the times written in them: those are local time and repeat in the
+# hour after the clocks go back (row 64, 25.10.2026).
+TURN_OPEN, TURN_END = ("UserPromptSubmit", "PostToolBatch"), ("Stop", "StopFailure")
+TURN_GRACE = 120          # seconds: a turn this young may still be going
+TURN_SESSIONS, TURN_DAYS = 20, 7
+
+
+def turns(where: Path, now: datetime, own: str = "") -> tuple[list, list, int] | None:
+    """(open, failed, judged) over the newest TURN_SESSIONS sessions of the last TURN_DAYS days:
+    `open` -- (session, event, time) of a last activity with no end after it; `failed` --
+    (session, error) of a last activity ended by StopFailure; `judged` -- sessions looked at.
+    `own` is the session the doctor runs in, whose turn is not over (BATON_SESSION). None when
+    there are no records: heartbeats from before v3.24.0 hold no session."""
+    import time
+    try:
+        files = [f for f in (where / "baton.turns").iterdir() if f.is_file()
+                 and time.time() - f.stat().st_mtime < TURN_DAYS * 86400]
+    except OSError:
+        return None
+    files = sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)[:TURN_SESSIONS]
+    if not files:
+        return None
+    open_, failed, judged = [], [], 0
+    for f in files:
+        if own and f.name == own:
+            continue
+        rows = []
+        try:
+            for line in f.read_text("utf-8", "replace").splitlines():
+                parts = line.split(" ")
+                try:
+                    rows.append((datetime.fromisoformat(parts[0]), parts[1] if len(parts) > 1 else "",
+                                 parts[2] if len(parts) > 2 else ""))
+                except ValueError:
+                    continue
+        except OSError:
+            continue
+        last = max((i for i, r in enumerate(rows) if r[1] in TURN_OPEN), default=None)
+        if last is None:
+            continue
+        ends = [r for r in rows[last + 1:] if r[1] in TURN_END]
+        if not ends and (now - rows[last][0]).total_seconds() < TURN_GRACE:
+            continue
+        judged += 1
+        if not ends:
+            open_.append((f.name, rows[last][1], rows[last][0]))
+        elif ends[-1][1] == "StopFailure":
+            failed.append((f.name, ends[-1][2] or "unknown"))
+    return open_, failed, judged
 
 
 def ago(when: datetime, now: datetime) -> str:
@@ -260,6 +321,24 @@ def main() -> int:
             mark = "⛔"            # whatever it did last, it does not run now
         print(f"  {mark} {event:<17} {state}   -- runs {when}")
     print()
+    seen_turns = turns(where, now, os.environ.get("BATON_SESSION", ""))
+    if seen_turns and seen_turns[2]:
+        open_, failed, judged = seen_turns
+        errors = ", ".join(f"{e} ({s[:8]})" for s, e in failed)
+        if open_:
+            print(f"⚠️  A turn with no end seen, in {len(open_)} of the last {judged} sessions: its "
+                  "last activity\n   has no Stop or StopFailure after it.")
+            for s, event, t in open_:
+                print(f"     {s[:8]}  {event} at {t:%Y-%m-%d %H:%M} ({ago(t, now)})")
+            if errors:
+                print(f"   Ended on an API error (StopFailure) instead: {errors}.")
+            print("   A question, not a failure: Stop does not run when the human interrupts a "
+                  "turn, or the\n   session is closed in the middle of one. If it shows after "
+                  "turns that ended normally,\n   Stop is not running.\n")
+        else:
+            print(f"✅ Turns ended: in each of the last {judged} sessions the last activity was "
+                  "followed by\n   a Stop or a StopFailure" + (f"; ended on an API error: {errors}" if errors else "")
+                  + ".\n")
     counted = handback(where)
     if counted:
         print(counted + "\n")
@@ -296,8 +375,8 @@ def main() -> int:
               "agent.")
         return 1
     print("✅ Running. A hook marked ⏳ has not had its moment yet (Stop needs a finished\n"
-          "   turn, PostToolBatch a tool call). If it is still ⏳ after a turn with a tool call,\n"
-          "   it is failing.")
+          "   turn, PostToolBatch a tool call, StopFailure an API error -- it may never run). If\n"
+          "   Stop or PostToolBatch is still ⏳ after a turn with a tool call, it is failing.")
     return 0
 
 

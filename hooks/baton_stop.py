@@ -1405,6 +1405,10 @@ def main() -> int:
     # `{}` it had no session start, so every folder's old debt was handed back to this turn.
     if not isinstance(payload, dict):
         return 0
+    # "again": the pass after a hand-back (`stop_hook_active`). Any Stop counts as the end of the
+    # turn; two in one turn are by design, so the doctor does not count them (row 49). Whether
+    # and when Claude Code resets the flag is not documented, and nothing here depends on it.
+    _turn("Stop", payload.get("session_id"), "again" if payload.get("stop_hook_active") else "")
     try:      # an L2 note shown this turn and no tool call after it: the turn ended (row 40)
         _batch().followed(str(payload.get("session_id") or ""), None)
     except Exception:
@@ -1627,6 +1631,23 @@ def main() -> int:
                                         **note}, ensure_ascii=False).encode("utf-8"))
     sys.stdout.flush()
     return 0
+
+
+def _turn(event: str, session: object, extra: str = "") -> None:
+    """One line in `baton.turns/<session>` per run: the time, the event and `extra` (row 49). The
+    doctor asks of it, per session, whether the last activity was followed by a Stop or a
+    StopFailure. Never raises."""
+    try:
+        sid = re.sub(r"[^\w-]", "", str(session or ""))[:80]
+        if not sid:
+            return
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = (Path(data) if data else Path(__file__).resolve().parent) / "baton.turns"
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / sid, "a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now().isoformat()} {event} {extra}".rstrip() + "\n")
+    except Exception:
+        pass
 
 
 def _start() -> None:

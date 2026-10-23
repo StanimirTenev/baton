@@ -18,12 +18,14 @@ Output in the human's language. Commands and hook names stay as they are.
 Installed as a plugin (Claude Code fills in both paths):
 
 ```
-CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" python3 "${CLAUDE_PLUGIN_ROOT}/tools/baton_doctor.py"
+CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" BATON_SESSION="${CLAUDE_SESSION_ID}" python3 "${CLAUDE_PLUGIN_ROOT}/tools/baton_doctor.py"
 ```
 
 If the line above still shows the literal text `${CLAUDE_PLUGIN_ROOT}`, this is a script
-install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
+install: run `BATON_SESSION="${CLAUDE_SESSION_ID}" python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
 `~/.claude/baton/hooks/baton.local.json`. On Windows use `python` for `python3`.
+`BATON_SESSION` is this session, whose turn is not over yet: the doctor leaves it out of the turn
+check below.
 
 ## Read it to the human
 
@@ -44,6 +46,12 @@ install: run `python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
 - **✅ Running** — say when SessionStart last ran. A hook marked ⏳ not yet is one whose moment
   has not come yet (Stop needs a finished turn, PostToolBatch a tool call) -- not a failure, so
   do not report it as one. If it is still ⏳ after a turn with tool calls, it is failing.
+  StopFailure runs only when a turn ends on an API error, so ⏳ there is the usual state.
+- **⚠️ A turn with no end seen** (since v3.24.0) — in a recent session the last message or tool
+  call has no Stop or StopFailure after it. Say it as the question it is: Stop does not run when
+  the human interrupts a turn or closes the session mid-turn. Only if it shows after turns that
+  ended normally is Stop not running. **✅ Turns ended** says each one was followed by one, and
+  names an API error (StopFailure) where one ended the turn.
 
 - **Logbook entries … written unasked / handed back / recorded on the second try / passed** —
   read the four numbers as they are. Unasked against handed back says how often the agent wrote

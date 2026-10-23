@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOKS = ("baton_session_start", "baton_prompt", "baton_stop", "baton_batch")
+HOOKS = ("baton_session_start", "baton_prompt", "baton_stop", "baton_batch", "baton_stop_failure")
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="signals as Claude Code sends them on POSIX")
 

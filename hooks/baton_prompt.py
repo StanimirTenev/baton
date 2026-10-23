@@ -298,6 +298,7 @@ def main() -> int:
         return 0
     if not isinstance(payload, dict):     # `[]`, `null`: no payload, not a crash (row 67)
         return 0
+    _turn("UserPromptSubmit", payload.get("session_id"))
     prompt = str(payload.get("prompt") or "")
     session = str(payload.get("session_id") or "")
     if not prompt.strip():
@@ -351,6 +352,24 @@ def main() -> int:
         except Exception:
             pass
     return 0
+
+
+def _turn(event: str, session: object, extra: str = "") -> None:
+    """One line in `baton.turns/<session>` per run: the time, the event and `extra` (row 49). The
+    doctor asks of it, per session, whether the last activity was followed by a Stop or a
+    StopFailure. Never raises."""
+    try:
+        from datetime import datetime
+        sid = re.sub(r"[^\w-]", "", str(session or ""))[:80]
+        if not sid:
+            return
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = (Path(data) if data else Path(__file__).resolve().parent) / "baton.turns"
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / sid, "a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now().isoformat()} {event} {extra}".rstrip() + "\n")
+    except Exception:
+        pass
 
 
 def _start() -> None:

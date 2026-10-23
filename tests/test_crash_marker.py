@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOKS = ("baton_session_start", "baton_prompt", "baton_stop", "baton_batch")
+HOOKS = ("baton_session_start", "baton_prompt", "baton_stop", "baton_batch", "baton_stop_failure")
 
 
 def _env(tmp_path, data):

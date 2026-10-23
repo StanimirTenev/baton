@@ -356,7 +356,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.23.0]
+[baton:board v3.24.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -811,6 +811,21 @@ timed out?) and exits 1, and the next SessionStart says it. One mark per pid, so
 running in two sessions at once is not taken for a kill. **What it cannot see:** a kill followed
 by a finish of the same hook is history, as a crash is; and on Windows, where a process cannot be
 probed safely, a killed run shows only after two minutes.
+
+**A turn with no end is asked about** (since v3.24.0, ZA-OPRAVYANE rows 49 and 90, after
+Synthetixis). Each hook was looked at on its own, so a Stop last finished three days ago, beside
+the others a minute ago, showed ✅. Now UserPromptSubmit, PostToolBatch, Stop and the new
+**StopFailure** hook each add a line to `baton.turns/<session>` (the time and the event; for
+StopFailure the error type, such as `rate_limit`), and the doctor asks of the last week's sessions
+(the newest 20) whether the last message or tool call was followed by a Stop or a StopFailure.
+One that was not is shown as ⚠️ **a turn with no end seen** -- a question, not a failure, and the
+exit code does not change: Stop does not run when the human interrupts a turn, and an API error runs
+StopFailure instead, which Baton did not register until this version. StopFailure only records;
+Claude Code ignores its output. Two Stops in one turn are by design (the hand-back, then the pass
+with `stop_hook_active`), so Stops are not counted: any one ends the turn. **What it cannot see:**
+the session the doctor runs in (`BATON_SESSION`, which the skill fills in) and a turn younger than
+two minutes are left out, since they may still be going; heartbeats from before v3.24.0 hold no
+session, and the check says nothing until new ones exist.
 
 It also shows whether Stop's hand-back does any work -- the one number that says it (ZA-OPRAVYANE
 row 27, from a question about how often the agent writes the entry only because it was made to).
@@ -1610,6 +1625,17 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.24.0** — a turn that ends on an API error leaves a beat; the doctor asks per session
+
+- **A turn that ends on an API error is recorded.** Claude Code runs StopFailure instead of Stop
+  then, and Baton did not register it, so such a turn looked like a Stop that did not run. A new
+  hook, `baton_stop_failure.py`, records the time, the session and the error type, and prints
+  nothing; the plugin and both installers register it (row 90, Synthetixis).
+- **`/baton-doctor` asks whether each recent session's last turn ended.** The hooks add a line per
+  run to `baton.turns/<session>`; a last message or tool call with no Stop or StopFailure after it
+  is ⚠️, a question and not a failure, since Stop does not run when the human interrupts a turn.
+  Two Stops in a turn are not counted (row 49, Synthetixis).
 
 **v3.23.0** — gaps found by a probe of LinkedIn's questions, a public reply and the last release
 
@@ -2754,8 +2780,9 @@ having been done.
 
 **Plugin:** `claude plugin uninstall baton` (add `--keep-data` to keep its settings).
 
-**Script install:** remove the four hook entries whose command runs a `baton_` script
-(`baton_session_start.py`, `baton_stop.py`, `baton_prompt.py`, `baton_batch.py`) from `~/.claude/settings.json`,
+**Script install:** remove the five hook entries whose command runs a `baton_` script
+(`baton_session_start.py`, `baton_stop.py`, `baton_prompt.py`, `baton_batch.py`,
+`baton_stop_failure.py`) from `~/.claude/settings.json`,
 delete the Baton section from `~/.claude/CLAUDE.md` (the heading
 `# Baton — task folders and logbooks` and the text under it, marked
 `<!-- Installed by Baton. ... -->`), and remove `~/.claude/baton`, the five skills
