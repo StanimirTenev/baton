@@ -789,12 +789,14 @@ whether the next step looked like a check, not whether the note caused it.
 And since v3.21.0, the same question for every lesson (ZA-OPRAVYANE row 44, after Sentry's
 "recovery verification"): **fixed after the lesson: N of M**, per lesson. After Stop asks about an
 entry -- L1 an hour off the clock, L3 a public/private claim, L4 a tests claim -- the next three
-Stops look at that folder's newest entry with the same test that raised the ask: the violation
+Stops look at the entry it asked about (found by its heading; since v3.23.0, row 71 -- it was the
+newest entry, so a claim fixed in a session's second entry counted as not fixed; L1, whose fix
+changes the heading, reads the newest) with the same test that raised the ask: the violation
 gone counts as fixed (`fixed_after` in `baton.lessons.json`), still there after three Stops as not
 (`not_fixed_after`). The second pass after a hand-back is one of the three, and is where the
 answer usually lands. A Stop, not a turn, is what the hook can count. For L2 the line is row 40's
-"followed by a check". **The same proxy:** a new entry written on top of the flagged one counts as
-fixed too, and a fix made because the agent would have made it anyway looks the same.
+"followed by a check". **The same proxy:** for L1, a new entry written on top of the flagged one
+counts as fixed too, and a fix made because the agent would have made it anyway looks the same.
 
 ## After compaction: the agent writes the logbook first
 

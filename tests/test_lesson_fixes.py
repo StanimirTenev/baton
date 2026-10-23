@@ -152,3 +152,44 @@ def test_l1_deleting_the_hour_is_not_a_fix(tmp_path):
     _write(tmp_path, f"{typed:%Y-%m-%d} — typed", "Read it.")
     _stop(tmp_path, again=True)
     assert "fixed_after" not in _rec("L1"), _rec("L1")
+
+
+def _book(tmp_path, listed: bool):
+    """Two entries of one session: a clean one on top, the tests claim in the one below it."""
+    now = datetime.now()
+    top = f"## {now:%Y-%m-%d %H:%M} — notes on the CI retry\n" + BODY.format(mention="")
+    below = (f"## {now - timedelta(minutes=20):%Y-%m-%d %H:%M} — fix the login test\n"
+             + ("\n### Claims to verify\n- All tests pass -- `pytest -q`: 9 passed\n" if listed else "")
+             + BODY.format(mention="All tests pass."))
+    folder = tmp_path / "tasks" / "login"
+    folder.mkdir(parents=True, exist_ok=True)
+    log = folder / "LOGBOOK.md"
+    log.write_text("---\nstate: active\n---\n\n" + top + "\n" + below, encoding="utf-8")
+    return log, below.splitlines()[0]
+
+
+def _module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bs_fixed", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_l4_fixed_in_the_entry_asked_about_not_the_newest(tmp_path):
+    """ZA-OPRAVYANE row 71 (22.10): since row 59 L4 asks about any entry the session wrote, but
+    `_fixed` read only the newest, so the claim listed where it stands was counted not fixed."""
+    bs = _module()
+    log, heading = _book(tmp_path, listed=True)
+    assert bs._fixed("L4", log, heading) is True
+    log, heading = _book(tmp_path, listed=False)
+    assert bs._fixed("L4", log, heading) is False
+
+
+def test_the_watch_passes_the_heading_it_asked_about(tmp_path):
+    bs = _module()
+    log, heading = _book(tmp_path, listed=True)
+    state = {"fix_watch": [{"lesson": "L4", "folder": str(log.parent), "heading": heading, "stops": 0}]}
+    Path(os.environ["BATON_LESSONS_STATE"]).write_text(json.dumps(state), "utf-8")
+    bs.fix_check("LOGBOOK.md")
+    assert _rec("L4").get("fixed_after") == 1, _rec("L4")

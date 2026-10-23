@@ -1017,8 +1017,10 @@ def _fix_watch(state: dict, lesson: str, folder: Path, heading: str, now: dateti
     state["fix_watch"] = watch[-_FIX_CAP:]
 
 
-def _fixed(lesson: str, book: Path) -> bool | None:
-    """Is the violation gone from this logbook's newest entry? None: the logbook cannot be read."""
+def _fixed(lesson: str, book: Path, heading: str | None = None) -> bool | None:
+    """Is the violation gone from the entry Stop asked about -- found by its heading, the newest
+    one when it is not there? None: the logbook cannot be read. Only the newest was read, so a
+    claim fixed in the session's second entry was counted not fixed (row 71, after row 59)."""
     try:
         text = book.read_text("utf-8-sig")
         saved = datetime.fromtimestamp(book.stat().st_mtime)
@@ -1027,6 +1029,8 @@ def _fixed(lesson: str, book: Path) -> bool | None:
     top = top_entry(text)
     if top is None:
         return None
+    if lesson != "L1":          # L1's fix changes the heading: the newest entry is the answer
+        top = next((e for e in _all_entries(text) if e[0] == heading), top)
     heading, body = top
     if lesson == "L1":
         m = _HEADING.match(heading)
@@ -1052,7 +1056,7 @@ def fix_check(name: str, now: datetime | None = None) -> None:
             return
         left = []
         for w in watch:
-            fixed = _fixed(w.get("lesson", ""), Path(w.get("folder", "")) / name)
+            fixed = _fixed(w.get("lesson", ""), Path(w.get("folder", "")) / name, w.get("heading"))
             w["stops"] = w.get("stops", 0) + 1
             if fixed:
                 ss.lesson_event(state, w["lesson"], "fixed_after", now)
