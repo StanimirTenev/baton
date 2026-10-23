@@ -356,7 +356,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.24.0]
+[baton:board v3.24.1]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -1625,6 +1625,13 @@ could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=,
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
 
 ## Versions
+
+**v3.24.1** — the plugin directory accepts Baton again
+
+- **No shipped file holds a whole key-shaped string.** The directory blocked v3.22.0–v3.24.0 with
+  "Secret in a shipped file": the test for row 48 (masking a pasted key) listed fourteen fake keys
+  verbatim. Each is now cut into pieces that Python joins at run time; the values the test checks
+  are the same, and nothing in the hooks changes.
 
 **v3.24.0** — a turn that ends on an API error leaves a beat; the doctor asks per session
 

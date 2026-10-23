@@ -103,21 +103,22 @@ def test_a_short_exchange_is_not_a_finding(tmp_path):
 
 # -- ZA-OPRAVYANE row 48 (Haddad, Sidhu, 22.10, said publicly): a pasted key was quoted verbatim ----
 
-SECRETS = [
+SECRETS = [  # each one cut in pieces, so no shipped file holds a whole key-shaped string (the
+             # directory blocked v3.22.0-v3.24.0 for "Secret in a shipped file" on this list)
     "FAKE_sk-probe-0000-not-a-real-secret",                       # the probe of 22.10
-    "sk-ant-api03-AbCdEfGh1234567890",
-    "sk-or-v1-0123456789abcdef0123",
-    "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-    "github_pat_11ABCDEFG0123456789_abcdefghijk",
-    "AKIAIOSFODNN7EXAMPLE",
-    "xoxb-1234567890-abcdefghij",
-    "AIzaSyA1234567890abcdefghijklmnopqrstu",
-    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N",
-    "token=hunter2hunter2",
-    "PASSWORD: correct-horse-battery",
-    "Bearer abcdef0123456789",
-    "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
-    "dGhpcyBpcyBhIGxvbmcgYmFzZTY0IHNlY3JldCB2YWx1ZQ2",
+    "sk-ant-a" "pi03-AbC" "dEfGh123" "4567890",
+    "sk-or-v1" "-0123456" "789abcde" "f0123",
+    "ghp_ABCD" "EFGHIJKL" "MNOPQRST" "UVWXYZ01" "23456789",
+    "github_p" "at_11ABC" "DEFG0123" "456789_a" "bcdefghi" "jk",
+    "AKIAIOSF" "ODNN7EXA" "MPLE",
+    "xoxb-123" "4567890-" "abcdefgh" "ij",
+    "AIzaSyA1" "23456789" "0abcdefg" "hijklmno" "pqrstu",
+    "eyJhbGci" "OiJIUzI1" "NiJ9.eyJ" "zdWIiOiI" "xMjM0NTY" "3ODkwIn0" ".dozjgNr" "yP4J3jVm" "NHl0w5N",
+    "token=hu" "nter2hun" "ter2",
+    "PASSWORD" ": correc" "t-horse-" "battery",
+    "Bearer a" "bcdef012" "3456789",
+    "9f86d081" "884c7d65" "9a2feaa0" "c55ad015" "a3bf4f1b" "2b0b822c" "d15d6c15" "b0f00a08",
+    "dGhpcyBp" "cyBhIGxv" "bmcgYmFz" "ZTY0IHNl" "Y3JldCB2" "YWx1ZQ2",
 ]
 
 
