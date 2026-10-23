@@ -466,10 +466,14 @@ the newest entry this session wrote in that folder says tests pass, Stop starts 
 command **in the background, after the turn** -- detached, its output to
 `baton.tests.<folder>.log` next to the settings, under its own budget -- and returns at once; it
 says so to the human in one line. Once per entry, one run at a time per folder. The verdict is
-the **exit code**: 0 passed; 5 with `pytest` in the command, **no tests ran** (pytest's code for
-"nothing collected" -- `-k` that matches nothing prints "575 deselected" and no "failed"; other
-runners may use 5 differently); any other code, failed; over the budget, timed out (the process
-group is killed); a `cwd` that is not there, could not start. The record
+**what the runner printed, then its exit code** (since v3.23.0, ZA-OPRAVYANE rows 74, 75; it was
+the exit code alone): **no tests ran** when the output says so -- pytest's "no tests ran"
+(`-k` that matches nothing), unittest's "NO TESTS RAN" / "Ran 0 tests", jest's "No tests found",
+vitest's "No test files found", and `go test` when every package is `[no test files]` or
+`[no tests to run]` -- whatever the code (`go test` exits 0 there, jest 1); otherwise 0 passed,
+any other code failed; over the budget, timed out (the process group is killed); a `cwd` that is
+not there, could not start. Another runner that exits 0 having run nothing is still "passed": the
+output is read for these runners' sentences only. The record
 (`baton.tests.<folder>.json`) keeps the command, the folder it ran in, the exit code, the
 duration and the last line it printed. The next Stop says the result beside the claim, once, in a
 message the agent does not write; if the session ended first, the next SessionStart puts it on the

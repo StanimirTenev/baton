@@ -870,11 +870,28 @@ def pinned_runs(root: Path, name: str, since: float | None, session: str) -> tup
     return said, started
 
 
+# What a runner prints when it ran no test (ZA-OPRAVYANE rows 74, 75; Kyle Bartlett, 23.10). The
+# verdict was the exit code, and "no tests ran" was code 5 with "pytest" anywhere in the command:
+# `go test` in a module with no test files exits 0 and was "passed"; unittest's "NO TESTS RAN"
+# (exit 5) was "failed"; jest's "No tests found" exits 1; and any program exiting 5 from a folder
+# whose path held "pytest" was "no tests ran". Now the output is read: pytest, unittest, jest and
+# vitest say it in a line; go says it per package, so only when no package ran a test.
+TAIL_BYTES = 64 * 1024
+_NO_TESTS = re.compile(r"(?im)\bno tests ran\b|^Ran 0 tests\b|\bNo tests? (?:files )?found\b")
+_GO_NONE = re.compile(r"(?m)^(?:\?\s+\S+\s+\[no test files\]|ok\s+\S+.*\[no tests to run\])\s*$")
+_GO_RAN = re.compile(r"(?m)^(?:ok|FAIL|---)\s(?!.*\[no tests to run\])")
+
+
+def ran_nothing(text: str) -> bool:
+    """The runner's output says it ran no test."""
+    return bool(_NO_TESTS.search(text)) or bool(_GO_NONE.search(text) and not _GO_RAN.search(text))
+
+
 def run_tests(folder_arg: str) -> int:
     """The background runner (`baton_stop.py --run-tests <folder>`). Runs the command pinned for
     that folder -- read here, from baton.local.json, never from the arguments -- in its own process
-    group, within its budget, and records the verdict by exit code: 0 passed; 5 from pytest, no
-    tests ran; another code, failed; over budget, timed out (the group is killed)."""
+    group, within its budget, and records the verdict: no tests ran, when its output says so (rows
+    74, 75); else 0 passed, another code failed; over budget, timed out (the group is killed)."""
     folder = Path(folder_arg)
     pin, _problem = pinned_tests(folder)
     if not pin:
@@ -911,16 +928,15 @@ def run_tests(folder_arg: str) -> int:
                 proc.wait()
     except Exception as exc:
         verdict = f"could not start: {type(exc).__name__}"
-    if verdict is None:
-        verdict = ("passed" if code == 0 else
-                   "no tests ran" if code == 5 and "pytest" in pin["command"] else "failed")
     try:
         with open(log, "rb") as fh:
-            fh.seek(max(0, os.path.getsize(log) - 4096))
-            tail = fh.read().decode("utf-8", "replace").splitlines()
-        line = next((ln.strip() for ln in reversed(tail) if ln.strip()), "")[:200]
+            fh.seek(max(0, os.path.getsize(log) - TAIL_BYTES))
+            text = fh.read().decode("utf-8", "replace")
     except OSError:
-        line = ""
+        text = ""
+    line = next((ln.strip() for ln in reversed(text.splitlines()) if ln.strip()), "")[:200]
+    if verdict is None:
+        verdict = ("no tests ran" if ran_nothing(text) else "passed" if code == 0 else "failed")
     rec.update({"state": "done", "finished": datetime.now().isoformat(),
                 "seconds": round(time.time() - t0, 1), "exit": None if verdict == "timed out"
                 else code, "verdict": verdict, "line": line, "log": str(log), "reported": False})
