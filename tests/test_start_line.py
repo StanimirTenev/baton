@@ -66,3 +66,15 @@ def test_a_new_user_with_no_tasks_is_told_baton_is_on(tmp_path):
 def test_installed_twice_says_so_on_the_screen_too(tmp_path):
     line = _run(tmp_path, plugin=True, installer=True)["systemMessage"]
     assert "installed twice" in line
+
+
+def test_a_task_without_a_header_is_not_nothing_waiting(tmp_path):
+    """Clean-install probe, 24.10: one task folder whose logbook has no header, and the line
+    said "nothing waiting" -- as if there were no task."""
+    root = tmp_path / "tasks"
+    (root / "billing").mkdir(parents=True)
+    (root / "billing" / "LOGBOOK.md").write_text("# billing\n\n## 2026-09-01 10:00 — a\n\nx\n",
+                                                 encoding="utf-8")
+    line = _run(tmp_path, tasks=False)["systemMessage"]
+    assert "nothing waiting" not in line
+    assert "1 without a header" in line

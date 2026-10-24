@@ -1745,7 +1745,7 @@ SHOW_BOARD = (
 
 
 def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
-               root: Path | None = None, twice: bool = False) -> str:
+               root: Path | None = None, twice: bool = False, plain: int = 0) -> str:
     """The one line the human sees in the terminal at session start. English, because the hook
     cannot know the human's language; the agent shows the board itself in that language.
     Without it, a session where the agent did not show the board looked like a session without
@@ -1757,7 +1757,8 @@ def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
         return (f"🧭 Baton is on -- no task folders yet in {root}. Write anything and the "
                 "agent will help you start one.")
     parts = [f"{n} {label}" for n, label in ((on_move, "on your move"), (ongoing, "ongoing"),
-                                             (outside, "waiting on others")) if n]
+                                             (outside, "waiting on others"),
+                                             (plain, "without a header")) if n]
     return ("🧭 Baton: " + (", ".join(parts) or "nothing waiting") +
             ". Write anything and the agent opens its reply with the full board.")
 
@@ -2113,7 +2114,8 @@ def main() -> int:
 
     # No systemMessage: that one reaches the human as it is, in English. The agent knows the
     # human's language and the hook does not, so the agent shows the board -- translated.
-    return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external)))
+    return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external),
+                                     plain=len(plain)))
 
 
 def _start() -> None:
