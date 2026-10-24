@@ -42,7 +42,7 @@ use the pasted one.
    and what has been spent, and never the key. Report both. If the limit says `none`, suggest
    setting one on the *Keys* page.
 6. **Settings for the review.** The review also needs `baton.local.json` (`review_index`,
-   `review_confidential` — see the README, "Configure it before it will run"). As a plugin it
+   `review_confidential` — see `docs/review-tools.md`, "Configure it before it will run"). As a plugin it
    lives in `${CLAUDE_PLUGIN_DATA}`, and the review is run with that folder passed in:
    `CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" python3 "${CLAUDE_PLUGIN_ROOT}/tools/baton_review.py" --stale`.
    With the install script it is `~/.claude/baton/hooks/baton.local.json`. Do not write the

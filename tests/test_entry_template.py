@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_every_place_that_teaches_the_entry_has_the_new_sections():
-    for rel in ("templates/LOGBOOK.md", "templates/CLAUDE.md", "README.md"):
+    for rel in ("templates/LOGBOOK.md", "templates/CLAUDE.md", "docs/how-it-works.md"):
         text = (ROOT / rel).read_text("utf-8")
         assert "### Corrections" in text, rel
         assert "### Changed: old → new" in text, rel

@@ -21,9 +21,10 @@ HOOKS = ROOT / "hooks"
 
 
 def _body() -> str:
-    """The README with the changelog cut off — the changelog does not count."""
+    """The README with the changelog cut off — the changelog does not count — and docs/."""
     text = README.read_text(encoding="utf-8")
-    return text.split("## Versions", 1)[0]
+    docs = "\n".join(p.read_text(encoding="utf-8") for p in sorted((ROOT / "docs").glob("*.md")))
+    return text.split("## Versions", 1)[0] + "\n" + docs
 
 
 def _is_shim(path):
