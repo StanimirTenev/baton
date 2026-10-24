@@ -175,7 +175,7 @@ per-process scope PowerShell provides for exactly this.
 
 Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
 skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`, `baton-key`, `baton-doctor`), appends to
-`~/.claude/CLAUDE.md`, merges four entries into `~/.claude/settings.json`, and creates
+`~/.claude/CLAUDE.md`, merges five entries into `~/.claude/settings.json`, and creates
 `~/tasks/`. The hooks are copied to your profile, but **keep the source** — the clone, the
 download or the folder it ran from: the installer records its path, and the tools (the doctor,
 the update check, the board, the inventory) run from its `tools/`. Run it twice and the second run reports that

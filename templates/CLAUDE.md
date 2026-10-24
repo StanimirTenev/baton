@@ -83,7 +83,7 @@ New state replaces old state in the memory file. The logbook only ever grows.
 
 ## Enforcement
 
-Three hooks ship with Baton and do not depend on the agent remembering any of the above:
+Five hooks ship with Baton and do not depend on the agent remembering any of the above:
 
 - **SessionStart** lists the task folders grouped by who holds the next move and sorted by
   priority (from each logbook's header), or by last entry when a logbook has no header.
@@ -94,6 +94,8 @@ Three hooks ship with Baton and do not depend on the agent remembering any of th
   edit as an entry.
 - **UserPromptSubmit** names a task a message touches — by folder or `aliases` — with its last
   entry and next step, so its record is read before anything is proposed.
+- **PostToolBatch** flags an empty or failed read result before it turns into "it is not there".
+- **StopFailure** only records a turn that ended on an API error, for `/baton-doctor`.
 
 Work that predates Baton is mapped once with `/baton-inventory`. The skill searches the
 machine, you confirm each task's state, and only then does it create folders with

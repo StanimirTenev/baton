@@ -234,7 +234,7 @@ one wins, so a half-translated header never loses what it said.
 | `code` | `kod` | |
 | `result` (plans) | `rezultat` | open `otvoren` · done `izpalnen` · abandoned `izostaven` |
 
-All three hooks read the header through one parser, and the synonym map lives there
+The three hooks that read the header (SessionStart, Stop, UserPromptSubmit) share one parser, and the synonym map lives there
 (`FIELD_SYNONYMS`, `VALUE_SYNONYMS`). Until v3.0.0 Stop and the prompt hook each had a reader
 of their own, and one of them would have asked an English header for a criterion it already had.
 

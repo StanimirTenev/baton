@@ -14,7 +14,8 @@ Baton makes the note-taking structural instead of voluntary. Every task gets a f
 folder holds a `LOGBOOK.md`, and two hooks make sure the logbook is read at the start and
 written at the end. Two more help in between: one brings up a task's record when a message
 names it (and, when the session grows long, has the logbooks written and suggests `/clear`), one flags an empty read result
-before it turns into "it is not there". The hooks are executed by the harness, not by the
+before it turns into "it is not there". A fifth only records a turn that ends on an API error,
+for `/baton-doctor`. The hooks are executed by the harness, not by the
 agent's judgement, and they make no network requests (see *What Baton sends over the network*).
 
 
