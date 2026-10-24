@@ -17,7 +17,7 @@ at the end.
 | claude.ai chat (web, desktop, mobile) | **no** -- hooks are ignored, only the skills load, nothing is enforced |
 | Cowork | loads hooks, but Baton is untested there |
 
-**In a claude.ai chat nothing warns you:** the plugin looks installed and the skills answer,
+**In a claude.ai chat nothing warns you:** the plugin looks installed and the skills load,
 but no hook runs ([platform support](https://claude.com/docs/plugins/platform-support)).
 A plugin added from the directory on claude.ai reaches Claude Code at its next session start.
 
@@ -30,16 +30,17 @@ claude plugin marketplace add StanimirTenev/baton && claude plugin install baton
 git clone https://github.com/StanimirTenev/baton ~/.baton && ~/.baton/install.sh
 ```
 
-On Windows the script is `install.cmd` (or `setup-windows.cmd` on a machine with no Claude
-Code). Task folders go in `~/tasks` unless you choose another. With the script, keep the
-clone: the tools, including the doctor, run from it. An agent installing Baton for you reads
+Windows: `install.cmd`. Tasks go in `~/tasks` unless you choose another. With the script, keep
+the clone: the tools, the doctor too, run from it. An agent installing Baton for you reads
 [docs/install.md](docs/install.md) first. Then start a new Claude Code session.
 
 ## Is it working?
 
-The new session shows one line, `🧭 Baton is on ...` or `🧭 Baton: ...`, and the agent's first
-reply opens with the board of your tasks. No line? Run `/baton-doctor` (`/baton:baton-doctor`
-as a plugin): it shows when each hook last finished, or that it crashed.
+The new session shows one line starting `🧭 Baton` -- with no task folders yet,
+`🧭 Baton is on -- no task folders yet in ~/tasks`. That line is the confirmation; once a task
+folder exists, the agent's first reply opens with the board of your tasks. No line? Run
+`/baton-doctor` (`/baton:baton-doctor` as a plugin): it shows when each hook last finished,
+or that it crashed.
 
 ## Documentation
 
