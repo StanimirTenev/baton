@@ -143,8 +143,10 @@ git clone https://github.com/StanimirTenev/baton %USERPROFILE%\.baton
 ```
 
 No git and no internet on the target machine? Copy this folder onto a USB stick, plug it
-in, and double-click `install.cmd`. The installer copies the hooks into your user profile,
-so the stick can come straight back out afterwards. Put a Windows **embeddable Python**
+in, and double-click `install.cmd`. The installer copies the hooks into your user profile, so
+the hooks keep running with the stick back out -- but the tools (the doctor, the update check,
+the board) run from the folder `install.cmd` ran from. To keep them, copy the folder off the
+stick first and run `install.cmd` from the copy. Put a Windows **embeddable Python**
 (from python.org) in a `python-win\` folder next to `install.cmd` and the installer will
 use it when the machine has no Python of its own — so the stick needs nothing installed on
 the target at all.
@@ -174,8 +176,9 @@ per-process scope PowerShell provides for exactly this.
 Nothing is overwritten. The installer copies the hooks into `~/.claude/baton/` and the
 skills into `~/.claude/skills/` (`baton-inventory`, `baton-plan`, `baton-task`, `baton-key`, `baton-doctor`), appends to
 `~/.claude/CLAUDE.md`, merges four entries into `~/.claude/settings.json`, and creates
-`~/tasks/`. Because the hooks are copied to your profile, the source — a clone, a download,
-or a USB stick — can be removed afterwards. Run it twice and the second run reports that
+`~/tasks/`. The hooks are copied to your profile, but **keep the source** — the clone, the
+download or the folder it ran from: the installer records its path, and the tools (the doctor,
+the update check, the board, the inventory) run from its `tools/`. Run it twice and the second run reports that
 everything is already in place. Run it again with another task root or logbook
 (`BATON_HOME`, `BATON_LOGBOOK`) and the Baton section in `CLAUDE.md` is rewritten to match —
 only the text between `<!-- Installed by Baton. ... -->` and `<!-- End of Baton section -->`,

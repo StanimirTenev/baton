@@ -24,6 +24,9 @@ CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" BATON_SESSION="${CLAUDE_SESSION_ID}" 
 If the line above still shows the literal text `${CLAUDE_PLUGIN_ROOT}`, this is a script
 install: run `BATON_SESSION="${CLAUDE_SESSION_ID}" python3 <repo>/tools/baton_doctor.py`, where `<repo>` is `repo` in
 `~/.claude/baton/hooks/baton.local.json`. On Windows use `python` for `python3`.
+If Python answers "can't open file", the source Baton was installed from is gone from that
+path: tell the human the clone was moved or removed (the hooks still run; the tools do not), and
+that cloning it back to that path, or installing again from a new clone, brings the tools back.
 `BATON_SESSION` is this session, whose turn is not over yet: the doctor leaves it out of the turn
 check below.
 
