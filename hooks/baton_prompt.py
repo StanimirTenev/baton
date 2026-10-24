@@ -274,6 +274,26 @@ def restart_due(session: str, tokens: int) -> bool:
     return level > said
 
 
+def chat_count(transcript: str, root: Path, logbook: str) -> str:
+    """For the ask before /clear: how many messages the human typed since the last entry headed
+    in this session's time, and the first of them -- SessionStart's count, on this session's
+    transcript. Empty when it cannot count: the question is asked without a number."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        folders = [p for p in root.iterdir() if p.is_dir()] if root.is_dir() else []
+        found = mod.chat_since_entry(transcript, folders, logbook)
+        if not found or not found[0]:
+            return ""
+        return (f" -- Baton counted {len(found[0])} messages typed by the human since the last "
+                "entry headed in this session's time, beginning: "
+                + mod.quote([t for _, t in found[0]]))
+    except Exception:
+        return ""
+
+
 def _stands_down() -> bool:
     """Installed twice (see installed_twice in SessionStart): this plugin copy stays quiet."""
     try:
@@ -328,17 +348,26 @@ def main() -> int:
         # much. No hook can run /clear itself (claude-code #35150, #16659: not planned), so
         # the logbooks are written first and the human types one command in the same window;
         # SessionStart with `source: "clear"` then hands the fresh context the board.
+        # The ask comes before /clear (the owner, 24.10): a decision made only in chat goes with
+        # the context, and SessionStart's question about it came after -- too late.
         lines.append(f"Baton: this session is at ~{k}k tokens of context, and every message "
                      "re-sends all of it -- that is what eats the usage limit. Finish this turn, "
                      "then, before your reply ends, write the logbook entry of every task "
                      "touched in this session that its logbook does not yet record -- decisions "
                      "and conversations count, not only files -- so nothing lives only in this "
-                     "context. Then tell the human in their language, in one line: the logbooks "
-                     "are written; type /clear to continue in this window with a fresh context, "
-                     "Baton brings the tasks back. No need to quit or start a new session.")
+                     "context. Then ask the human in their language whether anything decided or "
+                     "agreed only in this conversation, in no file, should be recorded, and in "
+                     "which task" + chat_count(str(payload.get("transcript_path") or ""), root,
+                                               logbook) + ". Do not suggest /clear in this "
+                     "reply. Only after they answer -- and what they name is recorded -- tell "
+                     "them in one line: the logbooks are written; type /clear to continue in this "
+                     "window with a fresh context, Baton brings the tasks back. No need to quit "
+                     "or start a new session.")
         out = json.dumps({"systemMessage": f"Baton: ~{k}k tokens in this session -- every message "
-                                           "re-sends them. Once the logbooks are written, type "
-                                           "/clear -- Baton brings the tasks back.",
+                                           "re-sends them. The agent writes the logbooks and asks "
+                                           "whether anything said only in chat should be "
+                                           "recorded; after that, type /clear -- Baton brings "
+                                           "the tasks back.",
                           "hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                                  "additionalContext": "\n".join(lines)}},
                          ensure_ascii=False)

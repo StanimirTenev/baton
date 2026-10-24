@@ -1382,6 +1382,42 @@ def _batch():
     return mod
 
 
+# A turn that changed no task file passes every check above, however much was decided in it
+# (ZA-OPRAVYANE row 26; the owner, 24.10: ask in the same session, not at the next start). Six
+# messages since this session's last entry, twice SessionStart's three: this one is asked
+# mid-session and again every six, and a question every third message is the reminder nobody reads.
+CHAT_EVERY = 6
+
+
+def chat_ask(root: Path, name: str, transcript: str, session: str) -> str | None:
+    """The note to hand back when the human has said CHAT_EVERY or more things since the last
+    entry written in this session; None otherwise, and when the transcript cannot be read."""
+    try:
+        folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
+        found = _ss().chat_since_entry(transcript, folders, name)
+        if not found or len(found[0]) < CHAT_EVERY:
+            return None
+        said, total = found
+        # A logbook saved after the turn's message: this turn wrote an entry, whatever its heading
+        # says (lesson L1 -- hand-typed hours were wrong by hours).
+        if any((f / name).is_file() and (f / name).stat().st_mtime >= said[-1][0].timestamp()
+               for f in folders):
+            return None
+        asked = _already_asked(session)
+        before = max((int(a[5:]) for a in asked if a.startswith("chat:") and a[5:].isdigit()),
+                     default=0)
+        if total - before < CHAT_EVERY:
+            return None
+        _remember(session, asked | {f"chat:{total}"})
+        return (f"Baton: no task file changed, and the human has typed {len(said)} messages since "
+                f"the last {name} entry headed in this session's time -- a decision made only in "
+                "chat leaves no trace. They began: " + _ss().quote([t for _, t in said]) + ". Ask "
+                "the human once, in their language, whether any of it should be recorded and in "
+                f"which task; if not, finish. (Asked once per {CHAT_EVERY} messages.)")
+    except Exception:
+        return None               # a count that cannot read must not cost the session
+
+
 def _stands_down() -> bool:
     """Installed twice (see installed_twice in SessionStart): this plugin copy stays quiet."""
     try:
@@ -1527,6 +1563,12 @@ def main() -> int:
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), *tested)))}
     if (not stale and not open_ended and not ahead and not typed and not thin and not claims
             and not passes and not rewritten):
+        chat = chat_ask(root, name, str(payload.get("transcript_path") or ""), session)
+        if chat:
+            sys.stdout.buffer.write(json.dumps({"decision": "block", "reason": chat, **note},
+                                               ensure_ascii=False).encode("utf-8"))
+            sys.stdout.flush()
+            return 0
         if note:
             sys.stdout.buffer.write(json.dumps(note, ensure_ascii=False).encode("utf-8"))
             sys.stdout.flush()
