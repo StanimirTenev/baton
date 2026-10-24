@@ -1576,6 +1576,76 @@ def mask_secrets(text: str) -> str:
     return _SECRET.sub("[masked]", text)
 
 
+def human_messages(path: Path) -> tuple[list, datetime | None, datetime | None, bool]:
+    """(when, text) of every message the human typed in a transcript, its first and last time,
+    and whether only its last QUIET_MAX_BYTES were read. Raises OSError when it cannot be read."""
+    said, start, end, cut = [], None, None, False
+    with open(path, "rb") as fh:
+        size = Path(path).stat().st_size
+        if size > QUIET_MAX_BYTES:
+            fh.seek(size - QUIET_MAX_BYTES)
+            fh.readline()
+            cut = True
+        for raw in fh:
+            # Only a line that can be a human message is parsed; the time is cut out of the
+            # rest as bytes. A 73 MB transcript took 3.5 s parsed whole (21.10, under load).
+            stamp = _STAMP.search(raw)
+            when = _local_time(stamp.group(1).decode("ascii", "replace")) if stamp else None
+            if when is None:
+                continue
+            start, end = min(start or when, when), max(end or when, when)
+            if not _USER.search(raw) or b'"tool_result"' in raw:
+                continue
+            try:
+                obj = json.loads(raw.decode("utf-8", "replace"))
+            except ValueError:
+                continue
+            text = _human(obj) if isinstance(obj, dict) else None
+            if text:
+                said.append((when, text))
+    return said, start, end, cut
+
+
+def entry_times(folders: list, logbook: str):
+    """(time, has an hour) of every dated entry heading in these folders' logbooks."""
+    for f in folders:
+        for m in _ENTRY_HEADING.finditer(read_head(Path(f) / logbook)):
+            try:
+                day = datetime.strptime(m.group(1), "%Y-%m-%d" if "-" in m.group(1) else "%d.%m.%Y")
+            except ValueError:
+                continue
+            if m.group(2):
+                yield day.replace(hour=int(m.group(2)), minute=int(m.group(3))), True
+            else:
+                yield day, False
+
+
+def quote(said: list, n: int = 5) -> str:
+    """The first `n` messages, masked, each cut at 70 characters."""
+    return "; ".join(f"\"{mask_secrets(t)[:70]}\"" for t in said[:n]) + (" ..." if len(said) > n else "")
+
+
+# The same count inside the session still going (the owner, 24.10): the next start comes after
+# /clear, and /clear is what Baton itself suggests at ~200k -- so the question came one context too
+# late, once the conversation was already gone. Messages typed after the last entry headed in this
+# session's time; a heading with no hour covers its whole day, as in Stop's session_entries.
+def chat_since_entry(transcript: str, folders: list, logbook: str) -> tuple[list, int] | None:
+    """((when, text) typed since the last entry this session, how many typed this session), or
+    None when the transcript cannot be read."""
+    try:
+        timed, start, _, _ = human_messages(Path(transcript))
+    except (OSError, ValueError):
+        return None
+    if start is None:
+        return None
+    last = None
+    for at, timed_heading in entry_times(folders, logbook):
+        at = at if timed_heading else at.replace(hour=23, minute=59)
+        if at >= start - QUIET_SLACK and (last is None or at > last):
+            last = at
+    return [(when, t) for when, t in timed if last is None or when > last], len(timed)
+
+
 def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
     """The last session in this project said things and wrote no entry: say so, once."""
     mine = Path(str(own.get("transcript_path") or ""))
@@ -1596,33 +1666,11 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
         state = {}
     if state.get("quiet_checked") == key:
         return None
-    said, start, end, cut = [], None, None, False
     try:
-        with open(last, "rb") as fh:
-            size = last.stat().st_size
-            if size > QUIET_MAX_BYTES:
-                fh.seek(size - QUIET_MAX_BYTES)
-                fh.readline()
-                cut = True
-            for raw in fh:
-                # Only a line that can be a human message is parsed; the time is cut out of the
-                # rest as bytes. A 73 MB transcript took 3.5 s parsed whole (21.10, under load).
-                stamp = _STAMP.search(raw)
-                when = _local_time(stamp.group(1).decode("ascii", "replace")) if stamp else None
-                if when is None:
-                    continue
-                start, end = min(start or when, when), max(end or when, when)
-                if not _USER.search(raw) or b'"tool_result"' in raw:
-                    continue
-                try:
-                    obj = json.loads(raw.decode("utf-8", "replace"))
-                except ValueError:
-                    continue
-                text = _human(obj) if isinstance(obj, dict) else None
-                if text:
-                    said.append(text)
+        timed, start, end, cut = human_messages(last)
     except OSError:
         return None
+    said = [text for _, text in timed]
     state["quiet_checked"] = key
     try:
         _state_file().write_text(json.dumps(state), "utf-8")
@@ -1631,20 +1679,14 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
     if len(said) < QUIET_MIN_MESSAGES or start is None:
         return None
     entries = 0
-    for f in folders:
-        for m in _ENTRY_HEADING.finditer(read_head(f / logbook)):
-            try:
-                day = datetime.strptime(m.group(1), "%Y-%m-%d" if "-" in m.group(1) else "%d.%m.%Y")
-            except ValueError:
-                continue
-            if m.group(2):
-                at = day.replace(hour=int(m.group(2)), minute=int(m.group(3)))
-                entries += start - QUIET_SLACK <= at <= end + QUIET_SLACK
-            else:
-                entries += start.date() <= day.date() <= end.date()
+    for at, timed_heading in entry_times(folders, logbook):
+        if timed_heading:
+            entries += start - QUIET_SLACK <= at <= end + QUIET_SLACK
+        else:
+            entries += start.date() <= at.date() <= end.date()
     if entries:
         return None
-    shown = "; ".join(f"\"{mask_secrets(t)[:70]}\"" for t in said[:5]) + (" ..." if len(said) > 5 else "")
+    shown = quote(said)
     return (f"📝 The last session in this project ({start:%Y-%m-%d %H:%M}–{end:%H:%M}) had "
             f"{len(said)} messages from the human and 0 logbook entries headed in that time"
             + (f" (counted in its last {QUIET_MAX_BYTES >> 20} MB)" if cut else "") + ". Stop asks only about files, so "

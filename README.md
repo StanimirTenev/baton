@@ -875,6 +875,15 @@ the logbook entries whose heading falls inside its time (15 minutes' slack). Thr
 more and no entry: the agent is told so, with the first five messages quoted, and asks the human
 once whether any of it should be recorded. Said once per session.
 
+**The same count, in the session still going** (24 October 2026): after `/clear` the question
+came one context too late. Now, before the ~200k reminder lets the agent suggest `/clear`, the
+agent asks the human whether anything decided only in chat should be recorded -- with the number
+of messages typed since the last entry headed in this session's time, and the first five quoted.
+`/clear` is suggested only after the answer. And Stop, on a turn that changed no task file, hands
+the turn back once when six or more messages have been typed since that entry (twice the threshold
+above: it is asked mid-session, again every six) -- never on a turn that saved a logbook, never
+twice in a turn, and silent when the transcript cannot be read.
+
 **Secret-shaped strings are masked before a message is quoted** (since v3.22.0, ZA-OPRAVYANE
 row 48, after Bernard Haddad and Bachittarjeet Singh Sidhu): a fake key pasted into a message came
 back verbatim in the new session's context. Now `sk-…`, GitHub (`ghp_…`, `github_pat_…`), AWS
