@@ -16,7 +16,7 @@ written at the end. Two more help in between: one brings up a task's record when
 names it (and, when the session grows long, has the logbooks written and suggests `/clear`), one flags an empty read result
 before it turns into "it is not there". A fifth only records a turn that ends on an API error,
 for `/baton-doctor`. The hooks are executed by the harness, not by the
-agent's judgement, and they make no network requests (see *What Baton sends over the network*).
+agent's judgement, and they make no network requests (see [What Baton sends over the network](../README.md#what-baton-sends-over-the-network)).
 
 
 ## Why this exists

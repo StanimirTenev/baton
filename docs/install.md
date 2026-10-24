@@ -96,7 +96,7 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   - **From this repository's marketplace** (the two commands above): auto-update is off by
     default for marketplaces other than Anthropic's. Turn it on under `/plugin` -> *Marketplaces*,
     or run `claude plugin update baton@baton`.
-  - **After an update, the agent tells you once what is new**, from the notes in this README that
+  - **After an update, the agent tells you once what is new**, from the notes in the [README](../README.md#versions) that
     came with it -- the bold first line of each note under the new version, and a link to the
     release. The hooks do not check for a newer version themselves, so **as a plugin they make
     no network request at all.**
@@ -226,6 +226,6 @@ there is no telemetry; if you would rather not answer, the question does not com
 | `BATON_HOME` | where task folders live (default `~/tasks`) |
 | `CLAUDE_CONFIG_DIR` | config directory to install into (default `~/.claude`) |
 | `BATON_LOGBOOK` | name of the logbook file (default `LOGBOOK.md`) — set it to a word in your own language if you prefer |
-| `"tests"` in `baton.local.json` | a test command a human pins per task folder, run after a turn whose entry says tests pass (L4, since v3.21.0; see *What you get*). Only in the file, never from an environment variable |
+| `"tests"` in `baton.local.json` | a test command a human pins per task folder, run after a turn whose entry says tests pass (L4, since v3.21.0; see [What you get](how-it-works.md#what-you-get)). Only in the file, never from an environment variable |
 
 `BATON_HOME=~/work ./install.sh` bakes that path into the installed hooks.

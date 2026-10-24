@@ -627,7 +627,7 @@ fixed.
 
 ⚠️ A quotation is not a gluing. A logbook describing this very defect contains the broken
 string verbatim, so inline code is stripped before the check. Getting that wrong is how the
-first version falsely rejected a real file while nine unit tests passed — see *Versions*.
+first version falsely rejected a real file while nine unit tests passed — see [Versions](../README.md#versions).
 
 ## Lessons: a mistake caught once is counted
 
@@ -764,7 +764,7 @@ than the whole index. An edit elsewhere in the index does not reset a line; rewr
 does. A link to a logbook is left out: it grows under its line by design (on the author's
 index all four lines first named were logbooks). `--accept` records the lines it names as
 re-read. Whether a line is still *true* is the
-paid review below.
+paid [review](review-tools.md).
 
 ## Retiring a constraint
 
