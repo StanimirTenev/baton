@@ -340,7 +340,8 @@ def main() -> int:
         lines = ["Baton: this message touches a task with a record. Read its logbook -- the "
                  "entries on this topic, not only the top one -- before proposing or acting:"]
         for name, entry, nxt in new:
-            lines.append(f"  - {name}: last entry \"{entry}\"" + (f"; next: {nxt}" if nxt else ""))
+            lines.append(f"  - {name}: " + (f"last entry \"{entry}\"" if entry else "no entry yet")
+                         + (f"; next: {nxt}" if nxt else ""))
     if restart:
         # Plain stdout reaches only the agent; the human sees `systemMessage`.
         k = round(tokens / 1000)

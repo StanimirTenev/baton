@@ -227,3 +227,14 @@ def test_a_short_cyrillic_alias_takes_an_ending_not_any_three_letters(tmp_path):
     for alias, word in (("джеф", "джефа"), ("нова", "новата"), ("пари", "парите"),
                         ("кука", "куката"), ("чужд", "чужди"), ("шина", "шината")):
         assert bp._word_matches(alias, [word]), (alias, word)
+
+
+def test_a_logbook_with_no_entry_yet_says_so(tmp_path):
+    """Clean-install probe, 24.10: a logbook with a header and no entry came back as
+    `last entry ""` -- read as an entry with an empty title."""
+    folder = tmp_path / "billing"
+    folder.mkdir()
+    (folder / "LOGBOOK.md").write_text('---\nstate: active\nnext: "send it"\n---\n', encoding="utf-8")
+    out = _run(tmp_path, "how is billing going?")
+    assert "billing" in out and 'last entry ""' not in out
+    assert "no entry yet" in out and "send it" in out
