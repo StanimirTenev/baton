@@ -4,7 +4,8 @@ Part of the [Baton](../README.md) documentation. Installing comes first: [instal
 
 ### Existing work: `/baton-inventory`
 
-The installer also copies one skill, `~/.claude/skills/baton-inventory/`. Baton starts
+The installer copies five skills into `~/.claude/skills/` -- `baton-inventory`, `baton-plan`,
+`baton-task`, `baton-key` and `baton-doctor` (every folder under `skills/`). Baton starts
 empty, but the machine rarely does. Run `/baton-inventory` once after installing:
 
 1. **Scan.** Four read-only agents search the machine at the same time. They cover git
