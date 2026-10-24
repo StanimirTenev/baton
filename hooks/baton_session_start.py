@@ -1923,8 +1923,12 @@ def main() -> int:
             root.mkdir()        # as install.sh does for a script install; never a drive root
         except OSError:
             pass
-    notices = [n for n in (crash_notice(), tests_notice(), whats_new_notice(), update_notice(date.today()),
-                           lessons_notice(), review_notice(), feedback_notice(date.today())) if n]
+    notices = [n for n in (crash_notice(), tests_notice(), whats_new_notice()) if n]
+    asked = update_notice(date.today())     # after whats_new_notice: both write the state file
+    # The review offer waits for a session the update question does not speak in: a fresh
+    # install's first session stacked the two (clean-install probe, 24.10).
+    notices += [n for n in (asked, lessons_notice(), None if asked else review_notice(),
+                            feedback_notice(date.today())) if n]
     folders = task_folders(root) if root.is_dir() else []
     if folders:
         open_board(own.get("source"), root, name)

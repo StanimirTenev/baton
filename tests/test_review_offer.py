@@ -28,14 +28,24 @@ def _run(tmp_path):
     return json.loads(out.stdout).get("hookSpecificOutput", {}).get("additionalContext", "")
 
 
-def test_offered_on_the_first_run_with_cost_and_what_is_sent(tmp_path):
+def test_not_in_the_session_that_asks_about_updates(tmp_path):
+    """Clean-install probe, 24.10: the first session stacked the update question and this offer.
+    The offer waits for a session the update question did not speak in."""
+    first = _run(tmp_path)
+    assert "check once a week" in first and "optional review" not in first
+
+
+def test_offered_on_the_next_run_with_cost_and_what_is_sent(tmp_path):
+    _run(tmp_path)
     ctx = _run(tmp_path)
+    assert "check once a week" not in ctx
     assert "optional review" in ctx
     assert "SENDS" in ctx and "OpenRouter" in ctx and "$0.0013" in ctx
     assert "/baton-key" in ctx and "never runs by itself" in ctx
 
 
 def test_offered_only_once(tmp_path):
+    _run(tmp_path)
     _run(tmp_path)
     assert "optional review" not in _run(tmp_path)
 
@@ -44,4 +54,5 @@ def test_not_offered_when_a_key_is_already_stored(tmp_path):
     env_file = tmp_path / "home" / ".config" / "baton" / "env"
     env_file.parent.mkdir(parents=True)
     env_file.write_text("OPENROUTER_API_KEY=x\n", "utf-8")
+    _run(tmp_path)
     assert "optional review" not in _run(tmp_path)
