@@ -67,7 +67,8 @@ claude plugin install baton@baton
 
 Claude Code asks for two things: the folder your task folders live in (default `~/tasks`) and the
 name of the logbook file (default `LOGBOOK.md`; use a word in your own language if you prefer).
-Skip the questions and the hooks use those same defaults.
+Skip the questions and the hooks use those same defaults. The first session creates the task
+folder if it is missing, as the install script does.
 
 **Requires Python 3.8 or later** (`python3`, `python` or `py` -- the first one that really
 runs is used). **On Windows it also requires [Git for Windows](https://git-scm.com/downloads/win):**

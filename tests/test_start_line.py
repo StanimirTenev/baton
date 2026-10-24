@@ -78,3 +78,20 @@ def test_a_task_without_a_header_is_not_nothing_waiting(tmp_path):
     line = _run(tmp_path, tasks=False)["systemMessage"]
     assert "nothing waiting" not in line
     assert "1 without a header" in line
+
+
+def test_a_plugin_creates_its_missing_task_root_as_install_sh_does(tmp_path):
+    """Clean-install probe, 24.10: in plugin mode ~/tasks was never created, and the line said
+    "no task folders yet in ~/tasks" of a folder that did not exist. install.sh creates it."""
+    root = tmp_path / "home" / "tasks"
+    (tmp_path / "home" / ".claude").mkdir(parents=True)
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
+    env.update(HOME=str(tmp_path / "home"), CLAUDE_PLUGIN_ROOT=str(ROOT),
+               CLAUDE_PLUGIN_DATA=str(tmp_path / "data"), CLAUDE_PLUGIN_OPTION_TASKS_FOLDER=str(root),
+               BATON_SESSION_STATE=str(tmp_path / "s.json"))
+    out = subprocess.run([sys.executable, str(HOOK)], input="{}", capture_output=True, text=True,
+                         env=env)
+    assert out.returncode == 0, out.stderr
+    assert root.is_dir()
+    assert f"no task folders yet in {root}" in json.loads(out.stdout)["systemMessage"]

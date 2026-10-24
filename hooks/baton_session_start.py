@@ -1918,6 +1918,11 @@ def main() -> int:
         return _emit(compacted(own), COMPACT_LINE, block="compact")
     cleared = own.get("source") == "clear"
     root, name = config()
+    if os.environ.get("CLAUDE_PLUGIN_ROOT") and not root.exists() and root.parent != root:
+        try:
+            root.mkdir()        # as install.sh does for a script install; never a drive root
+        except OSError:
+            pass
     notices = [n for n in (crash_notice(), tests_notice(), whats_new_notice(), update_notice(date.today()),
                            lessons_notice(), review_notice(), feedback_notice(date.today())) if n]
     folders = task_folders(root) if root.is_dir() else []

@@ -35,7 +35,7 @@
     "tasks_folder": {
       "type": "directory",
       "title": "Task folder",
-      "description": "Where your task folders live: one folder per task, each with its logbook. Created by you; Baton only reads it and names what it finds.",
+      "description": "Where your task folders live: one folder per task, each with its logbook. Created at the first session if it is missing; Baton only reads it and names what it finds.",
       "default": "~/tasks"
     },
     "logbook": {
