@@ -94,6 +94,35 @@ another tool's files.
 
 ## Versions
 
+**v3.25.0** — the README's first screen says where Baton runs; chat-only work is asked about before `/clear`
+
+- **The README opens with where Baton works, how to install it, and how to tell it is on.** People
+  installed it without knowing it runs only where Claude Code runs hooks, and in a claude.ai chat
+  nothing warns: the plugin looks installed and the skills load. The rest moved to `docs/` --
+  install, how it works, skills, review tools, memory layout, why -- with its substance unchanged.
+- **Chat-only work is asked about in the same session, and before `/clear`.** After `/clear` the
+  next-session question came one context too late. Before the ~200k reminder suggests `/clear`, the
+  agent asks whether anything decided only in chat should be recorded, with the messages typed since
+  the last entry; and Stop, on a turn that changed no task file, hands the turn back once when six
+  or more have been typed since then. The owner's decision of 24 October, building on the
+  next-session check of 20 October (Jake Manis).
+- **The install docs say to keep the clone.** They said it could be removed; the doctor, the update
+  check and the board run from its `tools/`, and the doctor failed with "can't open file".
+  `/baton-doctor` now tells the agent what that error means.
+- **Every shipped count says five hooks.** The rules said three, the marketplace entry and the
+  install docs four; `docs/skills.md` said the installer copies one skill, not five.
+- **As a plugin, the first session creates a missing task folder**, as the install script does;
+  the start line named a folder that did not exist.
+- **The start line counts tasks without a header** instead of saying "nothing waiting", and the
+  prompt hook says "no entry yet" for a logbook with none instead of `last entry ""`.
+- **The review offer waits for a session without an update notice.** A fresh install's first
+  session stacked it on the update question.
+- Not claimed: that the first screen has been tried on a newcomer -- the fixes come from one
+  simulated clean install. The ask before `/clear` counts messages; whether any was a decision is
+  the human's. A human who never answers the update question, which is asked daily, never sees
+  the review offer. A plugin's task folder is created one level deep only. A script install's third
+  session in a day with no task folder gets no hook context at all, only the rules in `CLAUDE.md`.
+
 **v3.24.1** — the plugin directory accepts Baton again
 
 - **No shipped file holds a whole key-shaped string.** The directory blocked v3.22.0–v3.24.0 with
