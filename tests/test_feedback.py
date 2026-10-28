@@ -8,11 +8,12 @@ agent asks one sentence and gives the link. Through the hook's entry point.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+
+from conftest import child_env
 
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
 
@@ -24,9 +25,7 @@ def _run(tmp_path, state):
     st = tmp_path / "s.json"
     if not st.exists():
         st.write_text(json.dumps(state), "utf-8")
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(home), BATON_HOME=str(tmp_path / "tasks"), BATON_SESSION_STATE=str(st))
+    env = child_env(HOME=str(home), BATON_HOME=str(tmp_path / "tasks"), BATON_SESSION_STATE=str(st))
     out = subprocess.run([sys.executable, str(HOOK)], input=b'{"source":"startup"}',
                          capture_output=True, env=env)
     assert out.returncode == 0, out.stderr

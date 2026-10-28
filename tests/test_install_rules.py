@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from conftest import child_env
+
 ROOT = Path(__file__).resolve().parent.parent
 RULES = ROOT / "hooks" / "_install_rules.py"
 TEMPLATE = ROOT / "templates" / "CLAUDE.md"
@@ -20,8 +22,7 @@ TEMPLATE = ROOT / "templates" / "CLAUDE.md"
 def _install(target, tasks, logbook, dry="0", home=None):
     env = None
     if home:
-        import os
-        env = dict(os.environ, HOME=str(home), USERPROFILE=str(home))
+        env = child_env(HOME=str(home), USERPROFILE=str(home))
     r = subprocess.run([sys.executable, str(RULES), str(TEMPLATE), str(target), tasks, logbook, dry],
                        capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr

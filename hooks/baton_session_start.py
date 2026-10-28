@@ -262,7 +262,7 @@ BOARD_ENV = ("PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT
 
 def board_env(environ, root: Path, logbook: str) -> dict:
     """The environment of the board process: only the names in BOARD_ENV."""
-    env = {k: v for k, v in environ.items() if k in BOARD_ENV}
+    env = {k: environ[k] for k in BOARD_ENV if k in environ}
     env.update(BATON_HOME=str(root), BATON_LOGBOOK=logbook)
     return env
 

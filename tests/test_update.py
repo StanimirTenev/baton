@@ -9,6 +9,8 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+from conftest import child_env
+
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks/baton_session_start.py"
 TODAY = date(2026, 9, 29)
@@ -101,8 +103,7 @@ def test_the_hook_tells_the_agent_even_when_there_are_no_tasks(tmp_path, root_ex
         (tmp_path / "tasks").mkdir()
     (hooks / "baton.local.json").write_text(json.dumps(
         {"home": str(tmp_path / "tasks"), "update_check": True, "repo": str(ROOT)}), "utf-8")
-    env = dict(os.environ, BATON_UPDATE_URL=_release(tmp_path, "v99.0.0"))
-    env.pop("BATON_HOME", None)
+    env = child_env(BATON_UPDATE_URL=_release(tmp_path, "v99.0.0"))
     out = subprocess.run([sys.executable, str(hooks / HOOK.name)], input="", env=env,
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0 and not out.stderr, out.stderr
@@ -135,8 +136,7 @@ def _hook_with_empty_root(tmp_path, talks: int, payload: str = ""):
         f = tmp_path / f"claude/projects/-home-x/{i}.jsonl"
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text("{}\n", "utf-8")
-    env = dict(os.environ, CLAUDE_CONFIG_DIR=str(tmp_path / "claude"))
-    env.pop("BATON_HOME", None)
+    env = child_env(CLAUDE_CONFIG_DIR=str(tmp_path / "claude"))
     run = lambda: subprocess.run([sys.executable, str(hooks / HOOK.name)], input=payload, env=env,
                                  capture_output=True, text=True, timeout=30)
     return run

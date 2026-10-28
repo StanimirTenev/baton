@@ -31,3 +31,21 @@ def _baton_state_outside_the_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_MEMLINT_STATE", str(tmp_path / ".baton.memlint.json"))
     # The doctor reads the machine's managed settings (row 78): not this machine's, in a test.
     monkeypatch.setenv("BATON_MANAGED_DIR", str(tmp_path / ".managed"))
+
+
+# What a hook or script started by a test gets from the environment: what Python and a shell
+# need to start (the Windows names too), and the state files pointed above at tmp_path. Each by
+# name, never a copy of os.environ: a developer's environment can hold API keys and tokens, and
+# no process under test needs them.
+CHILD_ENV = ("PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "SYSTEMDRIVE",
+             "WINDIR", "COMSPEC", "PATHEXT", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR",
+             "LANG", "LC_ALL", "LC_CTYPE", "BATON_BODY_STATE", "BATON_SESSION_STATE",
+             "BATON_LESSONS_STATE", "BATON_MEMLINT_STATE", "BATON_MANAGED_DIR")
+
+
+def child_env(**extra) -> dict:
+    """The environment for a child process of a test: the names in CHILD_ENV, then `extra`."""
+    import os
+    env = {k: os.environ[k] for k in CHILD_ENV if k in os.environ}
+    env.update(extra)
+    return env
