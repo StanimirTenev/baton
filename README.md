@@ -57,9 +57,9 @@ Below: [Uninstall](#uninstall), [What Baton sends over the network](#what-baton-
 
 **Plugin:** `claude plugin uninstall baton` (add `--keep-data` to keep its settings).
 
-**Script install:** remove the five hook entries whose command runs a `baton_` script
+**Script install:** remove the six hook entries whose command runs a `baton_` script
 (`baton_session_start.py`, `baton_stop.py`, `baton_prompt.py`, `baton_batch.py`,
-`baton_stop_failure.py`) from `~/.claude/settings.json`,
+`baton_stop_failure.py`, `baton_pretool.py`) from `~/.claude/settings.json`,
 delete the Baton section from `~/.claude/CLAUDE.md` (the heading
 `# Baton — task folders and logbooks` and the text under it, marked
 `<!-- Installed by Baton. ... -->`), and remove `~/.claude/baton`, the five skills
@@ -87,12 +87,28 @@ What the hooks read, all on this machine: the task folders and their logbooks; t
 transcript (`transcript_path`) — its first timestamp, for when the session began, and its
 last answer's token count, for the restart reminder; at session start, the previous transcript
 in the same project folder — the messages the human typed and its times, to set beside the
-entries written then; and the text of tool results, for an empty or failed read (lesson L2). Nothing of it leaves the machine. The review tools send only with the
+entries written then; the text of tool results, for an empty or failed read (lesson L2); and, before a Write or Edit, the text about to go into a logbook, for a typed hour in a heading (lesson L1). Nothing of it leaves the machine. The review tools send only with the
 key given to Baton by `tools/baton_key.py` — never a key found in the environment or in
 another tool's files.
 
 
 ## Versions
+
+**v3.26.0** — lesson L1 is said before the write, not only after it; one copy of the heartbeat, not five
+
+- **A logbook heading with a hand-typed hour is caught before it is written.** Lesson L1 (the hour
+  in a heading is read from the clock) was caught only at Stop, once the entry was on disk, and it
+  was not holding: 6 recurrences in 14 days on the author's machine. A new sixth hook,
+  `baton_pretool.py` (PreToolUse, only for Write, Edit and MultiEdit), says before such a write to use
+  `tools/baton_entry.py`, which stamps the time itself. It never blocks a write and never approves
+  one -- it returns no permission decision, only a note to the agent. Stop still checks after.
+- **The heartbeat lives in one file, `hooks/_baton.py`.** The three functions that write each hook's
+  beat were byte-for-byte copies in all five hooks, and two past bugs lived exactly there (a crash
+  still showing OK; a hook killed at its time limit leaving no mark). A missing or broken
+  `_baton.py` costs only the heartbeat, never the hook's work, and the drift check names it. Nothing
+  else about what the hooks do changes.
+- The script installer copies both new files and merges six entries into `settings.json`; a test
+  now fails if a shipped hook file is missing from the drift check.
 
 **v3.25.0** — the README's first screen says where Baton runs; chat-only work is asked about before `/clear`
 

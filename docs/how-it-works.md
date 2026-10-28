@@ -23,7 +23,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.25.0]
+[baton:board v3.26.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -644,7 +644,11 @@ the situation arose, `caught` when the mistake happened. The counters are in
   not late), and the agent is told
   which tool makes it impossible: `tools/baton_entry.py --title`, which stamps the time itself,
   named by its full path on this machine (the plugin's folder, or the repository the install
-  script recorded) since v3.17.0.
+  script recorded) since v3.17.0. Since v3.26.0 it is also said **before** the write: the
+  PreToolUse hook `baton_pretool.py`, registered only for Write, Edit and MultiEdit, reads the
+  text about to go into a file named as the logbook and, when it carries a `## <date> <hour>`
+  heading, tells the agent to use `baton_entry.py` instead (counted as `surfaced_before`). It
+  never blocks the write and returns no permission decision -- only a note; Stop still checks after.
 - **L2 — an empty result, or an error instead of one, is a failed read** (`baton_batch.py`,
   PostToolBatch). After a read —
   web, a shell command that searches or fetches, or an MCP tool whose name says it reads
