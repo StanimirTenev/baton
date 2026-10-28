@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOKS = ("baton_session_start", "baton_prompt", "baton_stop", "baton_batch", "baton_stop_failure")
+HOOKS = ("baton_session_start", "baton_prompt", "baton_stop", "baton_batch", "baton_stop_failure", "baton_pretool")
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="signals as Claude Code sends them on POSIX")
 
@@ -44,6 +44,7 @@ def _slow_copy(tmp_path, hook):
     copy.mkdir(exist_ok=True)
     for h in HOOKS:
         shutil.copy(ROOT / "hooks" / f"{h}.py", copy)
+    shutil.copy(ROOT / "hooks" / "_baton.py", copy)   # the shared helpers the hooks load
     path = copy / f"{hook}.py"
     text = path.read_text("utf-8")
     assert text.count("def main() -> int:\n") == 1

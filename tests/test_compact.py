@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -131,8 +132,12 @@ def test_sessionstart_fires_on_compaction_in_both_installs():
     plugin = json.loads((ROOT / "hooks" / "hooks.json").read_text("utf-8"))
     for group in plugin["hooks"]["SessionStart"]:
         assert group.get("matcher", "") in ("", "*")
+    # The installer may give other events a matcher (PreToolUse is scoped to the writing tools),
+    # but never SessionStart -- a matcher there would silently drop the compact case.
     src = (ROOT / "hooks" / "_install_hooks.py").read_text("utf-8")
-    assert '"matcher"' not in src
+    matchers = re.search(r"matchers\s*=\s*\{([^}]*)\}", src)
+    assert matchers is not None, "the installer should declare its matchers dict"
+    assert "SessionStart" not in matchers.group(1)
 
 
 def test_output_is_utf8_not_escaped(tmp_path):

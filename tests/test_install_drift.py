@@ -174,3 +174,20 @@ def test_as_a_plugin_without_the_variable_nothing_is_compared(tmp_path, monkeypa
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "baton.local.json").write_text(json.dumps({"source": str(src)}), "utf-8")
     assert _load(root / "hooks").install_drift() == []
+
+
+def test_every_copied_hook_file_is_covered_by_the_drift_check():
+    """A new file under hooks/ that the installers copy but install_drift() does not name is
+    invisible to the running-vs-source compare -- exactly the v2.2.0 failure, one level down.
+    _baton.py (the shared helpers) was the first such file. Keep the list honest: every hook
+    .py that ships (not the _install_ steps, which run from the source during install) must be
+    named in install_drift's own source."""
+    hooks = HOOK.parent
+    shipped = {p.name for p in hooks.glob("*.py")
+               if not p.name.startswith("_install_")}
+    body = HOOK.read_text(encoding="utf-8")
+    start = body.index("def install_drift(")
+    end = body.index("\ndef ", start)
+    drift_src = body[start:end]
+    missing = sorted(n for n in shipped if f'"{n}"' not in drift_src)
+    assert missing == [], f"not named in install_drift(): {missing}"

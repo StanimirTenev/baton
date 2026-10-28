@@ -82,19 +82,22 @@ def main() -> int:
               + (f" (kept: {', '.join(kept)})" if kept else ""))
 
     wanted = {
+        "PreToolUse": os.path.join(hookdir, "baton_pretool.py"),
         "SessionStart": os.path.join(hookdir, "baton_session_start.py"),
         "Stop": os.path.join(hookdir, "baton_stop.py"),
         "UserPromptSubmit": os.path.join(hookdir, "baton_prompt.py"),
         "PostToolBatch": os.path.join(hookdir, "baton_batch.py"),
         "StopFailure": os.path.join(hookdir, "baton_stop_failure.py"),
     }
+    # Only PreToolUse is filtered to the tools it speaks to, so it does not spawn on every call.
+    matchers = {"PreToolUse": "Write|Edit|MultiEdit"}
 
     # One of the five hook files by name, as installed_twice reads it (row 61). Any "baton_" in a
     # command was taken for Baton's, and a human's ~/bin/my_baton_notes.sh was rewritten (row 68).
     def is_baton(h):
         blob = str(h.get("command", "")) + " " + " ".join(map(str, h.get("args", []) or []))
         return bool(re.search(
-            r"(?:^|[\\/\s\"'])baton_(?:session_start|stop(?:_failure)?|prompt|batch)\.py(?![\w.])", blob))
+            r"(?:^|[\\/\s\"'])baton_(?:session_start|stop(?:_failure)?|prompt|batch|pretool)\.py(?![\w.])", blob))
 
     hooks = data.setdefault("hooks", {})
     changed = False
@@ -114,7 +117,10 @@ def main() -> int:
             else:
                 print(f"  {event}: hook already installed")
             continue
-        groups.append({"hooks": [entry]})
+        group = {"hooks": [entry]}
+        if event in matchers:
+            group = {"matcher": matchers[event], "hooks": [entry]}
+        groups.append(group)
         changed = True
         print(f"  {event}: hook installed")
 

@@ -14,6 +14,7 @@ import os
 import re
 import sys
 from datetime import datetime
+import importlib.util
 from pathlib import Path
 
 
@@ -47,53 +48,34 @@ def main() -> int:
     return 0
 
 
-def _start() -> None:
-    """Mark that this run began: `baton.beat.<hook>.started.<pid>`, as the other hooks do (row 41).
-    Never raises."""
+def _load_baton():
     try:
-        data = os.environ.get("CLAUDE_PLUGIN_DATA")
-        folder = Path(data) if data else Path(__file__).resolve().parent
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"baton.beat.{Path(__file__).stem}.started.{os.getpid()}").write_text(
-            datetime.now().isoformat(), "utf-8")
+        spec = importlib.util.spec_from_file_location(
+            "_baton", Path(__file__).with_name("_baton.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
     except Exception:
-        pass
+        return None          # bookkeeping must never stop the hook doing its work
 
 
-def _clear_starts(folder: Path) -> None:
-    """This run's start mark, and those of runs that are gone: this finish is newer than them."""
-    import time
-    for mark in folder.glob(f"baton.beat.{Path(__file__).stem}.started.*"):
-        try:
-            pid = mark.name.rsplit(".", 1)[1]
-            gone = pid == str(os.getpid()) or time.time() - mark.stat().st_mtime > 120
-            if not gone and os.name != "nt":      # on Windows os.kill(pid, 0) is not a probe
-                try:
-                    os.kill(int(pid), 0)
-                except ProcessLookupError:
-                    gone = True
-            if gone:
-                mark.unlink()
-        except (OSError, ValueError):
-            continue
+_baton = _load_baton()
+_HEARTBEAT = _baton.Heartbeat(__file__) if _baton else None
+
+
+def _start() -> None:
+    if _HEARTBEAT is not None:
+        _HEARTBEAT.start()
 
 
 def _beat(crash: BaseException | None = None) -> None:
-    """When this hook last finished, or `baton.beat.<hook>.crashed` when it raised -- the same
-    files as the other hooks (rows 36, 41). Never raises."""
-    try:
-        data = os.environ.get("CLAUDE_PLUGIN_DATA")
-        folder = Path(data) if data else Path(__file__).resolve().parent
-        folder.mkdir(parents=True, exist_ok=True)
-        beat, now = folder / f"baton.beat.{Path(__file__).stem}", datetime.now()
-        if crash is None:
-            beat.write_text(now.isoformat(), "utf-8")
-        else:
-            beat.with_name(beat.name + ".crashed").write_text(
-                f"{now.isoformat()} {type(crash).__name__}", "utf-8")
-        _clear_starts(folder)
-    except Exception:
-        pass
+    if _HEARTBEAT is not None:
+        _HEARTBEAT.beat(crash)
+
+
+
+
+
 
 
 if __name__ == "__main__":
