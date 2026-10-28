@@ -168,10 +168,47 @@ def last_entry(text: str) -> str:
     return ""
 
 
+# A task named by its number from the board ("12 приключи", "към 12", "#12"). Conservative: a
+# version, a date, a time, a hash or a count must not name a task. `#12`, `№12`, `задача 12` and
+# `task 12` anywhere; a bare number only as the first word of the message, or the last of one of
+# at most five words (`преди 11 дни` is three words and names nothing). Never a number touching
+# a letter or digit, after `.:/,-`, or before `.:/,-)` -- `0.37.0`, `10:30`, `2026-10-28`, `1.`.
+_MARKED_ID = re.compile(r"(?:#|№\s?|\b(?:задача(?:та)?|task)\s+)([1-9]\d*)(?![\w.:/,\-)])",
+                        re.IGNORECASE)
+_BARE_ID = re.compile(r"(?<![\w.:/,\-#№])([1-9]\d*)(?![\w.:/,\-)])")
+SHORT_WORDS = 5
+
+
+def numbers_in(prompt: str) -> set[int]:
+    """The task numbers a message names, by the rules above; known or not."""
+    out = {int(m.group(1)) for m in _MARKED_ID.finditer(prompt)}
+    short = len(_WORD.findall(prompt)) <= SHORT_WORDS
+    for m in _BARE_ID.finditer(prompt):
+        first = not _WORD.search(prompt[:m.start()])
+        last = short and not _WORD.search(prompt[m.end():])
+        if first or last:
+            out.add(int(m.group(1)))
+    return out
+
+
+def known_ids(root: Path) -> dict:
+    """number -> folder, from SessionStart's registry (`ids_load`); {} when there is none."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "baton_session_start", Path(__file__).with_name("baton_session_start.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return {n: name for name, n in (mod.ids_load(root) or {}).items()}
+    except Exception:
+        return {}
+
+
 def touched(root: Path, logbook: str, prompt: str) -> list[tuple[str, str, str]]:
     """(task, last entry heading, next step) for every task the message names."""
     found = []
     ps = _WORD.findall(prompt.lower())
+    asked = numbers_in(prompt)
+    by_number = {name for n, name in known_ids(root).items() if n in asked} if asked else set()
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
         book = folder / logbook
         if not book.is_file():
@@ -181,7 +218,7 @@ def touched(root: Path, logbook: str, prompt: str) -> list[tuple[str, str, str]]
         except OSError:
             continue
         head = _parse(text)
-        if any(matches(n, prompt, ps) for n in names_of(folder, head)):
+        if folder.name in by_number or any(matches(n, prompt, ps) for n in names_of(folder, head)):
             found.append((folder.name, last_entry(text), str(head.get("next", "") or head.get("sledvashto", ""))))
     return found
 
@@ -342,6 +379,13 @@ def main() -> int:
         for name, entry, nxt in new:
             lines.append(f"  - {name}: " + (f"last entry \"{entry}\"" if entry else "no entry yet")
                          + (f"; next: {nxt}" if nxt else ""))
+        # What SessionStart reads as finished (FINISHED and _plan_problem there), said here
+        # because "12 приключи" is the message that names a task to close it.
+        lines.append(f"  If the human says it is finished: set `state: done` in the header of its "
+                     f"{logbook} (that is what puts it under ✅ Finished on the board) and add an "
+                     "entry saying so; and close every PLAN.md / PLAN-*.md in its folder with "
+                     "`state: done` OR `abandoned`, AND `result:` -- what came of it -- or the "
+                     "board keeps it under ⛔ UNCLOSED PLANS.")
     if restart:
         # Plain stdout reaches only the agent; the human sees `systemMessage`.
         k = round(tokens / 1000)

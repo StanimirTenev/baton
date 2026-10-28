@@ -1369,7 +1369,65 @@ def prio(fm: dict) -> int:
     return PRIORITY_RANK.get(str(fm.get("priority", "")).strip().lower(), 3)
 
 
+# Task numbers, so the human can say "12 is finished" instead of a folder name. One registry at
+# the root, never the headers: writing a header moves its logbook's mtime, and that has set off
+# Stop before. A number is never changed or reused -- a finished task, or a folder that is gone,
+# keeps its own. A renamed folder is a new folder and gets a new number.
+IDS_FILE = ".baton-ids.json"
+IDS: dict = {}            # folder name -> number, for this board
+IDS_PROBLEM: list = []    # the registry could not be read or written: said on the board
+
+
+def ids_load(root: Path) -> dict | None:
+    """The registry; {} when there is none yet, None when it is there and cannot be read."""
+    path = root / IDS_FILE
+    if not path.exists():
+        return {}
+    try:
+        ids = json.loads(path.read_text("utf-8"))
+        if isinstance(ids, dict) and all(isinstance(n, int) and not isinstance(n, bool)
+                                         for n in ids.values()):
+            return ids
+    except Exception:
+        pass
+    return None
+
+
+def ids_assign(root: Path, order: list) -> None:
+    """Number every task in `order` (the board's order) that has no number yet: max + 1 each.
+    An unreadable registry is left as it is and the board goes without numbers -- renumbering
+    every task to get past it would make each number the human has used mean another task."""
+    IDS.clear()
+    IDS_PROBLEM.clear()
+    ids = ids_load(root)
+    if ids is None:
+        IDS_PROBLEM.append(f"Baton could not read {root / IDS_FILE}, the task numbers, so the "
+                           "board has none this session. It was left as it is: fix it, or delete "
+                           "it to number every task afresh (the old numbers then mean nothing).")
+        return
+    new = [n for n in order if n not in ids]
+    top = max(ids.values(), default=0)
+    for i, n in enumerate(new, 1):
+        ids[n] = top + i
+    if new:
+        try:
+            path = root / IDS_FILE
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(ids, ensure_ascii=False, indent=1), "utf-8")
+            tmp.replace(path)
+        except OSError:
+            IDS_PROBLEM.append(f"Baton could not write {root / IDS_FILE}, so the board has no "
+                               "task numbers this session.")
+            return
+    IDS.update(ids)
+
+
+def numbered(name: str) -> str:
+    return f"{IDS[name]} · {name}" if name in IDS else name
+
+
 def line_for(name: str, fm: dict, tail: str = "") -> str:
+    name = numbered(name)
     p = str(fm.get("priority", "")).strip()
     dot = PRIORITY_DOT.get(p.lower())
     badge = (f" {dot} [{p}]" if dot else f" [{p}]") if p else ""
@@ -2033,6 +2091,10 @@ def main() -> int:
 
     for bucket in (overdue, on_us, recurring, external):
         bucket.sort(key=lambda r: (prio(r["fm"]), r["dl"] or date.max))
+    plain.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    # In the board's order, so the first numbers go to the tasks shown first.
+    ids_assign(root, [r["name"] for r in overdue + on_us + recurring + external]
+               + [f.name for f in plain] + sorted(frozen) + sorted(finished))
 
     blocks = []
     if overdue:
@@ -2053,17 +2115,16 @@ def main() -> int:
         blocks.append("⛔ Waiting on someone OUTSIDE / blocked (for information):\n" + "\n".join(
             line_for(r["name"], r["fm"], ext_tail(r)) for r in external))
     if plain:
-        plain.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         shown = plain[:MAX_PLAIN]
         rows = []
         for f in shown:
             lb = f / name
             if not lb.is_file():
-                rows.append(f"- {f.name} — NO {name} (nothing was ever recorded here)")
+                rows.append(f"- {numbered(f.name)} — NO {name} (nothing was ever recorded here)")
                 continue
             when = datetime.fromtimestamp(lb.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
             title = first_entry_title(read_head(lb))
-            rows.append(f"- {f.name} — last entry {when}" + (f": {title}" if title else ""))
+            rows.append(f"- {numbered(f.name)} — last entry {when}" + (f": {title}" if title else ""))
         more = len(plain) - len(shown)
         block = "📋 No header (most recently touched):\n" + "\n".join(rows)
         if more > 0:
@@ -2103,14 +2164,19 @@ def main() -> int:
         blocks.append("🔒 " + unreadable_note(UNREADABLE))
     if LOST:
         blocks.append("🕳️ " + LOST[0] + " (Said once; tell the human.)")
+    if IDS_PROBLEM:
+        blocks.append("🔢 " + IDS_PROBLEM[0])
     if frozen:
-        blocks.append(f"❄️ Frozen (not offered): {', '.join(sorted(frozen))}")
+        blocks.append(f"❄️ Frozen (not offered): {', '.join(numbered(n) for n in sorted(frozen))}")
     if finished:
-        blocks.append(f"✅ Finished (not touched): {', '.join(sorted(finished))}")
+        blocks.append(f"✅ Finished (not touched): "
+                      f"{', '.join(numbered(n) for n in sorted(finished))}")
 
     summary = (
         f"Baton — the tasks in {root}, ordered by whose move it is and by priority:\n\n"
         + "\n\n".join(blocks + notices)
+        + ("\n\n(The number before a task is its own and stays: name a task by it -- "
+           "\"12 is finished\", \"go to 12\".)" if IDS else "")
     )
     context = (
         (CLEARED + "\n\n" if cleared else "")

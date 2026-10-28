@@ -27,22 +27,32 @@ What the agent gets:
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
-- migrate-billing 🔴 [high] — decide tax_region before the run
+- 1 · migrate-billing 🔴 [high] — decide tax_region before the run
 
 🔁 Ongoing:
-- weekly-report 🟢 [low] — Monday export
+- 2 · weekly-report 🟢 [low] — Monday export
 
 ⛔ Waiting on someone OUTSIDE / blocked (for information):
-- broken-disk 🟡 [medium] — zpool replace  (waiting on: new disk (delivery))
+- 3 · broken-disk 🟡 [medium] — zpool replace  (waiting on: new disk (delivery))
 
-❄️ Frozen (not offered): old-scraper
+❄️ Frozen (not offered): 4 · old-scraper
 
-✅ Finished (not touched): schema-audit
+✅ Finished (not touched): 5 · schema-audit
+
+(The number before a task is its own and stays: name a task by it -- "12 is finished", "go to 12".)
 ```
 
 The groups mean overdue (a deadline within 3 days), on us, recurring, waiting on someone
 else, frozen and done. A task with no header falls back to the v1 line: its name, the date
 of its last entry, and that entry's title.
+
+The number before each task is its own: the human can say "12 is finished" or "go to 12", and
+the UserPromptSubmit hook brings that task's record as if it had been named. The numbers live in
+`.baton-ids.json` at the tasks root, not in the headers. SessionStart numbers a new task max + 1
+(the first time, in the board's order); a number is never changed or reused, and a renamed
+folder is a new task with a new number. A bare number counts only as the first word of a
+message, or the last of a short one; `#12`, `№12`, `task 12` anywhere. A version, a date or a
+time (`3.27.0`, `17.10`, `10:30`) names no task.
 
 Every task is on the board with its `next:` (or `done_when:`), including one whose name or text
 holds a word from `review_confidential`: that list keeps text from being sent by the review
