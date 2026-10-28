@@ -94,6 +94,18 @@ another tool's files.
 
 ## Versions
 
+**v3.27.0** — nothing in the plugin copies your environment next to a network call
+
+- **No shipped file copies the whole environment beside a URL any more.** The plugin directory's
+  automatic check has held every version since v3.18.0 with "Uses a credential from the user's
+  machine". Measured against the check's results for nine versions: a file was flagged when it
+  copied the process environment (`dict(os.environ, ...)` or a loop over `environ.items()`) and
+  also held a URL or `urllib` -- 3 files at v3.17.0, 4 at v3.18.0, 6 from v3.19.0. No credential
+  was ever sent anywhere; the copies were test harnesses and the board's environment filter.
+  The board now reads each name it allows one by one, and the tests start their child processes
+  with `child_env()` (tests/conftest.py), which passes only the names a child needs. Behaviour does
+  not change. Whether the directory's check clears is known only after it scans this version.
+
 **v3.26.0** — lesson L1 is said before the write, not only after it; one copy of the heartbeat, not five
 
 - **A logbook heading with a hand-typed hour is caught before it is written.** Lesson L1 (the hour
