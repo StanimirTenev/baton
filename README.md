@@ -94,6 +94,23 @@ another tool's files.
 
 ## Versions
 
+**v3.28.0** — every task has a number of its own; name it by the number
+
+- **A task can be named by a number from the board.** Each task line now starts with a number --
+  `- 12 · pokritie-shema ...` -- and "12 is finished", "go to 12", `#12` or `task 12` reach that
+  task as its folder name would. Asked for by a user who wanted to say a task was finished and had
+  no short way to name it. The numbers live in one file at the tasks root, `.baton-ids.json`, not in
+  the logbook headers: a number is handed out once, in the board's order, and never changes or goes
+  to another task, even after its folder is finished or gone. A renamed folder is a new task with
+  a new number.
+- **A number has to look like a task to count.** A version, a date, a time, a hash or a count names
+  nothing (`0.37.0`, `01.11`, `10:30`, `2026-10-28`, "11 days ago"); a bare number counts only as
+  the first word of a message, or the last of a message of at most five words. Each rejected form is
+  a test. Strict on purpose: "go to 12." with a full stop does not match.
+- **When a task is named, the agent is also told how to close it** -- `state: done` in the header,
+  and every PLAN.md closed with `state:` and `result:` -- the two things the board reads as finished.
+- An unreadable `.baton-ids.json` is said on the board and left as it is; that session has no numbers.
+
 **v3.27.0** — nothing in the plugin copies your environment next to a network call
 
 - **No shipped file copies the whole environment beside a URL any more.** The plugin directory's
