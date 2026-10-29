@@ -91,8 +91,45 @@ entries written then; the text of tool results, for an empty or failed read (les
 key given to Baton by `tools/baton_key.py` — never a key found in the environment or in
 another tool's files.
 
+### For the plugin directory's reviewer
+
+The scan holds Baton on three warnings. What each flagged file does, checked against v3.28.1:
+
+- **A credential from the user's machine** (`README.md`, `hooks/baton_session_start.py`,
+  `.claude-plugin/plugin.json`). The only key Baton reads is the user's OpenRouter key, and only
+  three tools the human runs by hand read it: `tools/baton_review.py` (`get_api_key`, from
+  `~/.config/baton/env`, where `tools/baton_key.py` stored it after the human typed it in),
+  `tools/baton_sift.py` (through `baton_review`) and `tools/baton_key.py`. They send it only in
+  the `Authorization` header of requests to `openrouter.ai` -- the key's own vendor. No hook reads it.
+  `baton_session_start.py` checks only whether that file exists (`review_notice`, `.is_file()`,
+  to offer the review once) and never opens it; its one network request is the opt-in update
+  check (`update_notice`), a GET to `api.github.com` with no credential, never made as a plugin.
+  `plugin.json` reads nothing: its description only says that the review tools send text to
+  OpenRouter. A `userConfig` option would not reach these tools -- Claude Code passes
+  `CLAUDE_PLUGIN_OPTION_*` to hook processes, and they are run by hand.
+- **An image file the plugin's code could run** (`install.sh`, `.claude-plugin/plugin.json`).
+  `icon.png` is the listing icon named in `plugin.json`. Nothing runs or copies it:
+  `install.sh` does not name it and copies only the named hooks and each `skills/*/SKILL.md`.
+- **A download-and-run command.** In `hooks/baton_batch.py` it is a regular expression that
+  tells reading commands (`curl`, `wget`, ...) apart; in `hooks/baton_session_start.py` the text
+  of a message that tells the human how to update a script install (`git pull` and the
+  installer), which the hook never runs; in `README.md` and `docs/install.md`, documentation.
+  `setup-windows.cmd` is a setup helper the human starts by hand, outside the plugin: it
+  downloads Claude Code's own installer from `claude.ai/install.cmd` and runs it.
+
 
 ## Versions
+
+**v3.28.1** — what the directory's warnings refer to, written down for its reviewer
+
+- **A note for the plugin directory's reviewer.** The directory holds every version since v3.18.0
+  for a reviewer, on three warnings: a credential read from the machine, an image the code could
+  run, a download-and-run command. Each flagged file was checked: no hook reads a key (the session
+  start hook only checks that the review key's file exists), `install.sh` does not name the icon,
+  and the download-and-run hits are a pattern, message text and documentation. A short section
+  under "What Baton sends over the network" now says this per file. A `userConfig` option for the
+  key was considered and not made: Claude Code passes it to hooks, and the tools that need the
+  key are run by hand. No code changed.
 
 **v3.28.0** — every task has a number of its own; name it by the number
 
