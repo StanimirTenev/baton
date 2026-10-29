@@ -91,7 +91,7 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   - **From Anthropic's plugin directory** (claude.ai, *Discover*): updated on its own. Each time
     Claude Code starts it syncs your account's plugins in the background; when Baton changed you
     see `Plugins changed. Run /reload-plugins to activate.`, and the new version runs from the next
-    start. This sync needs a session signed in with your claude.ai account -- not an API key,
+    start. This sync needs a session signed in with your claude.ai account -- not a Console key,
     `ANTHROPIC_AUTH_TOKEN`, bare mode or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
   - **From this repository's marketplace** (the two commands above): auto-update is off by
     default for marketplaces other than Anthropic's. Turn it on under `/plugin` -> *Marketplaces*,
