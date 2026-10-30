@@ -148,8 +148,10 @@ the script-installed hooks):
 `env` (a list of variable names to pass on) to none. When
 the newest entry this session wrote in that folder says tests pass, Stop starts the pinned
 command **in the background, after the turn** -- detached, its output to
-`baton.tests.<folder>.log` next to the settings, under its own budget -- and returns at once; it
-says so to the human in one line. Once per entry, one run at a time per folder. The verdict is
+`baton.tests.<folder>.log` next to the settings, under its own budget -- and returns at once,
+without a word (since v3.29.1: the line on every such turn read as an alarm). Only a result that
+disagrees, could not say, or follows edited test files is said; a plain pass is kept in the record
+and not said. Once per entry, one run at a time per folder. The verdict is
 **what the runner printed, then its exit code** (since v3.23.0, ZA-OPRAVYANE rows 74, 75; it was
 the exit code alone): **no tests ran** when the output says so -- pytest's "no tests ran"
 (`-k` that matches nothing), unittest's "NO TESTS RAN" / "Ran 0 tests", jest's "No tests found",

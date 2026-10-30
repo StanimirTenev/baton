@@ -125,7 +125,7 @@ def test_a_claim_the_pinned_command_refutes_is_said_to_the_human_and_caught(tmp_
            {"login": {"command": f"{PY} -c \"print('1 failed, 4 passed'); raise SystemExit(1)\"",
                       "cwd": str(tmp_path), "timeout_s": 60}})
     first, _ = _stop(tmp_path)
-    assert "running the pinned test command" in first.get("systemMessage", ""), first
+    assert "pinned test" not in first.get("systemMessage", ""), "the start is not said"
     rec = _result(tmp_path)
     assert rec["state"] == "done" and rec["exit"] == 1 and rec["verdict"] == "failed"
     assert rec["line"] == "1 failed, 4 passed" and rec["command"].endswith("SystemExit(1)\"")
@@ -275,8 +275,23 @@ def test_the_entry_written_after_a_hand_back_gets_its_run(tmp_path):
     assert first.get("decision") == "block" and "login" in first["reason"], first
     log.write_text(log.read_text("utf-8").replace("\n\n## ", "\n\n" + _entry() + "\n## ", 1), "utf-8")
     second, _ = _stop(tmp_path, again=True)
-    assert "running the pinned test command" in second.get("systemMessage", ""), second
+    assert "pinned test" not in second.get("systemMessage", ""), second
     assert _result(tmp_path)["verdict"] == "passed"
+
+
+def test_a_pass_is_not_said_only_a_failure_is(tmp_path):
+    """stenly, 30.10.2026: a red line on every turn that wrote "tests pass" read as an alarm on the
+    phone. The start is not said, nor a pass that agrees with the entry; it is still marked said.
+    A pass after test files were saved is still said (row 52): it shows the tests as edited."""
+    folder = _setup(tmp_path, _entry(), {"login": {"command": f"{PY} -c \"print('3 passed')\"",
+                                                   "cwd": str(tmp_path)}})
+    (folder / "fix_test.py").rename(folder / "fix.py")
+    first, _ = _stop(tmp_path)
+    assert "pinned test" not in first.get("systemMessage", ""), first
+    assert _result(tmp_path)["verdict"] == "passed"
+    second, _ = _stop(tmp_path)
+    assert "pinned test" not in second.get("systemMessage", ""), second
+    assert json.loads((tmp_path / "data" / "baton.tests.login.json").read_text("utf-8"))["reported"]
 
 
 # -- the reviewer's question: nothing runs that a human did not pin --------------------------

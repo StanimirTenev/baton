@@ -1013,10 +1013,7 @@ def pinned_runs(root: Path, name: str, since: float | None, session: str) -> tup
         subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--run-tests", str(folder)],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, **detach)
-        started.add(folder.name)
-        said.append(f"Baton: the newest entry in {folder.name} says tests pass; running the pinned "
-                    f"test command after this turn, up to {pin['timeout_s']} s: `{pin['command']}` "
-                    f"(in {pin['cwd']}). Its result is said here next time.")
+        started.add(folder.name)          # not said: only a result that disagrees is (30.10)
     return said, started
 
 

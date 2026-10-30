@@ -210,7 +210,7 @@ def config() -> tuple[Path, str]:
     return Path(home).expanduser(), logbook
 
 
-BATON_VERSION = "3.29.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.29.1"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -504,8 +504,9 @@ def tests_results(now: datetime | None = None) -> list[str]:
                          + ", ".join(edited[:5]) + (", ..." if len(edited) > 5 else "")
                          + " -- a pass shows the tests as they now stand")
             if rec.get("verdict") == "passed":
-                out.append(f"Baton, lesson L4: the pinned tests for {folder} agree with the entry "
-                           f"\"{entry}\": {said}.")
+                if edited:    # a pass that agrees is not said (30.10); one on edited tests is
+                    out.append(f"Baton, lesson L4: the pinned tests for {folder} agree with the "
+                               f"entry \"{entry}\": {said}.")
             else:
                 agrees = rec.get("verdict") not in ("failed", "no tests ran")
                 caught += not agrees

@@ -152,6 +152,15 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 ## Versions
 
+**v3.29.1** — a pinned test run is said only when it disagrees
+
+- **The pinned test command runs without a word, and a pass is not said.** Every turn whose entry
+  said tests pass showed "running the pinned test command after this turn", and the next one "the
+  pinned tests agree" -- in Remote Control on a phone, as a red warning on a green result. Now the
+  start is not said, nor a pass that agrees with the entry; it is still recorded in
+  `baton.tests.<folder>.json`. Said as before: a failure, no tests ran, a timeout, a run that never
+  finished, fewer tests or more skipped than the last run, and a pass after test files were edited.
+
 **v3.29.0** — the session hook leaves the environment to a file with no address; a turn with no entry is handed back twice
 
 - **The session start hook no longer touches the environment or the key file.** The directory's
