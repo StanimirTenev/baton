@@ -641,7 +641,7 @@ _CHANGED = re.compile(r"(?i)\b(?:(?:re)?(?:wr[oi]te|written|fix|chang|updat|edit
                       r"|поправ|пренаписа|промен|добав|написа|създад|обнов|изтри|преименува|замен|махна")
 
 
-# A path named whole: /x/y.py, ~/x/y.py, C:\x\y.py. Not the tail of an address (https://h/x.py).
+# A path named whole: /x/y.py, ~/x/y.py, C:\x\y.py. Not the path part of a web address.
 _ABS_PATH = re.compile(r"(?<![\w~.:/\\])(?:~?/|[A-Za-z]:\\)(?:[\w.\-]+[/\\])*[\w\-][\w.\-]*\.\w+")
 
 
