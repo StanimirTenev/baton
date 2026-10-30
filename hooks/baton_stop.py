@@ -1155,7 +1155,10 @@ def run_tests(folder_arg: str) -> int:
     line = next((ln.strip() for ln in reversed(text.splitlines()) if ln.strip()), "")[:200]
     counts = test_counts(text)
     if verdict is None:
-        verdict = ("no tests ran" if ran_nothing(text) else passed_as(counts, last) if code == 0
+        # A runner that counted tests ran tests: a failure quoting "no tests ran" is a failure
+        # (row 84, 23.10).
+        nothing = ran_nothing(text) and not (counts and counts["total"] > 0)
+        verdict = ("no tests ran" if nothing else passed_as(counts, last) if code == 0
                    else "failed")
     if counts:
         rec["counts"] = counts

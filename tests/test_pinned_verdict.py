@@ -182,3 +182,15 @@ def test_test_files_saved_since_the_session_began_are_said(tmp_path, monkeypatch
     spec.loader.exec_module(ss)
     said = " ".join(ss.tests_results())
     assert "test files saved in that folder since the session began: test_new.py" in said, said
+
+
+def test_a_failing_run_that_quotes_no_tests_ran_is_failed(tmp_path):
+    """ZA-OPRAVYANE row 84 (agent, 23.10): the phrases were searched in the whole output at any
+    exit code, so a failed run whose assertion quoted "no tests ran" was recorded as no tests
+    ran. A runner that counted tests ran tests."""
+    text = ("E   AssertionError: assert 'no tests ran' == 'passed'\n"
+            "=========================== short test summary info ============================\n"
+            "FAILED tests/test_x.py::test_verdict\n"
+            "============================== 1 failed in 0.12s ===============================")
+    rec = _run(tmp_path, _prints(text, 1), tmp_path)
+    assert rec["verdict"] == "failed", rec
