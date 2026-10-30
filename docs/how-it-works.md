@@ -434,9 +434,9 @@ installer again is reported the same way -- it is the same question. Since v3.23
 **As a plugin** (since v3.17.0) there is no source of ours; Claude Code installs the copy. Two
 questions are still answered at session start, without the network. Has Claude Code recorded
 another install of Baton since this session started (`installed_plugins.json`)? Then
-`claude plugin update` has taken effect on disk and not here, until a restart. And are the four
-running hooks and `hooks.json` byte for byte the catalog's copy of the same version (the
-marketplace clone Claude Code keeps)? A copy Claude Code did not install (`--plugin-dir`) is not
+`claude plugin update` has taken effect on disk and not here, until a restart. And are the
+running hooks, `hooks.json` and the skills (since v3.29.0, row 86) byte for byte the catalog's
+copy of the same version (the marketplace clone Claude Code keeps)? A copy Claude Code did not install (`--plugin-dir`) is not
 compared, and nor is a catalog that has moved to another version. If you develop Baton and run it
 as a plugin, set **the variable** `BATON_SOURCE` (not `source` in the plugin's `baton.local.json`)
 and the plugin's running hooks, `hooks.json` and skills are compared with your working copy as

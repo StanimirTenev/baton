@@ -137,3 +137,27 @@ def test_the_board_carries_it_through_the_real_entry_point(tmp_path):
                          capture_output=True, text=True, env=env)
     assert out.returncode == 0, out.stderr
     assert "NOT THE RELEASED v3.16.0" in out.stdout and "baton_batch.py" in out.stdout, out.stdout
+
+
+def test_a_skill_that_differs_from_the_release_is_named(tmp_path):
+    """ZA-OPRAVYANE row 86 (agent, 23.10): plugin_drift compared the hooks and not the skills,
+    though install_drift has compared skills since row 51. Through the real entry point."""
+    cfg, run, clone = _machine(tmp_path)
+    for base in (run, clone):
+        (base / "skills" / "baton-plan").mkdir(parents=True)
+        (base / "skills" / "baton-plan" / "SKILL.md").write_text("released\n", "utf-8")
+    (run / "skills" / "baton-plan" / "SKILL.md").write_text("edited in the cache\n", "utf-8")
+    tasks = tmp_path / "tasks"
+    (tasks / "one").mkdir(parents=True)
+    (tasks / "one" / "LOGBOOK.md").write_text("## 2026-10-20 10:00 — x\n\ny\n", "utf-8")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE_", "BATON_"))}
+    env.update(CLAUDE_CONFIG_DIR=str(cfg), CLAUDE_PLUGIN_ROOT=str(run),
+               CLAUDE_PLUGIN_DATA=str(tmp_path / "data"), BATON_HOME=str(tasks),
+               BATON_LOGBOOK="LOGBOOK.md", HOME=str(tmp_path / "home"),
+               BATON_SESSION_STATE=os.environ["BATON_SESSION_STATE"])
+    out = subprocess.run([sys.executable, str(run / "hooks" / "baton_session_start.py")],
+                         input=json.dumps({"session_id": "s", "source": "startup"}),
+                         capture_output=True, text=True, env=env)
+    assert out.returncode == 0, out.stderr
+    assert "NOT THE RELEASED v3.16.0" in out.stdout and "skills/baton-plan/SKILL.md" in out.stdout, \
+        out.stdout[-800:]

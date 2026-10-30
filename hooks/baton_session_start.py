@@ -768,6 +768,18 @@ def plugin_drift() -> str | None:
                     differ.append(hook)
             except OSError:
                 differ.append(f"{hook} (missing)")
+        # The skills too, as install_drift has since row 51 (row 86, 23.10).
+        try:
+            released = sorted(d for d in (release / "skills").iterdir() if (d / "SKILL.md").is_file())
+        except OSError:
+            released = []
+        for d in released:
+            here = root / "skills" / d.name / "SKILL.md"
+            try:
+                if here.read_bytes() != (d / "SKILL.md").read_bytes():
+                    differ.append(f"skills/{d.name}/SKILL.md")
+            except OSError:
+                differ.append(f"skills/{d.name}/SKILL.md (missing)")
         if differ:
             return (f"- 🔴 THE RUNNING HOOKS ARE NOT THE RELEASED v{version}: " + ", ".join(differ)
                     + f" differ from the catalog's copy in {release}")
