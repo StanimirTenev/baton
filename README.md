@@ -183,7 +183,7 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 - **A path an entry says it changed outside the task folder is looked at** (row 95, Trofymenko).
   The hand-back says "name where" when the change is elsewhere, and nothing then looked at where.
   When no file of the folder was saved this session, a path named whole must exist and have been
-  saved in it, or the entry is asked about once. 0 of the 46 newest entries on this machine would
+  saved in it (not one it says it deleted or moved), or the entry is asked about once. 0 of the 46 newest entries on this machine would
   be asked. Work done only outside every task folder, with no entry, still passes: by design.
 - **Smaller.** A pointer naming `docs/ARCHITECTURE.md` is checked for shelf life like a file at
   the folder's root (row 101). A failing pinned run that quotes "no tests ran" is "failed" (row
