@@ -8,8 +8,11 @@ A folder is "unrecorded" when it holds a file newer than its own logbook. That i
 narrow test on purpose — a session that touched no task folder is never interrupted.
 
 When something is unrecorded the turn is handed back to the agent with a note naming the
-folder. `stop_hook_active` is honoured, so this can block at most once per turn and can
-never trap a session in a loop.
+folder. A turn that answers the hand-back with no new entry is handed back once more, and
+then let through: at most two hand-backs per turn, counted by Baton itself (ZA-OPRAVYANE row
+115, v3.29.0), so it can never trap a session in a loop. Until v3.29.0 it was one: that was
+Baton's choice, not a limit of Claude Code, whose own cap is 8 consecutive continuations,
+reset each time a tool is called.
 """
 from __future__ import annotations   # `str | None`, `list[str]`: Python 3.8 and 3.9 too
 import fnmatch
@@ -1310,24 +1313,36 @@ def _count(**kinds) -> None:
         pass          # counting is a courtesy; never a reason to fail the session
 
 
-def second_try(payload: dict) -> str | None:
-    """The turn after a hand-back (`stop_hook_active`): was the work recorded, or passed?"""
+HANDED_BACK_AGAIN = "handback:2"     # in the session's asked set: this turn's second is spent
+
+
+def second_try(payload: dict) -> tuple[str | None, list]:
+    """The turn after a hand-back (`stop_hook_active`): was the work recorded, or passed?
+    Returns (a note for the human, the folders to hand back once more). Row 115: a folder with
+    no new entry after the first hand-back is handed back a second time; after the second it
+    is counted as passed. Two per turn, by Baton's own count."""
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     pending = {a[len("blocked:"):] for a in asked if a.startswith("blocked:")}
     if not pending:
-        return None
+        return None, []
     root, name = config()
     if not root.is_dir():
-        return None
+        return None, []
     since = session_started(str(payload.get("transcript_path") or ""))
     unrecorded(root, name, since)
     # Judged by the logbook, not by `unrecorded`'s verdict: a folder whose newest file was saved
     # seconds ago is left out of it by the grace period, recorded or not.
     wrote = set(TOPPED)
-    _count(recorded_after=len(pending & wrote), passed=len(pending - wrote))
-    _remember(session, {a for a in asked if not a.startswith("blocked:")})
-    return lost_note(LOST, FORGOT) if LOST or FORGOT else None
+    still = sorted(pending - wrote)
+    if still and HANDED_BACK_AGAIN not in asked:
+        _count(recorded_after=len(pending & wrote))
+        _remember(session, {a for a in asked if not a.startswith("blocked:")}
+                  | {"blocked:" + f for f in still} | {HANDED_BACK_AGAIN})
+        return None, still
+    _count(recorded_after=len(pending & wrote), passed=len(still))
+    _remember(session, {a for a in asked if not a.startswith("blocked:") and a != HANDED_BACK_AGAIN})
+    return (lost_note(LOST, FORGOT) if LOST or FORGOT else None), []
 
 
 def answer_check(payload: dict) -> str | None:
@@ -1362,8 +1377,8 @@ def answer_check(payload: dict) -> str | None:
             pass
     if not said:
         return None
-    return ("Baton, on the entry written in answer to the hand-back (a turn is handed back once, so "
-            "this is not asked of the agent): " + "; ".join(said) + ".")
+    return ("Baton, on the entry written in answer to the hand-back (its quality is not handed "
+            "back again, so this is not asked of the agent): " + "; ".join(said) + ".")
 
 
 def _folder_of(item: str) -> str:
@@ -1451,12 +1466,13 @@ def main() -> int:
     except Exception:
         pass
 
-    # Already handed the turn back once — do not do it again. Only count what came of it.
+    # Already handed back this turn: count what came of it, and hand back once more only when
+    # the first produced no entry (row 115). Never a third time.
     if payload.get("stop_hook_active"):
         try:
-            lost = second_try(payload)
+            lost, again = second_try(payload)
         except Exception:
-            lost = None
+            lost, again = None, []
         fix_check(config()[1])        # the hand-back's answer lands here (row 44)
         try:
             checked = answer_check(payload)
@@ -1470,9 +1486,17 @@ def main() -> int:
         except Exception:
             tested = []
         lost = " ".join(filter(None, (lost, checked, *tested)))
-        if lost:          # a message for the human, not a hand-back: never twice in a turn
-            sys.stdout.buffer.write(json.dumps({"systemMessage": lost},
-                                               ensure_ascii=False).encode("utf-8"))
+        out = {"systemMessage": lost} if lost else {}
+        if again:
+            listed = "\n".join(f"  - {folder}" for folder in again)
+            out.update(decision="block", reason=(
+                f"Baton, a second and last time this turn: these task folders still have no new "
+                f"entry in their {config()[1]} after the hand-back:\n{listed}\n\n"
+                "Prepend the entry now -- what was asked, what was done, the result, what is "
+                "open. If you already said the change needs none, say it once more in one line "
+                "and finish; the turn is let through after this either way."))
+        if out:           # the quality checks: a message for the human, never their own hand-back
+            sys.stdout.buffer.write(json.dumps(out, ensure_ascii=False).encode("utf-8"))
             sys.stdout.flush()
         return 0
 
@@ -1587,7 +1611,8 @@ def main() -> int:
             "If the change was incidental and genuinely needs no entry, say so in one "
             "line and finish.")
         _count(handed_back=len(stale))
-        _remember(session, _already_asked(session) | {"blocked:" + _folder_of(f) for f in stale})
+        _remember(session, (_already_asked(session) - {HANDED_BACK_AGAIN})      # a new turn
+                  | {"blocked:" + _folder_of(f) for f in stale})
     if open_ended:
         listed = "\n".join(f"  - {folder}" for folder in open_ended)
         parts.append(

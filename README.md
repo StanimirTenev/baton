@@ -31,7 +31,8 @@ it is (example data):
 
 **What it does not do**, measured on my own machine, 22–29 October 2026: the Stop hook handed
 a turn back 43 times for a missing logbook entry; 29 got the entry, 14 ended without one. Baton
-makes forgetting visible and hard; it does not make it impossible.
+makes forgetting visible and hard; it does not make it impossible. Since v3.29.0 a turn that
+answers the hand-back with no entry is handed back once more, and then let through.
 
 ## Where it works
 

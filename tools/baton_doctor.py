@@ -100,8 +100,8 @@ def stopped(where: Path, stem: str) -> tuple | None:
 # StopFailure the error type. Per session: was its last activity followed by a Stop or a
 # StopFailure? Stop does not run when the human interrupts a turn, and an API error runs
 # StopFailure instead (code.claude.com/docs/en/hooks, 23.10), so a miss is a question. Stop can
-# run twice in a turn by design -- Baton's hand-back, then the pass with `stop_hook_active` true --
-# so Stops are not counted: any one ends the turn. Whether and when Claude Code resets that flag
+# run up to three times in a turn by design -- Baton's hand-back, at most one more (row 115), then
+# the pass with `stop_hook_active` true -- so Stops are not counted: any one ends the turn. Whether and when Claude Code resets that flag
 # is not documented, and nothing here depends on it. What follows what is read by the lines'
 # order in the file, not by the times written in them: those are local time and repeat in the
 # hour after the clocks go back (row 64, 25.10.2026).

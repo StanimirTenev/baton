@@ -81,9 +81,42 @@ def test_a_hand_back_passed_on_the_second_try_is_counted(tmp_path):
     _work(folder)
     assert _stop(env, tr).get("decision") == "block"
     assert _counts(env).get("handed_back") == 1
-    assert _stop(env, tr, active=True) == {}, "still never blocks twice"
+    assert _stop(env, tr, active=True).get("decision") == "block", "no entry: handed back again"
+    assert _stop(env, tr, active=True) == {}, "never a third time"
     c = _counts(env)
     assert c.get("passed") == 1 and c.get("recorded_after", 0) == 0, c
+    assert c.get("handed_back") == 1, "one turn handed back, not two"
+
+
+def test_the_second_hand_back_names_the_folder_and_is_the_last(tmp_path):
+    """ZA-OPRAVYANE row 115 (Nitin Sharma, 30.10): "once per turn" was Baton's choice, not a
+    limit of Claude Code, whose cap is 8 consecutive continuations, reset by a tool call. A
+    turn that answered the hand-back with no entry is handed back once more; two is Baton's
+    own cap, kept in its state, so a loop cannot come from here."""
+    env, folder, book, tr = _setup(tmp_path)
+    _work(folder)
+    assert _stop(env, tr).get("decision") == "block"
+    again = _stop(env, tr, active=True)
+    assert again.get("decision") == "block" and "  - a" in again["reason"], again
+    assert "last" in again["reason"], again
+    assert _stop(env, tr, active=True) == {}
+    assert _stop(env, tr, active=True) == {}, "the state was cleared, not left to block later"
+
+
+def test_a_new_turn_can_be_handed_back_twice_again(tmp_path):
+    env, folder, book, tr = _setup(tmp_path)
+    _work(folder)
+    _stop(env, tr)
+    _stop(env, tr, active=True)
+    _stop(env, tr, active=True)
+    _entry(book, "recorded at last")
+    assert "newer than" not in _stop(env, tr).get("reason", "")
+    (folder / "more.txt").write_text("m", "utf-8")
+    ten = time.time() - 600
+    os.utime(folder / "more.txt", (ten + 300, ten + 300))
+    os.utime(book, (ten, ten))
+    assert "newer than" in _stop(env, tr).get("reason", "")
+    assert _stop(env, tr, active=True).get("decision") == "block", "the cap is per turn"
 
 
 def test_a_hand_back_recorded_on_the_second_try_is_counted(tmp_path):
@@ -116,6 +149,7 @@ def test_doctor_shows_the_three_numbers(tmp_path):
     _work(folder)
     _stop(env, tr)
     _stop(env, tr, active=True)
+    _stop(env, tr, active=True)          # handed back twice since row 115; passed on the third
     out = subprocess.run([sys.executable, str(DOCTOR)], capture_output=True, text=True, env=env)
     assert "written unasked: 0" in out.stdout and "handed back: 1" in out.stdout, out.stdout
     assert "passed without one: 1" in out.stdout, out.stdout
@@ -128,6 +162,7 @@ def test_more_work_instead_of_an_entry_is_passed_not_recorded(tmp_path):
     _work(folder)
     assert _stop(env, tr).get("decision") == "block"
     (folder / "draft.txt").write_text("kept working", "utf-8")          # fresh, no entry
+    assert _stop(env, tr, active=True).get("decision") == "block"      # row 115: once more
     _stop(env, tr, active=True)
     c = _counts(env)
     assert c.get("passed") == 1 and c.get("recorded_after", 0) == 0, c
