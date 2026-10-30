@@ -152,6 +152,49 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 ## Versions
 
+**v3.29.0** — the session hook leaves the environment to a file with no address; a turn with no entry is handed back twice
+
+- **The session start hook no longer touches the environment or the key file.** The directory's
+  check still holds Baton under "Uses a credential from the user's machine", for
+  `hooks/baton_session_start.py` and `plugin.json`. Measured on its results: the hook was clean at
+  v3.18.0, when it already checked for the review key's file and held the update GET, and flagged
+  from v3.21.0, after v3.19.0 put the board's environment list beside Baton's release address;
+  four tests flagged the same way stopped being flagged in v3.27.0 once their environment was
+  built in a file with no address. So the board's environment (`BOARD_ENV`), the check whether
+  the key file exists and the masking of a key pasted into a message move to `hooks/_baton.py`,
+  which names no address and makes no network request. Nothing they do changed. A new test holds
+  it: no shipped code file outside the three key tools has both an address or a network call and
+  an environment copy, a word for a secret or the key file. `plugin.json` is not changed: it was
+  flagged from v3.15.0, when its description named neither OpenRouter nor any secret. The scan
+  cannot be run here; whether the hold clears is known only when the directory scans this
+  version.
+- **A turn that answers the hand-back with no entry is handed back once more** (row 115, after
+  Nitin Sharma). "Only once per turn" was said as a limit of Claude Code; it was Baton's choice:
+  Claude Code's own cap is 8 consecutive continuations, reset by each tool call. Measured here,
+  22–29 October: 14 of 43 hand-backs ended without an entry. Now the second Stop checks again,
+  and a folder whose logbook got no new entry is handed back a second time, then let through --
+  two per turn at most, by Baton's own count. Not claimed: that the second hand-back gets the
+  entry; `/baton-doctor`'s `recorded_after` and `passed` will say.
+- **An install made by the script compares its hooks with the repository it came from** (row 103,
+  Bernard Haddad). The installer writes `repo`, the drift check read only `source`, so nothing
+  was compared: a line added to an installed hook passed without a trace.
+- **A hand-back names every unrecorded file, up to five** (row 98, Abuzar Zaidi), not only the
+  newest: a session cut short with six files told the agent of one.
+- **A path an entry says it changed outside the task folder is looked at** (row 95, Trofymenko).
+  The hand-back says "name where" when the change is elsewhere, and nothing then looked at where.
+  When no file of the folder was saved this session, a path named whole must exist and have been
+  saved in it, or the entry is asked about once. 0 of the 46 newest entries on this machine would
+  be asked. Work done only outside every task folder, with no entry, still passes: by design.
+- **Smaller.** A pointer naming `docs/ARCHITECTURE.md` is checked for shelf life like a file at
+  the folder's root (row 101). A failing pinned run that quotes "no tests ran" is "failed" (row
+  84). The corpus reads `## 22.10.2026` headings as entries (row 85). As a plugin, the skills are
+  compared with the catalog's release too (row 86). The doctor's tests read their own managed
+  folder, not the machine's (row 87). The review offer says words, not folders, are held back
+  (row 66).
+- Not in this version: a second session's work recorded by another session's entry in the same
+  folder (row 92), a `.batonignore` written in an earlier session hiding new work (row 97), and
+  `cat`/`head`/Read as reads for lesson L2 (row 100) -- each reproduced, each needing a decision.
+
 **v3.28.2** — the README says the same, without the phrasing the directory's scan reads as a forward
 
 - **The README no longer quotes the code it describes.** The directory's check has flagged

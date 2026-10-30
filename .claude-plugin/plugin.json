@@ -1,7 +1,7 @@
 {
   "name": "baton",
   "displayName": "Baton",
-  "version": "3.28.2",
+  "version": "3.29.0",
   "description": "Baton is a Claude Code plugin: hooks that keep every task in a folder with a logbook. A session opens on the board of what is whose move, a turn that leaves work unrecorded is handed back, a message naming a task brings up its record. Hooks run in Claude Code (terminal, IDE, desktop Code tab); in claude.ai chat only the skills load. Installed from claude.ai? Open Claude Code on the same account. The hooks make no network requests; the opt-in review tools, run by hand, send text to OpenRouter.",
   "icon": "./icon.png",
   "author": {
