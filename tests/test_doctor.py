@@ -20,6 +20,7 @@ def _env(tmp_path, data):
     (home / ".claude").mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
+    env["BATON_MANAGED_DIR"] = os.environ["BATON_MANAGED_DIR"]   # the test's, not /etc (row 87)
     env.update(HOME=str(home), BATON_HOME=str(tmp_path / "tasks"),
                CLAUDE_PLUGIN_ROOT=str(ROOT), CLAUDE_PLUGIN_DATA=str(data))
     return env
@@ -127,3 +128,14 @@ def test_the_local_file_at_the_repository_root_from_a_subfolder(tmp_path):
     out = _disabled(tmp_path, {"proj/.claude/settings.local.json": {"disableAllHooks": True}},
                     cwd="proj/src/deep")
     assert out.returncode == 1 and "(local)" in out.stdout, out.stdout
+
+
+def test_the_doctor_run_by_these_tests_reads_the_tests_managed_folder(tmp_path):
+    """ZA-OPRAVYANE row 87 (agent, 23.10): _env dropped every BATON_* name, BATON_MANAGED_DIR
+    with them, so the doctor these tests start read the machine's own managed settings -- and
+    where a policy sets disableAllHooks, every test here that reads its output would fail."""
+    managed = Path(os.environ["BATON_MANAGED_DIR"])
+    managed.mkdir(parents=True, exist_ok=True)
+    (managed / "managed-settings.json").write_text('{"disableAllHooks": true}', "utf-8")
+    out = _doctor(tmp_path, tmp_path / "data")
+    assert "ALL HOOKS ARE SWITCHED OFF" in out.stdout, out.stdout[-600:]

@@ -32,6 +32,7 @@ def _env(tmp_path, data):
     (home / ".claude").mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
+    env["BATON_MANAGED_DIR"] = os.environ["BATON_MANAGED_DIR"]   # the test's, not /etc (row 87)
     env.update(HOME=str(home), BATON_HOME=str(tmp_path / "tasks"), CLAUDE_PLUGIN_DATA=str(data),
                BATON_STATE_DIR=str(tmp_path / "state"),
                BATON_LESSONS_STATE=str(data / "baton.lessons.json"))
