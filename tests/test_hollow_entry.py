@@ -200,12 +200,12 @@ def test_naming_an_old_file_without_changing_it_is_not_asked(tmp_path):
     assert _claimed(tmp_path, entry, 2 * 86400) == []
 
 
-def _outside_entry(tmp_path, path: str):
+def _outside_entry(tmp_path, path: str, verb: str = "Wrote"):
     """A full entry headed now, saying it changed `path`, outside the task folder; the folder's
     own file two days old. Stop run as the harness runs it."""
     now = datetime.now()
     entry = GOOD.replace("2026-10-01 10:00", f"{now:%Y-%m-%d %H:%M}") \
-                .replace("Wrote report-draft.md", f"Wrote {path}")
+                .replace("Wrote report-draft.md", f"{verb} {path}")
     folder = _folder(tmp_path / "tasks", "report", entry)
     os.utime(folder / "report-draft.md", (time.time() - 2 * 86400,) * 2)
     tr = tmp_path / "t.jsonl"
@@ -236,3 +236,10 @@ def test_an_entry_naming_an_outside_file_saved_now_passes(tmp_path):
     real.parent.mkdir(parents=True)
     real.write_text("x\n", "utf-8")
     assert "clean.py" not in _outside_entry(tmp_path, str(real))
+
+
+def test_an_entry_saying_it_deleted_an_outside_file_is_not_asked(tmp_path):
+    """A path an entry says it deleted, moved or renamed is meant to be gone."""
+    missing = str(tmp_path / "elsewhere" / "old.py")
+    reason = _outside_entry(tmp_path, missing, verb="Deleted")
+    assert "old.py" not in reason, reason

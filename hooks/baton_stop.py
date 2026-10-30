@@ -642,6 +642,8 @@ _CHANGED = re.compile(r"(?i)\b(?:(?:re)?(?:wr[oi]te|written|fix|chang|updat|edit
 
 
 # A path named whole: /x/y.py, ~/x/y.py, C:\x\y.py. Not the path part of a web address.
+# On a line that deletes, moves or renames, a path is meant to be gone: not judged.
+_GONE = re.compile(r"(?i)\b(?:delet|remov|mov(?:e|es|ed|ing)\b|renam)|изтри|премест|преименува|махна")
 _ABS_PATH = re.compile(r"(?<![\w~.:/\\])(?:~?/|[A-Za-z]:\\)(?:[\w.\-]+[/\\])*[\w\-][\w.\-]*\.\w+")
 
 
@@ -657,7 +659,7 @@ def claimed_untouched(folder: Path, logbook: str, body: str,
         name = Path(rel).name
         if len(name) >= MIN_NAME_CHARS and any(name in ln for ln in lines):
             out.append(rel.replace(os.sep, "/"))
-    for named in sorted({m for ln in lines for m in _ABS_PATH.findall(ln)}):
+    for named in sorted({m for ln in lines if not _GONE.search(ln) for m in _ABS_PATH.findall(ln)}):
         if (named[1:2] == ":") != (os.name == "nt") and not named.startswith("~"):
             continue          # another system's path (work on a Windows machine, said from here)
         try:
