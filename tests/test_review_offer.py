@@ -42,6 +42,8 @@ def test_offered_on_the_next_run_with_cost_and_what_is_sent(tmp_path):
     assert "optional review" in ctx
     assert "SENDS" in ctx and "OpenRouter" in ctx and "$0.0013" in ctx
     assert "/baton-key" in ctx and "never runs by itself" in ctx
+    # Row 66: the review holds back by words in a path or text, not by folders.
+    assert "folders the human lists" not in ctx and "a word the human lists as confidential" in ctx
 
 
 def test_offered_only_once(tmp_path):

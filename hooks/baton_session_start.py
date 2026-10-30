@@ -1557,8 +1557,8 @@ def review_notice() -> str | None:
             "lines of an index (a MEMORY.md, a list of pointers) still match the files they "
             "point to. Mention it to the human in one or two lines, in their language, with "
             "both of these: it SENDS the pointer and part of the file it points to to "
-            "OpenRouter (TypeSafe's Jev model) -- folders the human lists as confidential are "
-            "held back before anything is sent; and it COSTS money on their own OpenRouter key "
+            "OpenRouter (TypeSafe's Jev model) -- anything holding a word the human lists as "
+            "confidential (in its path or its text) is held back before anything is sent; and it COSTS money on their own OpenRouter key "
             "(about $0.0013 for one review of a 19-line index, measured by the author). Setting "
             f"up the key: {command('baton-key')}. It never runs by itself; do not run it without "
             "their yes. If they are not interested, drop it -- this note does not come back.")
