@@ -1658,7 +1658,10 @@ def main() -> int:
             "If the change was incidental and genuinely needs no entry, say so in one "
             "line and finish.")
         _count(handed_back=len(stale))
-        _remember(session, (_already_asked(session) - {HANDED_BACK_AGAIN})      # a new turn
+        # A new turn: its hand-back is the only one pending. A turn the human interrupted after
+        # its hand-back ran no second Stop, and its marks would be handed back here (row 115).
+        _remember(session, {a for a in _already_asked(session)
+                            if not a.startswith("blocked:") and a != HANDED_BACK_AGAIN}
                   | {"blocked:" + _folder_of(f) for f in stale})
     if open_ended:
         listed = "\n".join(f"  - {folder}" for folder in open_ended)

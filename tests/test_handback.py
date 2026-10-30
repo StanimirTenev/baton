@@ -175,3 +175,23 @@ def test_completing_the_newest_entry_after_a_hand_back_counts_as_recorded(tmp_pa
     book.write_text(book.read_text("utf-8").replace("body", "body\n\nwork.txt: done"), "utf-8")
     _stop(env, tr, active=True)
     assert _counts(env).get("recorded_after") == 1, _counts(env)
+
+
+def test_an_interrupted_hand_back_is_not_handed_back_in_a_later_turn(tmp_path):
+    """A turn the human interrupted after the first hand-back runs no second Stop, so its
+    `blocked:` mark stayed. Recorded in the next turn, that folder must not be named when a
+    later turn hands back another folder: this turn's hand-back is the only pending one."""
+    env, folder, book, tr = _setup(tmp_path)
+    other = folder.parent / "b"
+    other.mkdir()
+    (other / "LOGBOOK.md").write_text(book.read_text("utf-8"), "utf-8")
+    old = time.time() - 7200
+    os.utime(other / "LOGBOOK.md", (old, old))
+    _work(folder)
+    assert "  - a" in _stop(env, tr).get("reason", "")      # interrupted: no active Stop
+    _entry(book, "recorded in the next turn")
+    _stop(env, tr)
+    _work(other)
+    assert "  - b" in _stop(env, tr).get("reason", "")
+    again = _stop(env, tr, active=True)
+    assert "  - b" in again.get("reason", "") and "  - a" not in again.get("reason", ""), again
