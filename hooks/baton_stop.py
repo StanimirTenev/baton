@@ -641,15 +641,34 @@ _CHANGED = re.compile(r"(?i)\b(?:(?:re)?(?:wr[oi]te|written|fix|chang|updat|edit
                       r"|поправ|пренаписа|промен|добав|написа|създад|обнов|изтри|преименува|замен|махна")
 
 
-def claimed_untouched(folder: Path, logbook: str, body: str) -> list[str]:
+# A path named whole: /x/y.py, ~/x/y.py, C:\x\y.py. Not the tail of an address (https://h/x.py).
+_ABS_PATH = re.compile(r"(?<![\w~.:/\\])(?:~?/|[A-Za-z]:\\)(?:[\w.\-]+[/\\])*[\w\-][\w.\-]*\.\w+")
+
+
+def claimed_untouched(folder: Path, logbook: str, body: str,
+                      since: float | None = None) -> list[str]:
     """Work files of the folder the entry says it changed. Asked only when no file of the folder
-    was saved this session, so none of them was."""
+    was saved this session, so none of them was. And a path named whole, anywhere, that is not
+    there or was not saved this session (row 95, Trofymenko, 25.10: the hand-back says "name
+    where" when the change is somewhere else, and then nothing looked at where)."""
     lines = [ln for ln in body.splitlines() if _CHANGED.search(ln)]
     out = []
     for rel, path in (work_files(folder, logbook) if lines else ()):
         name = Path(rel).name
         if len(name) >= MIN_NAME_CHARS and any(name in ln for ln in lines):
             out.append(rel.replace(os.sep, "/"))
+    for named in sorted({m for ln in lines for m in _ABS_PATH.findall(ln)}):
+        if (named[1:2] == ":") != (os.name == "nt") and not named.startswith("~"):
+            continue          # another system's path (work on a Windows machine, said from here)
+        try:
+            saved = Path(named).expanduser().stat().st_mtime
+        except FileNotFoundError:
+            out.append(f"{named} (not there)")
+            continue
+        except OSError:
+            continue          # unreadable here (another user's, a drive not mounted): not judged
+        if since is not None and saved < since:
+            out.append(named)
     return sorted(out)
 
 
@@ -713,7 +732,7 @@ def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
     for folder, text, top in _changed_tops(root, name, since):
         files = touched_since(folder, name, since)
         reasons = hollow(top[1], files, session_entries(text, since),
-                         [] if files else claimed_untouched(folder, name, top[1]))
+                         [] if files else claimed_untouched(folder, name, top[1], since))
         if reasons:
             out.append((folder.name, top[0], reasons))
     return out

@@ -198,3 +198,41 @@ def test_the_same_entry_with_the_file_saved_now_passes(tmp_path):
 def test_naming_an_old_file_without_changing_it_is_not_asked(tmp_path):
     entry = GOOD.replace("Wrote report-draft.md", "Read report-draft.md and agreed")
     assert _claimed(tmp_path, entry, 2 * 86400) == []
+
+
+def _outside_entry(tmp_path, path: str):
+    """A full entry headed now, saying it changed `path`, outside the task folder; the folder's
+    own file two days old. Stop run as the harness runs it."""
+    now = datetime.now()
+    entry = GOOD.replace("2026-10-01 10:00", f"{now:%Y-%m-%d %H:%M}") \
+                .replace("Wrote report-draft.md", f"Wrote {path}")
+    folder = _folder(tmp_path / "tasks", "report", entry)
+    os.utime(folder / "report-draft.md", (time.time() - 2 * 86400,) * 2)
+    tr = tmp_path / "t.jsonl"
+    started = datetime.fromtimestamp(time.time() - 3600, timezone.utc).isoformat()
+    tr.write_text(json.dumps({"timestamp": started}) + "\n", "utf-8")
+    env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "SYSTEMROOT", "LANG")}
+    env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
+               BATON_STATE_DIR=str(tmp_path / "state"), BATON_BODY_STATE=str(tmp_path / "b.json"),
+               BATON_LESSONS_STATE=str(tmp_path / "l.json"),
+               BATON_SESSION_STATE=str(tmp_path / "s.json"))
+    out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env,
+                         input=json.dumps({"session_id": "s", "transcript_path": str(tr)}))
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout).get("reason", "") if out.stdout.strip() else ""
+
+
+def test_an_entry_naming_an_outside_path_that_is_not_there_is_asked(tmp_path):
+    """ZA-OPRAVYANE row 95 (Trofymenko, 25.10): an entry naming an absolute path outside the task
+    root passed with nothing checked -- and the hand-back itself says "name where" when the change
+    is somewhere else. A path it says it changed must be there and saved this session."""
+    missing = str(tmp_path / "elsewhere" / "clean.py")
+    reason = _outside_entry(tmp_path, missing)
+    assert "clean.py" in reason and "not there" in reason, reason
+
+
+def test_an_entry_naming_an_outside_file_saved_now_passes(tmp_path):
+    real = tmp_path / "elsewhere" / "clean.py"
+    real.parent.mkdir(parents=True)
+    real.write_text("x\n", "utf-8")
+    assert "clean.py" not in _outside_entry(tmp_path, str(real))
