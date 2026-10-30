@@ -91,3 +91,22 @@ def test_the_board_goes_to_the_agent_to_show_in_the_humans_language(tmp_path):
     assert "every group and every line" in context
     assert "WHOLE board" in context and "no summary" in context
     assert LOGBOOK in context
+
+
+def test_a_stale_reference_under_a_subfolder_reaches_the_report(tmp_path):
+    """ZA-OPRAVYANE row 101 (Matheus Castro, 27.10): only a name at the folder's root was
+    checked; `next: ... docs/ARCHITECTURE.md` was not. A path under the folder is checked; one
+    that climbs out of it is not."""
+    folder = _task(tmp_path, "zadacha", "see docs/ARCHITECTURE.md and ../other/OUT.md")
+    (folder / "docs").mkdir()
+    arch = folder / "docs" / "ARCHITECTURE.md"
+    arch.write_text("layers\n", encoding="utf-8")
+    out = tmp_path / "other"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "OUT.md").write_text("x\n", encoding="utf-8")
+    old = time.time() - 4 * 86400
+    os.utime(arch, (old, old))
+    os.utime(out / "OUT.md", (old, old))
+    report = _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
+    assert "docs/ARCHITECTURE.md (last touched" in report, report
+    assert "OUT.md (last touched" not in report

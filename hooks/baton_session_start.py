@@ -1070,8 +1070,9 @@ def pointer_drift(fm: dict) -> int | None:
     return len(text) if len(text) > POINTER_MAX else None
 
 
-# A pointer naming a working file -- a decisions list, a questions file, a plan.
-NAMED_FILE = re.compile(r"`?\b([A-Za-z0-9][A-Za-z0-9_.\-]*\.md)\b`?")
+# A pointer naming a working file -- a decisions list, a questions file, a plan -- at the folder's
+# root or under it: `docs/ARCHITECTURE.md` was cut to `ARCHITECTURE.md` and never found (row 101).
+NAMED_FILE = re.compile(r"`?\b([A-Za-z0-9][A-Za-z0-9_.\-]*(?:/[A-Za-z0-9_.\-]+)*\.md)\b`?")
 
 
 def kod_drift(fm: dict) -> str | None:
@@ -1168,6 +1169,10 @@ def stale_reference(folder: Path, logbook: str, fm: dict) -> list[str]:
     for name in sorted({n for n in NAMED_FILE.findall(str(fm.get("next", "")))
                         if n.lower() != logbook.lower()}):
         target = folder / name
+        try:      # under the folder only: `../other/X.md` is another task's, not this pointer's
+            target.resolve().relative_to(folder.resolve())
+        except (OSError, ValueError):
+            continue
         if not target.is_file():
             continue
         try:
