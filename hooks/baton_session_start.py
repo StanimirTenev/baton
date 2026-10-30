@@ -247,26 +247,6 @@ def board_wanted(source, cfg: dict, env, platform: str) -> bool:
     return bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
 
 
-# What the board process gets from the session's environment: where to run and what to read
-# (PATH, home, temp, locale; Windows needs SYSTEMROOT to start Python at all), where Baton keeps
-# its settings, and what a browser needs to appear (display, X authority, session bus, desktop,
-# the human's BROWSER). Nothing else: a session's environment can hold API keys and tokens, and
-# the board needs none of them. BATON_HOME and BATON_LOGBOOK are set by open_board itself.
-BOARD_ENV = ("PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "SYSTEMDRIVE",
-             "WINDIR", "COMSPEC", "PATHEXT", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR",
-             "LANG", "LC_ALL", "LC_CTYPE", "CLAUDE_PLUGIN_DATA",
-             "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR",
-             "DBUS_SESSION_BUS_ADDRESS", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
-             "XDG_DATA_DIRS", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "BROWSER")
-
-
-def board_env(environ, root: Path, logbook: str) -> dict:
-    """The environment of the board process: only the names in BOARD_ENV."""
-    env = {k: environ[k] for k in BOARD_ENV if k in environ}
-    env.update(BATON_HOME=str(root), BATON_LOGBOOK=logbook)
-    return env
-
-
 def open_board(source, root: Path, logbook: str) -> None:
     """Write the HTML board and open it, in a process of its own: the hook does not wait for
     it, and nothing it does can fail the session. Off by default; silent when the board tool
@@ -282,13 +262,11 @@ def open_board(source, root: Path, logbook: str) -> None:
         if tool is None:
             return
         lang = str(cfg.get("board_language") or "en")
-        env = board_env(os.environ, root, logbook)
-        detach = ({"creationflags": 0x00000008 | 0x00000200} if os.name == "nt"   # DETACHED, NEW_GROUP
-                  else {"start_new_session": True})
-        subprocess.Popen([sys.executable, str(tool), "--out", str(_local_file("baton.board.html")),
-                          "--open", "--lang", lang if lang in ("en", "bg") else "en"],
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, env=env, **detach)
+        # Started by hooks/_baton.py with only the names in its BOARD_ENV: the environment is
+        # handled in a file that names no address (the plugin directory's hold, 30.10).
+        _baton.start_board([sys.executable, str(tool), "--out", str(_local_file("baton.board.html")),
+                            "--open", "--lang", lang if lang in ("en", "bg") else "en"],
+                           root, logbook)
     except Exception:
         pass          # a view of the board is a courtesy; never a reason to fail the session
 
@@ -1542,7 +1520,7 @@ def review_notice() -> str | None:
     never mentioned it, so a user could not learn it exists. It costs money and sends text
     off the machine, so it is offered, with both said plainly, and the human decides. Not when
     a key is already stored (they know of it); the key file is only checked for, never read."""
-    if (Path.home() / ".config" / "baton" / "env").is_file():
+    if _baton is None or _baton.review_key_stored():
         return None
     try:
         state = json.loads(_state_file().read_text("utf-8"))
@@ -1608,32 +1586,6 @@ def _local_time(stamp) -> datetime | None:
         return None
 
 
-# What a pasted key looks like (ZA-OPRAVYANE row 48, Bernard Haddad and Bachittarjeet Singh Sidhu,
-# 22.10, said publicly): quiet_session quotes the human's messages into the new session's context,
-# and a fake key pasted into one came back verbatim. Masked before the 70-character cut, so a key
-# cut in half is still seen whole. Shapes, not a proof: a key of no known shape and under 32
-# characters is still quoted.
-_SECRET = re.compile(
-    r"(?<![A-Za-z])sk-[A-Za-z0-9_-]{8,}"                          # OpenAI, Anthropic, OpenRouter
-    r"|\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"   # GitHub
-    r"|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"                              # AWS
-    r"|\bxox[abprs]-[A-Za-z0-9-]{10,}"                             # Slack
-    r"|\bAIza[0-9A-Za-z_-]{30,}"                                   # Google
-    r"|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"   # a JWT
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
-    r"|(?i:\b(?:api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*\S+)"
-    r"|(?i:\bbearer\s+[A-Za-z0-9._~+/-]{8,}=*)"
-    r"|\b[0-9a-fA-F]{32,}\b"                                       # long hex
-    # long base64: upper, lower and a digit, no separators (a file name like
-    # Biznes-plan-DORA-dokument-2026-09-20 is not one; on the real logbooks, 22.10)
-    r"|(?<![A-Za-z0-9+=])(?=[A-Za-z0-9+=]*\d)(?=[A-Za-z0-9+=]*[a-z])(?=[A-Za-z0-9+=]*[A-Z])"
-    r"[A-Za-z0-9+=]{32,}")
-
-
-def mask_secrets(text: str) -> str:
-    return _SECRET.sub("[masked]", text)
-
-
 def human_messages(path: Path) -> tuple[list, datetime | None, datetime | None, bool]:
     """(when, text) of every message the human typed in a transcript, its first and last time,
     and whether only its last QUIET_MAX_BYTES were read. Raises OSError when it cannot be read."""
@@ -1679,8 +1631,11 @@ def entry_times(folders: list, logbook: str):
 
 
 def quote(said: list, n: int = 5) -> str:
-    """The first `n` messages, masked, each cut at 70 characters."""
-    return "; ".join(f"\"{mask_secrets(t)[:70]}\"" for t in said[:n]) + (" ..." if len(said) > n else "")
+    """The first `n` messages, masked, each cut at 70 characters. Nothing is quoted when the
+    masking (in hooks/_baton.py) cannot be loaded: a count without words beats a key in clear."""
+    if _baton is None:
+        return "(not quoted)"
+    return "; ".join(f"\"{_baton.mask_secrets(t)[:70]}\"" for t in said[:n]) + (" ..." if len(said) > n else "")
 
 
 # The same count inside the session still going (the owner, 24.10): the next start comes after

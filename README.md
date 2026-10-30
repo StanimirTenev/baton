@@ -119,24 +119,25 @@ another tool's files.
 
 ### For the plugin directory's reviewer
 
-The scan holds Baton on three warnings. What each flagged file does, checked against v3.28.2:
+The scan holds Baton on three warnings. What each flagged file does, checked against v3.29.0:
 
-- **A key read from the user's machine** (`README.md`, `hooks/baton_session_start.py`,
+- **A key read from the user's machine** (`hooks/baton_session_start.py`,
   `.claude-plugin/plugin.json`). The only key Baton reads is the user's OpenRouter key, and only
   three tools the human runs by hand read it: `tools/baton_review.py` (from
   `~/.config/baton/env`, where `tools/baton_key.py` stored it after the human typed it in),
   `tools/baton_sift.py` (through `baton_review`) and `tools/baton_key.py`. They send it only to
   OpenRouter, the key's own vendor, in the header of their requests. No hook reads it.
-  `baton_session_start.py` checks only whether that file exists (`review_notice`, `.is_file()`,
-  to offer the review once) and never opens it. Its one network request is the opt-in update
-  check (`update_notice`): a GET for the latest release number on GitHub that sends nothing of
-  the user's, never made as a plugin. It also starts the board, a local process that makes no
-  network request, with a fixed list of environment names (`BOARD_ENV`: path, home, temp,
-  locale, where Baton keeps its settings, and what a browser needs to appear -- display, its
-  X authority file, session bus, desktop, `BROWSER`) and nothing else from the session.
-  `plugin.json` reads nothing: its description only says that the review tools send text to
-  OpenRouter. A `userConfig` option would not reach these tools -- Claude Code hands plugin
-  options to hook processes, and these tools are run by hand.
+  Since v3.29.0 `baton_session_start.py` no longer touches the environment or the key file
+  at all: what did -- the board's fixed list of environment names (`BOARD_ENV`: path, home,
+  temp, locale, where Baton keeps its settings, and what a browser needs to appear), the check
+  whether the key file exists (to offer the review once; it is never opened) and the masking
+  of a key pasted into a message -- is in `hooks/_baton.py`, which makes no network request.
+  The session hook's one network request is the opt-in update check (`update_notice`): a GET
+  for the latest release number on GitHub that sends nothing of the user's, never made as a
+  plugin. `plugin.json` reads nothing: its description only says that the review tools send
+  text to OpenRouter, and it was flagged the same way from v3.15.0, when it did not mention
+  OpenRouter at all. A `userConfig` option would not reach these tools -- Claude Code hands
+  plugin options to hook processes, and these tools are run by hand.
 - **An image file the plugin's code could run** (`install.sh`, `.claude-plugin/plugin.json`).
   `icon.png` is the listing icon named in `plugin.json`. Nothing runs or copies it:
   `install.sh` does not name it and copies only the named hooks and each `skills/*/SKILL.md`.

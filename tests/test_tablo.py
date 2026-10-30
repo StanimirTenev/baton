@@ -255,7 +255,7 @@ def test_the_board_process_gets_no_secret_from_the_session(tmp_path):
 
 def test_board_env_keeps_only_the_listed_names():
     import importlib.util
-    hook = Path(__file__).resolve().parent.parent / "hooks" / "baton_session_start.py"
+    hook = Path(__file__).resolve().parent.parent / "hooks" / "_baton.py"   # since v3.29.0
     spec = importlib.util.spec_from_file_location("ss_board_env", hook)
     ss = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ss)

@@ -1078,7 +1078,8 @@ def run_tests(folder_arg: str) -> int:
     group = {"creationflags": 0x00000200} if os.name == "nt" else {"start_new_session": True}
     # Only RUN_ENV's names, never Baton's own: run as the pin, Baton's suite read the hook's
     # CLAUDE_PLUGIN_DATA and BATON_HOME instead of its own, and 12 tests failed (22.10).
-    allowed = (set(_ss().BOARD_ENV) - {"CLAUDE_PLUGIN_DATA"}) | set(RUN_ENV) | set(pin["env"])
+    board = set(_baton.BOARD_ENV) if _baton else set()      # hooks/_baton.py since v3.29.0
+    allowed = (board - {"CLAUDE_PLUGIN_DATA"}) | set(RUN_ENV) | set(pin["env"])
     env = {k: v for k, v in os.environ.items() if k in allowed}
     try:
         with open(log, "wb") as out:

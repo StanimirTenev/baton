@@ -66,6 +66,38 @@ def test_no_prose_quotes_the_code_that_copies_the_environment():
     assert found == [], f"say it in words, not in the code itself: {found}"
 
 
+# Code that builds a dict out of the environment (to hand to a child process), names a secret,
+# or names the file the key is stored in. Measured on the directory's results (2026-10-30):
+# four tests were flagged while each built its child's environment from os.environ in a file
+# with an address; from v3.27.0 they call conftest's child_env(), which holds no address, and the
+# four findings went away while the files still pass env= to a child. The session hook was clean
+# at v3.18.0 and flagged from the version that added BOARD_ENV next to its release URL.
+ENV_BUILD = re.compile(r"\benviron\[\s*\w+\s*\]\s+for\b|\benviron\.(?:items|copy)\(|"
+                       r"\bdict\(\s*os\.environ\b")
+KEY_FILE = re.compile(r"\.config\W{1,8}baton\W{1,8}env\b|OPENROUTER_API_KEY")
+NETWORK = re.compile(r"\burllib\b|\burlopen\(|\bhttp\.client\b|\brequests\.(?:get|post)\(|"
+                     r"Invoke-(?:WebRequest|RestMethod)|\bcurl\s|\bwget\s")
+CODE = (".py", ".sh", ".ps1", ".cmd")
+URL = re.compile(r"(?i)\bhttps?://")   # a bare host named in a comment was never flagged in code
+
+
+def test_no_code_with_an_address_touches_the_environment_or_a_secret():
+    """One file, both halves: an address or a network call, and a dict built from the
+    environment, a secret word or the key file. Those live in hooks/_baton.py, which has no
+    address; the three tools that really send the key to its vendor are the exception."""
+    found = []
+    for name, text in _shipped().items():
+        if not name.endswith(CODE) or name in HANDLE_THE_KEY:
+            continue
+        if not (URL.search(text) or NETWORK.search(text)):
+            continue
+        for pattern in (ENV_BUILD, KEY_FILE, SECRET_WORD):
+            m = pattern.search(text)
+            if m:
+                found.append(f"{name}:{text.count(chr(10), 0, m.start()) + 1} {m.group(0)!r}")
+    assert found == [], f"move it to a file with no address: {found}"
+
+
 def test_no_secret_word_beside_an_address():
     found = [f"{name}:{line} {word!r}" for name, text in _shipped().items()
              if name not in HANDLE_THE_KEY for line, word in secret_beside_address(text)]
