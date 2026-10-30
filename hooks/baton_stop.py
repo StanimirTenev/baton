@@ -195,6 +195,28 @@ def newest_work(folder: Path, logbook: str) -> tuple[float, str]:
     return newest, newest_name
 
 
+NAMED_MAX = 5      # files named per unrecorded folder (row 98); the rest are counted
+
+
+def newer_files(folder: Path, logbook: str, after: float) -> list[str]:
+    """The work files saved after `after`, newest first: the same files newest_work looks at."""
+    found = []
+    for rel, path in work_files(folder, logbook):
+        try:
+            m = os.stat(path).st_mtime
+        except OSError:
+            continue
+        if m > after:
+            found.append((m, rel))
+    return [rel for _, rel in sorted(found, reverse=True)]
+
+
+def _named(files: list[str]) -> str:
+    """`a.py, b.py` -- at most NAMED_MAX, then how many more."""
+    more = len(files) - NAMED_MAX
+    return ", ".join(files[:NAMED_MAX]) + (f", and {more} more" if more > 0 else "")
+
+
 def lost_note(lost: list[str], forgot: list[str]) -> str:
     """One message for the human, from Stop or on the board: history gone, no entry saying so."""
     out = []
@@ -357,10 +379,13 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
         if since is not None and work < since:
             continue
         if work > logged and (time.time() - work) > GRACE_SECONDS:
+            # Every file newer than the record, not only the newest: a session cut short with six
+            # files told the agent of one (row 98, Abuzar Zaidi, 27.10).
+            files = newer_files(folder, name, max(logged, since or 0.0)) or [newest_name]
             if logbook.is_file():
-                out.append(f"{folder.name} (newest: {newest_name})")
+                out.append(f"{folder.name} (newest: {_named(files)})")
             else:
-                out.append(f"{folder.name} (no {name} at all; newest: {newest_name})")
+                out.append(f"{folder.name} (no {name} at all; newest: {_named(files)})")
     # Row 37: a logbook Baton remembered that is not there now -- said once, then forgotten.
     for key in [k for k in bodies if Path(k).parent == root]:
         folder = Path(key)

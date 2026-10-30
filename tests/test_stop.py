@@ -415,3 +415,24 @@ def test_a_folder_the_root_batonignore_names_is_never_asked_about(tmp_path):
     (root / ".batonignore").write_text("snimki\n", "utf-8")
     assert "snimki" not in run("baton_stop.py", "{}")
     assert "snimki" not in run("baton_session_start.py", '{"source":"startup"}')
+
+
+def test_every_unrecorded_file_is_named_up_to_a_few(tmp_path):
+    """ZA-OPRAVYANE row 98 (Abuzar Zaidi, 27.10): the hand-back and the board named only the
+    newest file of an unrecorded folder; a session cut short with six files told the agent of
+    one. Up to five are named, newest first, and the rest are counted."""
+    folder = _task(tmp_path / "tasks", "big", log_age=3 * 86400, work_age=2 * 86400)
+    now = time.time()
+    for i in range(6):
+        f = folder / f"part{i}.py"
+        f.write_text("x\n", encoding="utf-8")
+        os.utime(f, (now - 7200 - i * 60, now - 7200 - i * 60))
+    old = folder / "kept.txt"           # older than the logbook: recorded, not named
+    old.write_text("k\n", encoding="utf-8")
+    os.utime(old, (now - 4 * 86400, now - 4 * 86400))
+    reason = _stop(tmp_path).get("reason", "")
+    assert "big (newest: part0.py" in reason, reason
+    for name in ("part1.py", "part2.py", "part3.py", "part4.py"):
+        assert name in reason, reason
+    assert "part5.py" not in reason and "2 more" in reason, reason
+    assert "kept.txt" not in reason
