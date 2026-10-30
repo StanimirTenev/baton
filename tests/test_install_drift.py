@@ -191,3 +191,29 @@ def test_every_copied_hook_file_is_covered_by_the_drift_check():
     drift_src = body[start:end]
     missing = sorted(n for n in shipped if f'"{n}"' not in drift_src)
     assert missing == [], f"not named in install_drift(): {missing}"
+
+
+def test_an_install_script_install_compares_against_its_repo(tmp_path):
+    """ZA-OPRAVYANE row 103 (Bernard Haddad, 27.10, said publicly): install.sh writes `repo` to
+    baton.local.json and source_dir() read only BATON_SOURCE and `source`, so for an
+    install-script install nothing was compared: a line added to the installed baton_stop.py
+    passed without a trace. Run as the harness runs SessionStart, with what the installer writes."""
+    import subprocess
+    from conftest import child_env
+    repo = tmp_path / "repo"
+    shutil.copytree(HOOK.parent, repo / "hooks",
+                    ignore=shutil.ignore_patterns("__pycache__", "baton.*", "sessions"))
+    hookdir = tmp_path / "installed"
+    shutil.copytree(repo / "hooks", hookdir)
+    with open(hookdir / "baton_stop.py", "a", encoding="utf-8") as fh:
+        fh.write("# a line nobody released\n")
+    (tmp_path / "tasks" / "a").mkdir(parents=True)
+    (tmp_path / "tasks" / "a" / "LOGBOOK.md").write_text("## 2026-10-30 10:00 — x\n\nbody\n", "utf-8")
+    (hookdir / "baton.local.json").write_text(json.dumps(
+        {"home": str(tmp_path / "tasks"), "logbook": "LOGBOOK.md", "repo": str(repo)}), "utf-8")
+    env = child_env(CLAUDE_CONFIG_DIR=str(tmp_path / "claude"), HOME=str(tmp_path / "home"))
+    out = subprocess.run([sys.executable, str(hookdir / HOOK.name)],
+                         input=json.dumps({"session_id": "s", "source": "startup"}),
+                         env=env, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert "NOT FROM THE SOURCE: baton_stop.py" in out.stdout, out.stdout[:600]

@@ -650,10 +650,13 @@ def source_dir() -> Path | None:
     """
     raw = os.environ.get("BATON_SOURCE")       # read first: with no settings file it was never
     if not raw:                                # read at all (row 50, Benjamin Brachert, 22.10)
-        try:
-            raw = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig")).get("source")
-        except Exception:
-            return None
+        cfg = _local()
+        raw = cfg.get("source")
+        # The installer writes `repo`, never `source`: for an install-script install nothing was
+        # compared, and a line added to an installed hook passed without a trace (row 103,
+        # Bernard Haddad, 27.10). Its hooks/ folder is what the installer copied from.
+        if not raw and cfg.get("repo") and not plugin():
+            raw = str(Path(cfg["repo"]).expanduser() / "hooks")
     return Path(raw).expanduser() if raw else None
 
 

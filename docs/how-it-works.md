@@ -423,8 +423,11 @@ a hook that did not contain the check. The release notes said it was live. The r
 The machine did not.
 
 Set `source` in `baton.local.json` (or `BATON_SOURCE`) to the directory the hooks are developed
-in, and Baton compares its own bytes against it and reports a difference at session start. It is
-optional: an install from a release configures no source and nothing is reported. Since v3.23.0
+in, and Baton compares its own bytes against it and reports a difference at session start.
+Without either, an install by `install.sh`/`install.ps1` is compared with the `hooks/` folder of
+the repository it recorded as `repo` (since v3.29.0, ZA-OPRAVYANE row 103: the installer writes
+`repo`, never `source`, so until then nothing was compared). A `git pull` without running the
+installer again is reported the same way -- it is the same question. Since v3.23.0
 (ZA-OPRAVYANE row 51, after Benjamin Brachert) the skills are compared too: each
 `skills/<name>/SKILL.md` beside that directory against the copy in `~/.claude/skills/<name>/`.
 
