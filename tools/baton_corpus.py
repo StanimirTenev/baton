@@ -64,7 +64,9 @@ from fnmatch import fnmatch
 from pathlib import Path
 import re
 
-ENTRY = re.compile(r'^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)', re.M)
+# Both heading forms, as SessionStart reads them since row 69: `## 22.10.2026 15:30` too (row 85).
+_DAY = r'(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})'
+ENTRY = re.compile(r'^## (' + _DAY + r'(?: \d{1,2}:\d{2})?)', re.M)
 REGISTERS = {"FAKTI.md", "FACTS.md", "TVARDENIYA.md", "CLAIMS.md"}
 DATED_NAME = re.compile(r'\d{4}-\d{2}-\d{2}|[_-]\d{2}[_-]\d{2}(?:\D|$)')
 SKIP = {".git", "__pycache__", "node_modules", ".pytest_cache"}
@@ -231,7 +233,7 @@ def _pieces(text: str, file: Path, logbook: str):
     """
     if file.name == logbook:
         offset = 0
-        for piece in re.split(r'(?=^## \d{4}-)', text, flags=re.M):
+        for piece in re.split(r'(?=^## ' + _DAY + r')', text, flags=re.M):
             yield offset, piece
             offset += len(piece)
     elif file.name in REGISTERS:

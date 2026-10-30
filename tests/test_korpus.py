@@ -290,3 +290,16 @@ def test_the_board_finds_the_tasks_the_config_points_at(tmp_path, monkeypatch):
     out = tmp_path / "board.html"
     assert tablo.main(["--out", str(out)]) == 0, "the board found no tasks"
     assert "a-task" in out.read_text(encoding="utf-8")
+
+
+def test_an_entry_headed_day_first_is_a_record(tmp_path):
+    """ZA-OPRAVYANE row 85 (agent, 23.10), the same as row 69 in SessionStart: only ISO headings
+    were entries, so a logbook written `## 22.10.2026 15:30` was one LIVE chunk."""
+    task = tmp_path / "t"
+    task.mkdir()
+    (task / "LOGBOOK.md").write_text(
+        HEADER + "## 22.10.2026 15:30 — later\n\n" + "what happened later on. " * 6 + "\n\n"
+        "## 21.10.2026 — earlier\n\n" + "what happened before it. " * 6 + "\n", encoding="utf-8")
+    rows = [(s, w) for _, s, w in bkorpus.chunks([tmp_path], bkorpus.Scope([]), "LOGBOOK.md")]
+    assert [w for _, w in rows].count("RECORD") == 2, rows
+    assert "LIVE" not in [w for _, w in rows], rows
