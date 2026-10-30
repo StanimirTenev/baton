@@ -1,11 +1,37 @@
 # Baton
 
-**Work that survives the session.**
+**Your coding agent forgets everything when the session ends. Baton makes it write things down -- and read them back.**
 
-A coding agent forgets everything between sessions. Baton makes the note-taking structural
-instead of voluntary: every task gets a folder with a `LOGBOOK.md`, and hooks run by Claude
-Code -- not by the agent's judgement -- make sure the logbook is read at the start and written
-at the end.
+Tired of explaining yesterday's work to Claude Code every morning? Of a `/clear` that wipes a
+decision, or a session that ends without saying what is left?
+
+Baton is a Claude Code plugin. Every task gets a folder with a `LOGBOOK.md`, and hooks that
+Claude Code runs -- not the agent's judgement -- make sure the logbook is read when a session
+starts and written before a turn ends. A rule in `CLAUDE.md` is advice the agent may skip; a hook
+is not. Everything stays plain Markdown on your disk; installed as a plugin, the hooks make no network
+request at all.
+
+```bash
+claude plugin marketplace add StanimirTenev/baton && claude plugin install baton@baton
+```
+
+Start a new session; once you have task folders, the agent's first reply opens with your tasks, ordered by whose move
+it is (example data):
+
+```text
+⏳ Waiting on YOU / can continue now:
+- 1 · migrate-billing 🔴 [high] — decide tax_region before the run
+
+🔁 Ongoing:
+- 2 · weekly-report 🟢 [low] — Monday export
+
+⛔ Waiting on someone OUTSIDE / blocked (for information):
+- 3 · broken-disk 🟡 [medium] — zpool replace  (waiting on: new disk (delivery))
+```
+
+**What it does not do**, measured on my own machine, 22–29 October 2026: the Stop hook handed
+a turn back 43 times for a missing logbook entry; 29 got the entry, 14 ended without one. Baton
+makes forgetting visible and hard; it does not make it impossible.
 
 ## Where it works
 
