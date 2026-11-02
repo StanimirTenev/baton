@@ -126,12 +126,29 @@ def ignored_this_session(root: Path, logbook: str, since: float | None) -> list[
     return out
 
 
+PULLED_FILE = ".baton-pulled"
+PULLED = {}       # folder name -> files skipped as pulled, this run
+
+
+def pulled_files(folder: Path) -> dict:
+    """{path: st_mtime_ns} a sync wrote after checking these files out (baton-firmi Р5, 02.11).
+    A pull gives every file the checkout time, so a task handed over from another machine read as
+    this session's unrecorded work. Unreadable or not an object: nothing is skipped."""
+    try:
+        data = json.loads((folder / PULLED_FILE).read_text("utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): v for k, v in data.items() if isinstance(v, int)} if isinstance(data, dict) else {}
+
+
 def work_files(folder: Path, logbook: str):
     """(path relative to the folder, full path) of every work file: not the logbook, not a
-    dotfile, nothing in SKIP_DIRS or a folder a `dir/` line names, nothing .batonignore matches.
+    dotfile, nothing in SKIP_DIRS or a folder a `dir/` line names, nothing .batonignore matches,
+    nothing a sync checked out and nobody changed since (.baton-pulled).
     Stops after WALK_CAP files and adds the folder to TRUNCATED."""
     patterns = ignore_patterns(folder)
     dirs = _dir_patterns(patterns)
+    pulled = pulled_files(folder)
     count = 0
     for dirpath, dirnames, filenames in os.walk(folder):
         here = os.path.relpath(dirpath, folder)
@@ -144,6 +161,15 @@ def work_files(folder: Path, logbook: str):
             rel = name if here == "." else os.path.join(here, name)
             if is_ignored(rel, name, patterns):
                 continue
+            key = rel.replace(os.sep, "/")
+            if key in pulled:
+                try:
+                    same = os.stat(os.path.join(dirpath, name)).st_mtime_ns == pulled[key]
+                except OSError:
+                    same = False
+                if same:          # as the sync left it; a change here moves the time, and counts
+                    PULLED.setdefault(folder.name, set()).add(key)
+                    continue
             if count == WALK_CAP:
                 if folder.name not in TRUNCATED:
                     TRUNCATED.append(folder.name)
@@ -1622,6 +1648,19 @@ def main() -> int:
                 "no entry.")
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), said)))}
         _remember(session, _already_asked(session) | {f"ignore:{f}" for f, _ in hidden})
+    try:      # Р5: a .baton-pulled saved this session is also a way past the check -- said once
+        fresh = [f for f in sorted(PULLED) if f"pulled:{f}" not in asked and since is not None
+                 and (root / f / PULLED_FILE).stat().st_mtime >= since]
+    except OSError:
+        fresh = []
+    if fresh:
+        listed = "; ".join(f"{f}: " + ", ".join(sorted(PULLED[f])[:3])
+                           + (", ..." if len(PULLED[f]) > 3 else "") for f in fresh)
+        said = (f"Baton: files a sync checked out this session were not counted as this session's "
+                f"work ({PULLED_FILE}) -- {listed}. A file changed here counts again; if the list "
+                "was written to get past the check, the work has no entry.")
+        note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), said)))}
+        _remember(session, _already_asked(session) | {f"pulled:{f}" for f in fresh})
     locked = [f for f in _ss().UNREADABLE if f"locked:{f}" not in asked]    # row 54, the same way
     if locked:
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"),

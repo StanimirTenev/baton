@@ -152,6 +152,16 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 ## Versions
 
+**v3.30.0** — files a sync checked out are not counted as this session's work
+
+- **A task handed over by `git pull` is no longer handed back as unrecorded.** A pull gives every
+  file the checkout time, logbook first, so Stop called the arriving task unrecorded and the other
+  machine's entry hollow. A sync that writes `.baton-pulled` (`{path: st_mtime_ns}` of what it
+  checked out) in the folder now has those files skipped until they change here. Measured with the
+  real hook on two clones, five scenarios: 3 of 5 right before, 5 of 5 after. Baton does not sync;
+  this only reads the record a sync leaves. A `.baton-pulled` saved this session is said to the
+  human once, as a `.batonignore` is. Details: [how it works](docs/how-it-works.md).
+
 **v3.29.1** — a pinned test run is said only when it disagrees
 
 - **The pinned test command runs without a word, and a pass is not said.** Every turn whose entry

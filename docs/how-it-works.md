@@ -900,6 +900,17 @@ back for unrecorded work could add `*` or the file's name and pass with no word.
 the line -- it may be right -- but says once a session, in a message the agent does not write,
 which files saved this session it hides; the board no longer suggests it as the way out.
 
+**Files a sync checked out are not this session's work** (since v3.30.0). A task handed over
+from another machine arrives by `git pull`, and every file in it gets the time of the checkout --
+git writes the logbook first, the work files a millisecond later -- so Stop called the task
+unrecorded, and then the other machine's entry hollow for not naming files "saved here this
+session". A sync that writes `.baton-pulled` in each task folder it changed -- a JSON object
+`{"path/in/folder": st_mtime_ns}` of what it checked out -- stops that: a file whose time still
+matches is skipped by every Stop check, and one changed here no longer matches and counts again.
+Keep `.baton-pulled` out of git (`.gitignore`): it is the clone's own state, and a committed one
+conflicts on the next pull. A `.baton-pulled` saved this session is said to the human once, like
+a `.batonignore`, since it is also a way past the check. Baton itself never syncs anything.
+
 ## Logbook is not memory
 
 They are different jobs and must not merge:
