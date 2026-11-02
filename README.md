@@ -15,6 +15,16 @@ request at all.
 claude plugin marketplace add StanimirTenev/baton && claude plugin install baton@baton
 ```
 
+```mermaid
+flowchart TD
+    A["A session starts"] --> B["SessionStart hook<br/>your tasks, by whose move it is"]
+    B --> C["You work; a message that names a task<br/>points the agent to its LOGBOOK.md first"]
+    C --> D{"The turn ends. Stop hook:<br/>work newer than the logbook?"}
+    D -- yes --> E["The turn is handed back:<br/>write the entry"]
+    E --> F["LOGBOOK.md on your disk,<br/>read by the next session"]
+    D -- no --> F
+```
+
 Start a new session; once you have task folders, the agent's first reply opens with your tasks, ordered by whose move
 it is (example data):
 
