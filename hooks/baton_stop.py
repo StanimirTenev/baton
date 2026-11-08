@@ -1621,12 +1621,92 @@ def _batch():
 CHAT_EVERY = 6
 
 
+_CHAT: dict = {}
+
+
+def _chat_since_entry(transcript: str, folders: list, name: str):
+    """SessionStart's chat_since_entry, read once per run: the chat file and chat_ask both ask."""
+    if transcript not in _CHAT:
+        _CHAT[transcript] = _ss().chat_since_entry(transcript, folders, name)
+    return _CHAT[transcript]
+
+
+# The chat after the last entry survives /clear and a restart (ZA-OPRAVYANE row 124, the owner,
+# 07.11). Measured that day: the previous session was 48 MB, ~712,000 characters of words alone,
+# 332 messages from the human -- none of it reached the next session unless an entry held it.
+# At every Stop the human's messages and the agent's text replies since the last entry headed in
+# this session's time -- chat_since_entry's cut, the one Stop's ask uses -- are written to
+# `<task root>/.baton-chat/<session>.md`, newest CHAT_KEEP characters, masked. No tool call, no
+# tool output. An entry written trims it (the part before it is recorded); nothing left after one,
+# the file goes. SessionStart (startup, clear) hands it to the next session and removes it.
+# Stop, not UserPromptSubmit: only Stop sees the reply that closes the turn. A turn the human
+# interrupts runs no Stop, so its last exchange is missing. Claude Code's own .jsonl is only read.
+CHAT_DIR = ".baton-chat"
+CHAT_KEEP = 40_000
+
+
+def _replies(transcript: str, after) -> list:
+    """(when, text) of the agent's text replies at or after `after`, in the transcript's tail."""
+    ss, out = _ss(), []
+    path = Path(transcript)
+    with open(path, "rb") as fh:
+        size = path.stat().st_size
+        if size > ss.QUIET_MAX_BYTES:
+            fh.seek(size - ss.QUIET_MAX_BYTES)
+            fh.readline()
+        for raw in fh:
+            if b'"assistant"' not in raw or b'"text"' not in raw:
+                continue
+            try:
+                obj = json.loads(raw.decode("utf-8", "replace"))
+            except ValueError:
+                continue
+            if not isinstance(obj, dict) or obj.get("type") != "assistant" or obj.get("isSidechain"):
+                continue
+            when = ss._local_time(obj.get("timestamp"))
+            content = (obj.get("message") or {}).get("content")
+            if when is None or when < after or not isinstance(content, list):
+                continue
+            text = "\n".join(str(b.get("text", "")) for b in content
+                             if isinstance(b, dict) and b.get("type") == "text").strip()
+            if text:
+                out.append((when, text))
+    return out
+
+
+def save_chat(payload: dict) -> None:
+    """Write this session's chat since its last entry to CHAT_DIR, or remove it when none is left."""
+    root, name = config()
+    session = re.sub(r"[^\w-]", "", str(payload.get("session_id") or ""))[:80]
+    transcript = str(payload.get("transcript_path") or "")
+    if not root.is_dir() or not session or not transcript or _baton is None:
+        return
+    path = root / CHAT_DIR / f"{session}.md"
+    folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    found = _chat_since_entry(transcript, folders, name)
+    if found is None:
+        return                              # cannot read: leave what is there
+    if not found[0]:
+        if path.is_file():
+            path.unlink()
+        return
+    said = [(w, "human", t) for w, t in found[0]] + \
+        [(w, "agent", t) for w, t in _replies(transcript, found[0][0][0])]
+    lines = [f"**{who} {w:%Y-%m-%d %H:%M}:** {_baton.mask_secrets(t)}\n"
+             for w, who, t in sorted(said, key=lambda s: s[0])]
+    body = "".join(lines)[-CHAT_KEEP:]
+    pid = _baton.claude_pid()
+    head = json.dumps({"session": session, "pid": pid, "project": str(Path(transcript).parent)},
+                      ensure_ascii=False)
+    _write_private(path, f"<!-- baton-chat {head} -->\n" + body)
+
+
 def chat_ask(root: Path, name: str, transcript: str, session: str) -> str | None:
     """The note to hand back when the human has said CHAT_EVERY or more things since the last
     entry written in this session; None otherwise, and when the transcript cannot be read."""
     try:
         folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
-        found = _ss().chat_since_entry(transcript, folders, name)
+        found = _chat_since_entry(transcript, folders, name)
         if not found or len(found[0]) < CHAT_EVERY:
             return None
         said, total = found
@@ -1679,6 +1759,10 @@ def main() -> int:
     _turn("Stop", payload.get("session_id"), "again" if payload.get("stop_hook_active") else "")
     try:      # an L2 note shown this turn and no tool call after it: the turn ended (row 40)
         _batch().followed(str(payload.get("session_id") or ""), None)
+    except Exception:
+        pass
+    try:      # the chat after the last entry, for the next session (row 124)
+        save_chat(payload)
     except Exception:
         pass
 

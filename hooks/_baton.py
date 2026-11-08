@@ -130,6 +130,38 @@ def start_board(cmd: list, root: Path, logbook: str) -> None:
                      stderr=subprocess.DEVNULL, env=board_env(os.environ, root, logbook), **detach)
 
 
+def claude_pid() -> int | None:
+    """The Claude Code process this hook runs under: the nearest ancestor named `claude`, read from
+    /proc (Linux). The same across /clear, a new one after a restart. None elsewhere, or not found."""
+    try:
+        pid = os.getpid()
+        for _ in range(8):
+            with open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace") as fh:
+                stat = fh.read()
+            name, rest = stat[stat.index("(") + 1:stat.rindex(")")], stat[stat.rindex(")") + 2:]
+            if name == "claude" and pid != os.getpid():
+                return pid
+            pid = int(rest.split()[1])
+            if pid <= 1:
+                return None
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def alive(pid: int) -> bool:
+    """Is that process still running? False where it cannot be asked (Windows)."""
+    if os.name == "nt":
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True               # someone else's: it exists
+    return True
+
+
 def review_key_stored() -> bool:
     """Whether the review's key file exists (tools/baton_key.py writes it). Only checked for,
     never opened: the hooks never read the key."""

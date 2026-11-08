@@ -1793,8 +1793,71 @@ def ignore_news(root: Path, logbook: str) -> str | None:
             + ". Tell the human in one line; a line they did not add is theirs to keep or remove.")
 
 
+# The chat the last session left after its last entry (ZA-OPRAVYANE row 124; Stop writes it, see
+# save_chat there). Which file is the previous session's: the human runs several at once, in one
+# folder (07.11). After /clear the Claude Code process is the same one, so the file whose `pid` is
+# this hook's Claude Code; after a restart the old process is gone, so never a file whose process
+# still runs -- that is another window. Where the process cannot be read (no /proc), the newest.
+# Only from the same project folder. Never a file not taken: it may be a running session's.
+# Claude Code holds a hook's context to 10,000 characters (over it: a file and a 2,000-character
+# preview), and the board is most of that. So the full text (Stop's CHAT_KEEP, 40,000) moves to
+# Baton's own state folder, private, and the context gets its path and the last CHAT_INLINE
+# characters -- where the last decision is.
+CHAT_INLINE = 2500
+CHAT_DAYS = 7
+
+
+def previous_chat(own: dict, root: Path) -> str | None:
+    folder = root / ".baton-chat"
+    if not folder.is_dir():
+        return None
+    mine = re.sub(r"[^\w-]", "", str(own.get("session_id") or ""))
+    project = str(Path(str(own.get("transcript_path") or "")).parent)
+    me = _baton.claude_pid() if _baton else None
+    found = []
+    for path in folder.glob("*.md"):
+        try:
+            text = path.read_text("utf-8")
+            first, _, body = text.partition("\n")
+            head = json.loads(first[len("<!-- baton-chat "):-len(" -->")])
+            saved = path.stat().st_mtime
+        except (OSError, ValueError):
+            continue
+        if path.stem == mine or head.get("project") != project or not body.strip():
+            continue
+        pid = head.get("pid") if isinstance(head.get("pid"), int) else None
+        if own.get("source") == "clear" and me and pid != me:
+            continue
+        if own.get("source") != "clear" and pid and pid != me and _baton.alive(pid):
+            continue
+        found.append((saved, path, body))
+    if not found:
+        return None
+    saved, path, body = max(found, key=lambda f: f[0])
+    state = Path(os.environ.get("BATON_STATE_DIR") or _local_file("sessions"))
+    copy = state / f"baton-chat-{path.stem}.md"
+    try:
+        state.mkdir(parents=True, exist_ok=True)
+        with os.fdopen(os.open(str(copy), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w",
+                       encoding="utf-8") as fh:
+            fh.write(body)
+        path.unlink()
+        for old in state.glob("baton-chat-*.md"):
+            if datetime.now().timestamp() - old.stat().st_mtime > CHAT_DAYS * 86400:
+                old.unlink()
+    except OSError:
+        return None                 # not moved: left where it is, for the next start
+    tail = body[-CHAT_INLINE:]
+    return (f"💬 The previous session's conversation after its last logbook entry was kept by Baton "
+            f"({len(body):,} characters, until {datetime.fromtimestamp(saved):%Y-%m-%d %H:%M}): the "
+            f"human's messages and your text replies, no tool output. In full: {copy} -- read it "
+            "before the human's next request; it may hold a decision no logbook has yet, and if so, "
+            "write it into the task's logbook. Its end:\n"
+            + ("[...]\n" if len(body) > len(tail) else "") + tail)
+
+
 FEEDBACK_AFTER_DAYS = 7
-ISSUES ="https://github.com/StanimirTenev/baton/issues"
+ISSUES = "https://github.com/StanimirTenev/baton/issues"
 
 
 def feedback_notice(today: date) -> str | None:
@@ -1934,7 +1997,8 @@ def _notices_only(notices: list[str], line: str | None = None) -> int:
 COMPACT_LINE = "🧭 Baton: context compacted -- the agent writes the logbook before going on."
 
 CLEARED = ("Baton: the human typed /clear to continue with a fresh context -- the previous "
-           "conversation is gone from it, and Baton asked for the logbooks to be written just "
+           "conversation is gone from it, but for what Baton kept of it after the last logbook entry "
+           "(💬 below, when there is any), and Baton asked for the logbooks to be written just "
            "before. Do not ask what was being done: the board below and each task's logbook "
            "hold it. Show the board as usual; the tasks touched most recently are the ones "
            "they were working on, so read the top entry of those logbooks before the human's "
@@ -2034,6 +2098,13 @@ def main() -> int:
             hidden = None           # a check that cannot read must not cost the board
         if hidden:
             notices.append(hidden)
+        if own.get("source") in ("startup", "clear"):
+            try:
+                kept = previous_chat(own, root)
+            except Exception:
+                kept = None         # the chat that cannot be handed over stays where it is
+            if kept:
+                notices.append(kept)
     if folders:
         open_board(own.get("source"), root, name)
     if folders and own.get("source") in ("startup", "clear"):
