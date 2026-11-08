@@ -39,6 +39,32 @@ QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"", re.S)
 CARRIER = re.compile(r"(?:^|[|;&(\n])\s*(?:\w+=\S*\s+)*(?:sed|echo|printf|awk|perl|python[\d.]*)\b"
                      r"[^|;&(\n]*$")
 SUBST = re.compile(r"\$\([^)]*\)|(?<!\\)`[^`]*(?<!\\)`")      # \` is a literal backtick
+# A file printed is a read too (ZA-OPRAVYANE row 100, Gianpiero Puleo, 27.10): `cat`, `head`,
+# `tail`, `sed -n`, where a command starts. Measured 30.10 on the recorded calls: 1,631 with these
+# verbs, 30 empty -- most of them `cat > f` and `sed -i`, which write. So not when the output goes
+# to a file (`>`, `>>`, `&>`; `2>` is only the errors) or a heredoc feeds it (`cat <<EOF`), and
+# not `sed -i`. Not after a pipe -- `git status | head` prints nothing when there is nothing to say
+# -- and not in a command that holds a heredoc anywhere (a script's body is not always cut out
+# above). Replayed 08.11 on 24,734 recorded Bash calls: 45 new fires before these two rules,
+# 33 after, each an empty file or output read (a background task's output not yet written, `sed -n`
+# past the end of a file). Not the Read tool: an image comes back as no text and would read as empty.
+FILE_READ = re.compile(r"(?:^|\|\||[;&(\n])\s*(?:sudo\s+)?(?P<verb>cat|head|tail|sed)\b"
+                       r"(?P<rest>(?:[^|;&\n]|&>)*)")
+FILE_WRITE = re.compile(r"(?<![2>])>")
+
+
+def _prints_a_file(command: str) -> bool:
+    if "<<" in command:
+        return False
+    for m in FILE_READ.finditer(command):
+        rest = m.group("rest")
+        if FILE_WRITE.search(rest):
+            continue
+        if m.group("verb") == "sed" and (not re.search(r"(?:^|\s)(?:-[a-zA-Z]*n[a-zA-Z]*|--quiet|--silent)\b", rest)
+                                          or re.search(r"(?:^|\s)(?:-[a-zA-Z]*i|--in-place)", rest)):
+            continue
+        return True
+    return False
 EMPTY = {"", "[]", "{}", '""', "''", "0", "null", "none", "(bash completed with no output)",
          "(no output)", "no matches found", "no files found"}
 
@@ -87,7 +113,8 @@ def is_read(call: dict) -> bool:
         return bool(words & MCP_READ) and not words & MCP_WRITE
     if tool in ("Bash", "PowerShell"):
         command = HEREDOC_BODY.sub(r"\1", str((call.get("tool_input") or {}).get("command", "")))
-        return bool(READ_VERBS.search(_carried(command)))
+        carried = _carried(command)
+        return bool(READ_VERBS.search(carried)) or _prints_a_file(carried)
     return False
 
 
