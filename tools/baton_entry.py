@@ -2,6 +2,7 @@
 """Prepend an entry to a logbook without corrupting it.
 
     python3 tools/baton_entry.py <logbook> <entry-file> [--next NEW --old OLD]
+    python3 tools/baton_entry.py <logbook> --open      # open the page of the last entry
 
 Or from Python, which is how an agent uses it:
 
@@ -40,13 +41,23 @@ Both or neither, or it fails.
 system clock, because the hour was typed from memory rather than read from the
 machine. This one only warns. A few hours can be a timezone, and a helper that
 refuses a write on a guess gets worked around instead of fixed.
+
+**The page of the entry** (ZA-OPRAVYANE row 117). After each write, `.baton-etap.html` in the
+task folder is made anew: the header (state, next, done_when), the entry just written and the
+work files saved since the logbook was last written. One file, overwritten every time; the dot
+keeps Stop from counting it as work. The agent offers to open it only at the end of a big
+stage, and `--open` opens it on this machine -- or, with no display, says the path instead.
 """
 
 from __future__ import annotations
 
 import argparse
+import html
+import importlib.util
+import os
 import re
 import sys
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +65,9 @@ from pathlib import Path
 DATE = r'(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})'
 HEADING = re.compile(r'^## (' + DATE + r')(?: (\d{2}):(\d{2}))?')
 AHEAD_MINUTES = 15       # below this, say nothing: clocks and timezones drift
+PAGE = ".baton-etap.html"  # a dotfile: Stop never counts it as work (row 117)
+PAGE_FILES = 40          # the page names at most this many files
+SKIP_DIRS = {"node_modules", "__pycache__", "venv", "dist", "build"}
 
 
 def _without_code(text: str) -> str:
@@ -160,6 +174,7 @@ def write_entry(path, entry: str, next_line: str | None = None,
         raise ValueError(
             f"heading glued mid-file, invisible to a heading read: {glued[:3]}")
 
+    before = file.stat().st_mtime   # the work since this is what the new entry records
     tmp = file.with_suffix(file.suffix + ".tmp")
     tmp.write_text(text, encoding="utf-8-sig" if bom else "utf-8")
     tmp.replace(file)               # atomic: never a half-written logbook
@@ -167,6 +182,98 @@ def write_entry(path, entry: str, next_line: str | None = None,
     print(f"written: {path}")
     if (note := _hours_ahead(entry)):
         print(note)
+    try:
+        page = stage_page(file, text, entry.strip(), before)
+    except Exception as exc:        # the page is a view; never a reason to fail the write
+        print(f"HTML: not made ({exc})")
+    else:
+        print(f"HTML: {page}")
+        if (why := no_display()):
+            print(f"no display here ({why}): do not offer to open it; give the path, and a "
+                  f"machine with a screen can copy it (scp) and open it there")
+
+
+def _board():
+    """The HTML board's module, for its stylesheet and the hook's own header reader."""
+    spec = importlib.util.spec_from_file_location(
+        "baton_board_page", Path(__file__).resolve().parent / "baton_board.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def no_display() -> str | None:
+    """Why a page cannot be opened here, or None: over SSH, or Linux with no display."""
+    if os.environ.get("SSH_CONNECTION"):
+        return "this session runs over SSH"
+    if sys.platform.startswith("linux") and not (
+            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return "no DISPLAY or WAYLAND_DISPLAY"
+    return None
+
+
+def saved_since(folder: Path, logbook: str, since: float) -> list[str]:
+    """Work files saved after `since`, as Stop counts work: not the logbook, no dotfile."""
+    out = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS)
+        for name in sorted(filenames):
+            full = os.path.join(dirpath, name)
+            if name.startswith(".") or (dirpath == str(folder) and name == logbook):
+                continue
+            try:
+                if os.stat(full).st_mtime > since:
+                    out.append(os.path.relpath(full, folder).replace(os.sep, "/"))
+            except OSError:
+                continue
+    return out
+
+
+def stage_page(logbook: Path, text: str, entry: str, since: float) -> Path:
+    """Write `.baton-etap.html` beside the logbook: header, the new entry, the files."""
+    board = _board()
+    fm = board._hook().parse_frontmatter(text)
+    folder = logbook.parent
+    files = saved_since(folder, logbook.name, since)
+    e = html.escape
+    head = "".join(f'<div class="next"><strong>{k}:</strong> {e(str(fm[k]))}</div>'
+                   for k in ("state", "next", "done_when") if fm.get(k))
+    listed = "".join(f"<li>{e(f)}</li>" for f in files[:PAGE_FILES])
+    if len(files) > PAGE_FILES:
+        listed += f"<li>... and {len(files) - PAGE_FILES} more</li>"
+    page = (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f"<title>{e(folder.name)}</title><style>{board.CSS}"
+            "pre{white-space:pre-wrap;font:inherit;margin:0}</style></head><body>"
+            f'<div class="wrap"><h1>{e(folder.name)}</h1>'
+            f'<div class="sub">{e(str(logbook))}</div>'
+            + (f'<div class="card">{head}</div>' if head else "")
+            + f'<h2>The entry</h2><div class="card"><pre>{e(entry)}</pre></div>'
+            + "<h2>Files saved since the last entry</h2>"
+            + (f'<div class="card"><ul>{listed}</ul></div>' if files
+               else '<div class="card quiet">none in the task folder</div>')
+            + "<footer>Made from the logbook by tools/baton_entry.py. The logbook is the record; "
+              "this page is a view of it. Nothing leaves the machine.</footer>"
+              "</div></body></html>")
+    out = folder / PAGE
+    out.write_text(page, encoding="utf-8")
+    return out
+
+
+def open_page(logbook) -> int:
+    """Open the page of the last entry on this machine, or say its path when there is no screen."""
+    page = Path(logbook).parent / PAGE
+    if not page.is_file():
+        print(f"no page yet: {page} is made when an entry is written", file=sys.stderr)
+        return 1
+    why = no_display()
+    if why:
+        print(f"HTML: {page}\nnot opened: {why}. Copy it to a machine with a screen (scp) "
+              f"and open it there.")
+        return 0
+    webbrowser.open(page.resolve().as_uri())
+    print(f"opened: {page}")
+    return 0
 
 
 def vpishi(logbook, entry, sledvashto=None, staro=None):
@@ -178,14 +285,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("logbook")
-    parser.add_argument("entry", help="file holding the entry, or - for stdin")
+    parser.add_argument("entry", nargs="?", help="file holding the entry, or - for stdin")
     parser.add_argument("--next", "--sledvashto", dest="next_line", help="the new pointer line, in full")
     parser.add_argument("--old", "--staro", dest="old_line", help="the old pointer line, verbatim")
     parser.add_argument("--title", help="build the heading from the clock: '## <now> — TITLE'; "
                                         "the entry is then the body only")
+    parser.add_argument("--open", action="store_true",
+                        help=f"open {PAGE} of the last entry here (with no display: say its path)")
     args = parser.parse_args()
+    if args.entry is None:
+        if not args.open:
+            parser.error("an entry file (or -) is needed, unless only --open is asked")
+        raise SystemExit(open_page(args.logbook))
     entry = sys.stdin.read() if args.entry == "-" else Path(args.entry).read_text(encoding="utf-8")
     write_entry(args.logbook, entry, args.next_line, args.old_line, title=args.title)
+    if args.open:
+        raise SystemExit(open_page(args.logbook))
 
 
 if __name__ == "__main__":

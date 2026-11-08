@@ -55,6 +55,8 @@ The two middle sections are left out when there is nothing to put in them. **Nev
 secret** (key, password, token, private URL with a credential) into an entry: write
 `[secret removed]` and say where the secret actually lives.
 
+An entry written with `tools/baton_entry.py` also becomes a page, `.baton-etap.html` in the folder (`HTML: <path>`). Ask the human "open it?" only at the end of a big stage — a new plan version, a research round, a release, a finished task — and on "yes" run `baton_entry.py <logbook> --open`; after a small entry, say nothing of it, and where the tool says there is no display, give the path instead of asking.
+
 Write it for **the next agent**, not for the human. The next session starts with no memory
 of this conversation. It gets this file and nothing else. So record what you would need in
 order to continue: what was decided and why, what was verified and how, what is still

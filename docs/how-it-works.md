@@ -618,7 +618,20 @@ Two Stop checks came from that evening, both mechanical:
 
 ```
 python3 tools/baton_entry.py <logbook> <entry-file> [--next NEW --old OLD]
+python3 tools/baton_entry.py <logbook> --open
 ```
+
+**The page of an entry** (row 117). Right after each write the tool makes
+`.baton-etap.html` in the task folder and prints `HTML: <path>`: the header (`state`, `next`,
+`done_when`), the entry just written, and the work files saved since the logbook was last
+written (the work this entry records -- the tool has no transcript, so this is its reading of
+"the files of the session"). One file, overwritten each time; its leading dot keeps Stop from
+counting it. The rules have the agent ask "open it?" only at the end of a big stage -- a new
+plan version, a research round, a release, a finished task -- and `--open` opens it in the
+browser of the machine the agent runs on. Over SSH, or on Linux with neither `DISPLAY` nor
+`WAYLAND_DISPLAY`, nothing is opened and the path is said instead; an agent on another
+machine copies it with `scp` and opens it there. The entry is shown as its plain text, not
+rendered Markdown. A page that cannot be made is said and never fails the write.
 
 The Stop hook demands an entry at the top of the logbook, and until now nothing here helped
 write one. So it was done by hand, and doing it by hand went wrong four times in three days.
