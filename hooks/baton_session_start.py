@@ -1730,8 +1730,71 @@ def quiet_session(own: dict, folders: list, logbook: str) -> str | None:
             "entries by the time in their heading.)")
 
 
+# A .batonignore written in an earlier session hides work with no word (ZA-OPRAVYANE row 97,
+# Iqbal, 25.10; reproduced 30.10: `*.py` from a previous session, and Stop was silent). Stop says
+# a line saved in its own session (row 57); the next session never heard of it. So the board names
+# the lines added since the last look -- the root's too, which hide whole folders -- remembered in
+# the state file. The first look has nothing to compare with: then only a line that hides a whole
+# type of file (`*.py`). One line on the board, never a hand-back: the line may be right.
+# A root line naming a whole folder hides a task only when that folder has a logbook: a folder of
+# photos declared no task (row 31) is not news.
+_WHOLE_TYPE = re.compile(r"^\*(?:\.[\w.-]+)?$")
+IGNORE_SHOWN = 5
+
+
+def ignore_news(root: Path, logbook: str) -> str | None:
+    import fnmatch
+    def lines(path: Path) -> list:
+        try:
+            raw = path.read_text("utf-8-sig").splitlines()
+        except OSError:
+            return []
+        return [ln.strip() for ln in raw if ln.strip() and not ln.strip().startswith("#")]
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+    state = state if isinstance(state, dict) else {}
+    seen = state.get("batonignore")
+    first = not isinstance(seen, dict)
+    seen = {} if first else seen
+    now, news = {}, []
+    try:
+        folders = sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+    except OSError:
+        return None
+    for where, path in [("the task root", root / ".batonignore")] + \
+            [(p.name, p / ".batonignore") for p in folders]:
+        got = lines(path)
+        if not got:
+            continue
+        key = str(path)
+        now[key] = got
+        old = seen.get(key)
+        for ln in got:
+            if old is not None and ln in old:
+                continue
+            if first and not _WHOLE_TYPE.match(ln):
+                continue
+            if path.parent == root and "/" not in ln.rstrip("/") and not any(
+                    fnmatch.fnmatch(p.name, ln.rstrip("/")) and (p / logbook).is_file() for p in folders):
+                continue
+            news.append(f"{where}: `{ln}`" + (" (every such file)" if _WHOLE_TYPE.match(ln) else ""))
+    state["batonignore"] = now
+    try:
+        _state_file().write_text(json.dumps(state), "utf-8")
+    except OSError:
+        return None                 # cannot remember what was seen: better silent than every time
+    if not news:
+        return None
+    more = len(news) - IGNORE_SHOWN
+    return ("🙈 .batonignore lines added since the last session -- Stop does not ask about what "
+            "they hide: " + "; ".join(news[:IGNORE_SHOWN]) + (f"; and {more} more" if more > 0 else "")
+            + ". Tell the human in one line; a line they did not add is theirs to keep or remove.")
+
+
 FEEDBACK_AFTER_DAYS = 7
-ISSUES = "https://github.com/StanimirTenev/baton/issues"
+ISSUES ="https://github.com/StanimirTenev/baton/issues"
 
 
 def feedback_notice(today: date) -> str | None:
@@ -1964,6 +2027,13 @@ def main() -> int:
     notices += [n for n in (asked, lessons_notice(), None if asked else review_notice(),
                             feedback_notice(date.today())) if n]
     folders = task_folders(root) if root.is_dir() else []
+    if root.is_dir():
+        try:
+            hidden = ignore_news(root, name)
+        except Exception:
+            hidden = None           # a check that cannot read must not cost the board
+        if hidden:
+            notices.append(hidden)
     if folders:
         open_board(own.get("source"), root, name)
     if folders and own.get("source") in ("startup", "clear"):
