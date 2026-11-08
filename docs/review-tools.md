@@ -248,6 +248,21 @@ And in TypeSafe's own words: *calibration is measured across groups of predictio
 not guarantee that an individual answer is correct.* This ranks and says "look here". A person
 opens the file and decides. Nothing is rewritten because a number was high.
 
+### Rewriting what it flagged: no more certain than the evidence
+
+When a person or an agent then rewrites a flagged pointer, or merges two notes into one, two
+sentences from the memory consolidation of
+[Octopus-SI-OS](https://github.com/miuuyy/Octopus-SI-OS) (MIT;
+`registry/artifact/artifact-role-memory-consolidation/artifact.json` and
+`docs/contracts/MEMORY_AND_SKILLS.md`) hold here too:
+
+> A consolidated note must not become more certain than its evidence.
+
+> A newer note is not automatically stronger evidence.
+
+In Baton's terms: a claim that was an agent's word or an inference (А, И) stays that when it is
+folded into a pointer, and the date on a note is not its status.
+
 ## Where else does this live — and is that place still claiming it?
 
 ```

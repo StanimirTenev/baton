@@ -638,3 +638,11 @@ def test_the_old_file_name_and_flags_still_work(tmp_path, monkeypatch):
     for flag in ("--dali", "--stale"):
         out = subprocess.run([sys.executable, str(old), flag, "--help"], capture_output=True, text=True)
         assert out.returncode == 0 and "--stale" in out.stdout, out.stderr
+
+
+def test_the_review_guide_says_a_merge_is_no_more_certain_than_its_evidence():
+    """ZA-OPRAVYANE row 107: two sentences from Octopus-SI-OS (MIT), quoted with attribution."""
+    doc = (TOOL.parent.parent / "docs" / "review-tools.md").read_text(encoding="utf-8")
+    assert "A consolidated note must not become more certain than its evidence." in doc
+    assert "A newer note is not automatically stronger evidence." in doc
+    assert "Octopus-SI-OS" in doc and "MIT" in doc
