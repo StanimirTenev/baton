@@ -194,7 +194,8 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   which names no address and makes no network request. Nothing they do changed. A new test holds
   it: no shipped code file outside the three key tools has both an address or a network call and
   an environment copy, a word the scan reads as a key, or the key file. `plugin.json` is not changed: it was
-  flagged from v3.15.0, when its description named neither OpenRouter nor any key. The scan
+  flagged from v3.15.0, when its description did not name OpenRouter (it did say "token count",
+  for the model's tokens -- gone in v3.19.0, and the flag stayed). The scan
   cannot be run here; whether the hold clears is known only when the directory scans this
   version.
 - **A turn that answers the hand-back with no entry is handed back once more** (row 115, after
