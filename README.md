@@ -121,8 +121,8 @@ own is a test command **you** pinned in `baton.local.json` (lesson L4, since v3.
 machine after a turn whose entry says tests pass, and never without that pin.
 
 What the hooks read, all on this machine: the task folders and their logbooks; the session's
-transcript (`transcript_path`) — its first timestamp, for when the session began, and its
-last answer's token count, for the restart reminder; at session start, the previous transcript
+transcript (`transcript_path`) — its first timestamp, for when the session began, and how
+full its context was at the last answer, for the restart reminder; at session start, the previous transcript
 in the same project folder — the messages the human typed and its times, to set beside the
 entries written then; the text of tool results, for an empty or failed read (lesson L2); and, before a Write or Edit, the text about to go into a logbook, for a typed hour in a heading (lesson L1). Nothing of it leaves the machine. The review tools send only with the
 key given to Baton by `tools/baton_key.py` — never a key found in the environment or in
@@ -184,7 +184,7 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 **v3.29.0** — the session hook leaves the environment to a file with no address; a turn with no entry is handed back twice
 
 - **The session start hook no longer touches the environment or the key file.** The directory's
-  check still holds Baton under "Uses a credential from the user's machine", for
+  check still holds Baton under its warning about a key read from the user's machine, for
   `hooks/baton_session_start.py` and `plugin.json`. Measured on its results: the hook was clean at
   v3.18.0, when it already checked for the review key's file and held the update GET, and flagged
   from v3.21.0, after v3.19.0 put the board's environment list beside Baton's release address;
@@ -193,8 +193,9 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   the key file exists and the masking of a key pasted into a message move to `hooks/_baton.py`,
   which names no address and makes no network request. Nothing they do changed. A new test holds
   it: no shipped code file outside the three key tools has both an address or a network call and
-  an environment copy, a word for a secret or the key file. `plugin.json` is not changed: it was
-  flagged from v3.15.0, when its description named neither OpenRouter nor any secret. The scan
+  an environment copy, a word the scan reads as a key, or the key file. `plugin.json` is not changed: it was
+  flagged from v3.15.0, when its description did not name OpenRouter (it did say "token count",
+  for the model's tokens -- gone in v3.19.0, and the flag stayed). The scan
   cannot be run here; whether the hold clears is known only when the directory scans this
   version.
 - **A turn that answers the hand-back with no entry is handed back once more** (row 115, after
@@ -233,11 +234,11 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   the whole environment, in a file that also holds web addresses -- the same shape that flagged
   the test files, read here in prose. Another builder cleared the same hold by rewording
   documentation (ZA-OPRAVYANE row 112, after Andres Fuentes). Those notes, the reviewer section
-  above and one line of `docs/install.md` are reworded so that no word for a secret sits beside
+  above and one line of `docs/install.md` are reworded so that no word the scan reads as a key sits beside
   an address and no code is quoted; the meaning is the same, and the OpenRouter key the review
   tools read and send to OpenRouter is still said plainly.
 - **A test holds it** (`tests/test_shipped_text.py`): over every file the plugin ships, no prose
-  quotes the code that copies the environment, and no word for a secret sits within 300
+  quotes the code that copies the environment, and no word the scan reads as a key sits within 300
   characters of an address -- except in the three tools that really handle the OpenRouter key.
   What the scan matches is not published; the test pins the shapes measured, nothing more. No
   hook or tool changed. Whether the hold clears is known only after the directory scans this
@@ -278,7 +279,7 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   automatic check has held every version since v3.18.0 with "Uses a credential from the user's
   machine". Measured against the check's results for nine versions: a file was flagged when it
   copied the whole process environment (in one expression, or in a loop over all of it) and
-  also held a web address or a network call -- 3 files at v3.17.0, 4 at v3.18.0, 6 from v3.19.0. No credential
+  also held a web address or a network call -- 3 files at v3.17.0, 4 at v3.18.0, 6 from v3.19.0. No key or login
   was ever sent anywhere; the copies were test harnesses and the board's environment filter.
   The board now reads each name it allows one by one, and the tests start their child processes
   with `child_env()` (tests/conftest.py), which passes only the names a child needs. Behaviour does
@@ -332,7 +333,7 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 **v3.24.1** — the plugin directory accepts Baton again
 
 - **No shipped file holds a whole key-shaped string.** The directory blocked v3.22.0–v3.24.0 with
-  "Secret in a shipped file": the test for row 48 (masking a pasted key) listed fourteen fake keys
+  its warning about a key-shaped string in a shipped file: the test for row 48 (masking a pasted key) listed fourteen fake keys
   verbatim. Each is now cut into pieces that Python joins at run time; the values the test checks
   are the same, and nothing in the hooks changes.
 
@@ -380,8 +381,8 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 - **The pinned test command gets an allowlist, not the session's environment** -- three made-up
   identity variables reached it (row 47, Bernard Haddad). Extra names go in the pin's `"env"`.
 - **A pasted key is masked before the quiet-session note quotes the human** (row 48, Bernard Haddad,
-  Bachittarjeet Singh Sidhu): `sk-…`, GitHub, AWS, Slack, Google keys, JWTs, `token=`, long hex
-  and base64 read `[masked]`. Shapes, not a proof.
+  Bachittarjeet Singh Sidhu): the key shapes of `sk-…`, GitHub, AWS, Slack and Google, JWTs, a
+  `name=value` pair whose name says it holds a key, long hex and base64 read `[masked]`. Shapes, not a proof.
 - **`BATON_SOURCE` works without `baton.local.json`**, as the README said (row 50, Benjamin
   Brachert); the drift check compared nothing.
 - **One unreadable task folder no longer takes the board and every Stop check with it.** It is
@@ -483,8 +484,8 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   proposes nothing.
 - **The HTML board can open itself** at `startup` and `/clear` with `"board_open": true` (off by
   default, only with a display), with Bulgarian labels by `"board_language": "bg"`. Its process
-  gets only the environment variables it needs (`BOARD_ENV`); a key or token in the session's
-  environment is not passed to it.
+  gets only the environment variables it needs (`BOARD_ENV`); nothing else in the session's
+  environment, keys included, is passed to it.
 - **After a week of use the agent asks once for feedback** and names the issues page. Nothing is
   sent; Baton has no telemetry.
 - **L3's hand-back names no command.** It said to check visibility with a GitHub CLI command; it

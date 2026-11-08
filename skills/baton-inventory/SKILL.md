@@ -28,7 +28,7 @@ and the dated logbook files are the record to reconstruct from, grouped by their
 Launch four read-only (Explore) agents in one message. Each returns one table row per
 work item: `name (kebab) | paths | last activity | evidence | proposed state | next step | confidence`.
 Tell every agent: skip `node_modules`, virtualenvs, `.git` internals, caches; never print
-secrets or key contents; list the existing task folders so they are not reported as new.
+a key, a login or what a key file holds; list the existing task folders so they are not reported as new.
 
 1. **Repositories** — every git repo under the home directory: `git log`, branches, tags,
    `git status -sb` (unpushed / dirty work), and **whether a remote exists at all**.

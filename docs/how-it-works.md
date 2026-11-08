@@ -618,7 +618,20 @@ Two Stop checks came from that evening, both mechanical:
 
 ```
 python3 tools/baton_entry.py <logbook> <entry-file> [--next NEW --old OLD]
+python3 tools/baton_entry.py <logbook> --open
 ```
+
+**The page of an entry** (row 117). Right after each write the tool makes
+`.baton-etap.html` in the task folder and prints `HTML: <path>`: the header (`state`, `next`,
+`done_when`), the entry just written, and the work files saved since the logbook was last
+written (the work this entry records -- the tool has no transcript, so this is its reading of
+"the files of the session"). One file, overwritten each time; its leading dot keeps Stop from
+counting it. The rules have the agent ask "open it?" only at the end of a big stage -- a new
+plan version, a research round, a release, a finished task -- and `--open` opens it in the
+browser of the machine the agent runs on. Over SSH, or on Linux with neither `DISPLAY` nor
+`WAYLAND_DISPLAY`, nothing is opened and the path is said instead; an agent on another
+machine copies it with `scp` and opens it there. The entry is shown as its plain text, not
+rendered Markdown. A page that cannot be made is said and never fails the write.
 
 The Stop hook demands an entry at the top of the logbook, and until now nothing here helped
 write one. So it was done by hand, and doing it by hand went wrong four times in three days.
@@ -786,6 +799,21 @@ does. A link to a logbook is left out: it grows under its line by design (on the
 index all four lines first named were logbooks). `--accept` records the lines it names as
 re-read. Whether a line is still *true* is the
 paid [review](review-tools.md).
+
+## Does the fix's test fail without the fix?
+
+```
+python3 tools/baton_rootcause.py main tests/test_stage_page.py tests/test_vpishi.py
+```
+
+A test written with a fix proves the fix only if it fails without it. The tool checks the base
+(`main` here) out into a temporary git worktree, puts the working tree's `tests/` over it (an
+uncommitted new test included), and runs each named test there and here, one pytest run each,
+judged by exit code: **PINS THE FIX** (fails on the base, passes here), **DOES NOT PIN IT**
+(passes on the base too), **FAILS HERE**, or **RAN NOTHING**. Exit 0 only when every test
+pins the fix; the worktree is removed afterwards. Needs git and pytest. After pullboard's
+"root cause control" (ZA-OPRAVYANE row 121). Its first run, on the page of an entry (row 117):
+`test_stage_page.py` pinned it, and `test_vpishi.py`, which was green before the change, did not.
 
 ## Retiring a constraint
 
