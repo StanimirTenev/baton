@@ -238,9 +238,10 @@ def test_the_board_process_gets_no_secret_from_the_session(tmp_path):
                "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
                "XDG_CURRENT_DESKTOP": "ubuntu:GNOME", "XDG_SESSION_TYPE": "x11",
                "WAYLAND_DISPLAY": "wayland-0"}
-    secrets = {"OPENROUTER_API_KEY": "sk-or-test", "GITHUB_TOKEN": "ghp_test",
-               "CLAUDE_CODE_MESSAGING_TOKEN": "t", "ANTHROPIC_API_KEY": "sk-ant-test",
-               "AWS_SECRET_ACCESS_KEY": "s"}
+    # The names are real; the values are plain placeholders, nothing shaped like a key (row 116).
+    secrets = {"OPENROUTER_API_KEY": "placeholder-1", "GITHUB_TOKEN": "placeholder-2",
+               "CLAUDE_CODE_MESSAGING_TOKEN": "placeholder-3", "ANTHROPIC_API_KEY": "placeholder-4",
+               "AWS_SECRET_ACCESS_KEY": "placeholder-5"}
     env.update(display, **secrets, BROWSER=f"{browser} %s")
     _start(env, "startup")
     assert _wait(opened), "the board still opens"
