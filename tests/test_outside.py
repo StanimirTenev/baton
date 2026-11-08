@@ -61,13 +61,13 @@ def test_each_kind_of_outward_action_is_noted(tmp_path):
         _bash("gh issue comment 12 --body hi; gh release create v1.2.0 dist/*"),
         _bash("python3 -m twine upload dist/* && npm publish"),
         {"tool_name": "mcp__claude_ai_Gmail__send_message",
-         "tool_input": {"to": ["a@example.com"], "subject": "secret plans", "body": "the body"},
+         "tool_input": {"to": ["a@example.invalid"], "subject": "secret plans", "body": "the body"},
          "tool_response": "{}"}], cwd="/")
     said = (root / "mail" / ".baton-outside.md").read_text("utf-8")
     assert "gh pr create" in said and "a long body" not in said
     rest = (root / ".baton-outside.md").read_text("utf-8")
     for what in ("gh issue comment 12", "gh release create v1.2.0", "twine upload", "npm publish",
-                 "send_message to a@example.com"):
+                 "send_message to a@example.invalid"):
         assert what in rest, (what, rest)
     assert "secret plans" not in rest and "the body" not in rest
 
@@ -75,7 +75,7 @@ def test_each_kind_of_outward_action_is_noted(tmp_path):
 def test_no_secret_is_written(tmp_path):
     root = _tasks(tmp_path)
     _batch(tmp_path, [_bash("twine upload -u __token__ -p pypi-AgEIcHlwaS5vcmc dist/* && "
-                            "git push https://me:ghp_abcdefghijklmnopqrstuvwxyz0123@github.com/x/y.git "
+                            "git push " + "https" + ":" + "//me:ghp_abcdefghijklmnopqrstuvwxyz0123@git.invalid/x/y.git "
                             "&& npm publish --otp=123456 --token=npm_secret")])
     said = (root / ".baton-outside.md").read_text("utf-8")
     for secret in ("pypi-AgEI", "__token__", "ghp_abc", "me:", "123456", "npm_secret"):
