@@ -800,6 +800,21 @@ index all four lines first named were logbooks). `--accept` records the lines it
 re-read. Whether a line is still *true* is the
 paid [review](review-tools.md).
 
+## Does the fix's test fail without the fix?
+
+```
+python3 tools/baton_rootcause.py main tests/test_stage_page.py tests/test_vpishi.py
+```
+
+A test written with a fix proves the fix only if it fails without it. The tool checks the base
+(`main` here) out into a temporary git worktree, puts the working tree's `tests/` over it (an
+uncommitted new test included), and runs each named test there and here, one pytest run each,
+judged by exit code: **PINS THE FIX** (fails on the base, passes here), **DOES NOT PIN IT**
+(passes on the base too), **FAILS HERE**, or **RAN NOTHING**. Exit 0 only when every test
+pins the fix; the worktree is removed afterwards. Needs git and pytest. After pullboard's
+"root cause control" (ZA-OPRAVYANE row 121). Its first run, on the page of an entry (row 117):
+`test_stage_page.py` pinned it, and `test_vpishi.py`, which was green before the change, did not.
+
 ## Retiring a constraint
 
 Research adds. Almost nothing retires, and a rule nobody retires goes on steering the plan from a
