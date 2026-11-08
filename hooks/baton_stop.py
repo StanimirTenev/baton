@@ -365,12 +365,141 @@ def session_started(transcript: str) -> float | None:
     return None
 
 
-def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
+# Whose work is it? (08.11: Stop handed back twice for folders this session never touched --
+# files a nightly cron wrote at 02:30 and another at 08:15 -- and on 07.11, after /clear, asked
+# `done_when` for a task another session had just written in.) "Saved since the session began" is
+# not "saved by this session". The session's own tool calls say what it touched, from its
+# transcript and its subagents': a file counts when a Write/Edit/MultiEdit/NotebookEdit named it;
+# or any other tool call that is not a look (Bash, PowerShell, an Agent's prompt, an MCP call)
+# named its folder -- the path, `~/...`, or the folder's name as a word -- or ran with its `cwd`
+# inside it; or it was saved while one of the session's Bash calls was running. Missed: a file a
+# process started in the background (`run_in_background`, `nohup`, `&`) writes after its call
+# returned, into a folder no call named. Wrongly counted: a cron that fires while a Bash call runs,
+# or writes in a folder the session named. Where they conflict, a cron file handed back is the
+# cheaper mistake. Without a readable transcript, or one with no tool call, nothing changes.
+# Measured 08.11 on a 46 MB transcript: 0.86 s, read only when a folder has newer work.
+CALL_SLACK_S = 2
+WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+LOOK_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "TodoWrite"}
+SHELL_TOOLS = {"Bash", "PowerShell"}
+_TOOL_USE = re.compile(rb'"type":\s*"tool_use"')
+_CALLS: dict = {}
+FOREIGN: dict = {}      # folder name -> files newer than the logbook no call of this session touched
+
+
+def _epoch(stamp) -> float | None:
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def session_calls(transcript: str | None) -> dict | None:
+    """What this session's tool calls touched -- {"files", "texts", "cwds", "windows"} -- read once
+    per run from its transcript and its subagents' (`<transcript>/subagents/*.jsonl`). None when the
+    transcript cannot be read."""
+    if not transcript:
+        return None
+    if transcript in _CALLS:
+        return _CALLS[transcript]
+    main = Path(transcript)
+    files, texts, cwds, started, windows = set(), [], set(), {}, []
+    try:
+        subs = sorted(main.with_suffix("").glob("subagents/*.jsonl"))
+    except OSError:
+        subs = []
+    for path in [main] + subs:
+        try:
+            fh = open(path, "rb")
+        except OSError:
+            if path == main:
+                _CALLS[transcript] = None
+                return None
+            continue
+        with fh:
+            for raw in fh:
+                use = bool(_TOOL_USE.search(raw))
+                if not use and not (started and b'"tool_result"' in raw):
+                    continue
+                try:
+                    obj = json.loads(raw.decode("utf-8", "replace"))
+                    content = (obj.get("message") or {}).get("content")
+                except (ValueError, AttributeError):
+                    continue
+                if not isinstance(content, list):
+                    continue
+                at = _epoch(obj.get("timestamp"))
+                for b in content:
+                    if not isinstance(b, dict):
+                        continue
+                    if b.get("type") == "tool_result" and b.get("tool_use_id") in started:
+                        begun = started.pop(b["tool_use_id"])
+                        windows.append((begun, at if at is not None else begun))
+                        continue
+                    if b.get("type") != "tool_use":
+                        continue
+                    tool, args = str(b.get("name") or ""), b.get("input")
+                    args = args if isinstance(args, dict) else {}
+                    if tool in WRITE_TOOLS:
+                        named = args.get("file_path") or args.get("notebook_path")
+                        if isinstance(named, str) and named:
+                            files.add(os.path.normcase(os.path.abspath(os.path.expanduser(named))))
+                    elif tool not in LOOK_TOOLS:
+                        texts.append(json.dumps(args, ensure_ascii=False).replace("\\\\", "\\"))
+                    if tool in SHELL_TOOLS:
+                        if isinstance(obj.get("cwd"), str):
+                            cwds.add(os.path.normcase(os.path.abspath(obj["cwd"])))
+                        if at is not None and b.get("id"):
+                            started[b["id"]] = at
+    windows += [(t, t + 600) for t in started.values()]      # no result recorded: ten minutes
+    # A transcript with no tool call at all says nothing about whose a file is (and is how every
+    # older test builds one): as before, everything since the start counts.
+    _CALLS[transcript] = ({"files": files, "texts": texts, "cwds": cwds, "windows": windows}
+                          if files or texts or windows else None)
+    return _CALLS[transcript]
+
+
+def _named_folder(folder: Path, calls: dict) -> bool:
+    """A call that is not a look named the folder, or a shell call ran inside it. Once a folder."""
+    seen = calls.setdefault("named", {})
+    if str(folder) not in seen:
+        seen[str(folder)] = _names_folder(folder, calls)
+    return seen[str(folder)]
+
+
+def _names_folder(folder: Path, calls: dict) -> bool:
+    full = os.path.normcase(os.path.abspath(str(folder)))
+    if any(c == full or c.startswith(full + os.sep) for c in calls["cwds"]):
+        return True
+    home = os.path.normcase(str(Path.home()))
+    forms = [str(folder)] + (["~" + str(folder)[len(home):]] if full.startswith(home + os.sep) else [])
+    word = re.compile(r"(?<![\w.-])" + re.escape(folder.name) + r"(?![\w-])")
+    return any(f in t for t in calls["texts"] for f in forms) or any(word.search(t) for t in calls["texts"])
+
+
+def by_this_session(folder: Path, rel: str, calls: dict | None) -> bool:
+    """Did this session's tool calls save this file? True when they cannot be read."""
+    if calls is None:
+        return True
+    full = os.path.join(str(folder), rel)
+    if os.path.normcase(os.path.abspath(full)) in calls["files"] or _named_folder(folder, calls):
+        return True
+    try:
+        saved = os.stat(full).st_mtime
+    except OSError:
+        return True
+    return any(a - CALL_SLACK_S <= saved <= b + CALL_SLACK_S for a, b in calls["windows"])
+
+
+def unrecorded(root: Path, name: str, since: float | None = None,
+               transcript: str | None = None) -> list[str]:
     """Folders whose work is newer than their logbook. With `since`, only work saved after
     it: 2026-10-01, external review of v3.10.0 -- an old unrecorded file in an unrelated task
     blocked every turn of a session that never touched it. Stop asks about this session's
-    work; the older debt is listed on the board instead."""
+    work; the older debt is listed on the board instead. With `transcript` too, only work this
+    session's tool calls saved (see session_calls); the rest goes to FOREIGN."""
     out = []
+    FOREIGN.clear()
     REWRITTEN.clear()
     GREW.clear()
     TOPPED.clear()
@@ -408,6 +537,13 @@ def unrecorded(root: Path, name: str, since: float | None = None) -> list[str]:
             # Every file newer than the record, not only the newest: a session cut short with six
             # files told the agent of one (row 98, Abuzar Zaidi, 27.10).
             files = newer_files(folder, name, max(logged, since or 0.0)) or [newest_name]
+            if since is not None and transcript:
+                calls = session_calls(transcript)
+                mine = [f for f in files if by_this_session(folder, f, calls)]
+                if not mine:
+                    FOREIGN[folder.name] = files
+                    continue
+                files = mine
             if logbook.is_file():
                 out.append(f"{folder.name} (newest: {_named(files)})")
             else:
@@ -465,16 +601,24 @@ def _criterion(logbook: Path) -> bool:
     return str(fm.get("done_when", "")).strip() != ""
 
 
-def undefined(root: Path, name: str) -> list[str]:
+def undefined(root: Path, name: str, transcript: str | None = None) -> list[str]:
+    """Tasks worked in now with no `done_when`. With `transcript`, only those this session's tool
+    calls touched: on 07.11, after /clear, one another session had just written in was asked."""
     out = []
     now = time.time()
     for folder in _ss().task_folders(root):
         logbook = folder / name
         if not logbook.is_file():
             continue          # no logbook at all is `unrecorded`'s finding, not this one
-        work, _ = newest_work(folder, name)
+        work, newest = newest_work(folder, name)
         touched = max(work, logbook.stat().st_mtime)
         if now - touched <= RECENT_SECONDS and not _criterion(logbook):
+            calls = session_calls(transcript)
+            inside = os.path.normcase(os.path.abspath(str(folder))) + os.sep
+            if calls is not None and not any(f.startswith(inside) for f in calls["files"]) \
+                    and not any(by_this_session(folder, rel, calls)
+                                for rel in ([newest] if newest else []) + [name]):
+                continue
             out.append(folder.name)
     return out
 
@@ -1578,14 +1722,14 @@ def main() -> int:
     fix_check(name)               # before this Stop's own asks: they are judged from the next one
 
     since = session_started(str(payload.get("transcript_path") or ""))
-    stale = unrecorded(root, name, since)
+    stale = unrecorded(root, name, since, str(payload.get("transcript_path") or ""))
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     if since is not None:         # without a session start, an entry cannot be called this one's
         stale_names = {_folder_of(f) for f in stale}
         _count(unasked=sum(1 for f in GREW if f not in stale_names
                            and (root / f / name).stat().st_mtime >= since))
-    open_ended = [f for f in undefined(root, name) if f not in asked]
+    open_ended = [f for f in undefined(root, name, str(payload.get("transcript_path") or "")) if f not in asked]
     ahead = [f for f in future_dated(root, name) if f"future:{f}" not in asked]
     try:
         typed = hand_typed_hours(root, name, since=since)
@@ -1648,6 +1792,14 @@ def main() -> int:
                 "no entry.")
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), said)))}
         _remember(session, _already_asked(session) | {f"ignore:{f}" for f, _ in hidden})
+    foreign = [f for f in sorted(FOREIGN) if f"foreign:{f}" not in asked]   # never a silent pass
+    if foreign:
+        listed = "; ".join(f"{f}: {_named(FOREIGN[f])}" for f in foreign)
+        said = (f"Baton: files saved during this session that none of its tool calls touched -- "
+                f"another session, a scheduled job or an editor -- were not handed back: {listed}. "
+                "If they stay without an entry, the next session's board lists them.")
+        note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), said)))}
+        _remember(session, _already_asked(session) | {f"foreign:{f}" for f in foreign})
     try:      # Р5: a .baton-pulled saved this session is also a way past the check -- said once
         fresh = [f for f in sorted(PULLED) if f"pulled:{f}" not in asked and since is not None
                  and (root / f / PULLED_FILE).stat().st_mtime >= since]
