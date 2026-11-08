@@ -197,6 +197,112 @@ def followed(session: str, calls: list | None, ss=None, state=None) -> bool:
     return True
 
 
+# What was done outside the machine is written down by itself (ZA-OPRAVYANE row 123; a reader,
+# 04.11: "they stop and ask before they send, pay or delete anything"). A push, a pull request or
+# issue, a release, an upload to PyPI or npm, a message sent through an MCP tool: one line in
+# `.baton-outside.md` of the task -- a dotfile, so Stop never counts it as work -- and a note to
+# the agent to carry it into the next entry. A release in git is not a release in people's hands
+# (`feedback_publikuvane_ne_e_stigane`); what went out is the part a logbook most often lacks.
+# The task: the one whose `code:` header names the repository the command ran in; else one the
+# command names or runs in; else the task root's own `.baton-outside.md`. Matched where a command
+# starts, after heredoc bodies and carried text are cut (L2's lesson: an entry that mentions
+# `gh pr create` is not one). Never a secret: what follows -p/--password/--token is masked, a
+# user:password in a URL too, then every known key shape; a send keeps only its tool and recipient.
+OUTSIDE_FILE = ".baton-outside.md"
+OUTWARD = re.compile(
+    r"(?:^|[|;&(\n])\s*(?:\w+=\S*\s+)*(?:sudo\s+)?"
+    r"(?P<cmd>(?:git\s+(?:-C\s+(?P<repo>\S+)\s+)?push|gh\s+(?:pr|issue)\s+(?:create|comment)"
+    r"|gh\s+release\s+(?:create|upload|edit|delete)|twine\s+upload|python[\d.]*\s+-m\s+twine\s+upload"
+    r"|npm\s+publish)\b[^;&|\n]*)")
+_SECRET_ARG = re.compile(r"(?<!\S)(-p|--password|--token|--otp|-u|--username|--api-key)(=|\s+)\S+")
+_URL_USER = re.compile(r"//[^/@\s]+@")
+_LONG_QUOTE = re.compile(r"'[^']{30,}'|\"(?:[^\"\\]|\\.){30,}\"")
+
+
+def _short(command: str) -> str:
+    text = _SECRET_ARG.sub(lambda m: m.group(1) + (m.group(2) if m.group(2) == "=" else " ") + "[masked]",
+                           command.strip())
+    text = _LONG_QUOTE.sub("\"...\"", _URL_USER.sub("//[masked]@", text))
+    if _baton is not None:
+        text = _baton.mask_secrets(text)
+    return " ".join(text.split())[:120]
+
+
+def outward(calls: list) -> list[tuple[str, str | None, str]]:
+    """(what went out, the repository a `git -C` named, the whole command) for each outward action."""
+    out = []
+    for c in calls:
+        tool = str(c.get("tool_name", ""))
+        args = c.get("tool_input") if isinstance(c.get("tool_input"), dict) else {}
+        if tool.startswith("mcp__"):
+            words = set(re.split(r"[_\-]+", tool.rsplit("__", 1)[-1].lower()))
+            if "send" in words:
+                to = args.get("to") or args.get("recipient") or args.get("channel")
+                to = ", ".join(map(str, to)) if isinstance(to, list) else str(to or "")
+                out.append((tool + (f" to {_short(to)[:60]}" if to else ""), None, ""))
+        elif tool in ("Bash", "PowerShell"):
+            command = _carried(HEREDOC_BODY.sub(r"\1", str(args.get("command", ""))))
+            for m in OUTWARD.finditer(command):
+                out.append((_short(m.group("cmd")), m.group("repo"), command))
+    return out
+
+
+def _task_for(root: Path, logbook: str, ss, where: str, command: str) -> Path:
+    """The task folder an outward action belongs to, or the root itself."""
+    here = os.path.normcase(os.path.abspath(os.path.expanduser(where))) if where else ""
+    folders = ss.task_folders(root)
+    for f in folders:
+        try:
+            raw = str(ss.parse_frontmatter(ss.read_head(f / logbook)).get("code", "")).strip()
+        except Exception:
+            continue
+        repo = (raw.rpartition("@")[0] if "@" in raw else raw).strip()
+        if repo and here:
+            repo = os.path.normcase(os.path.abspath(os.path.expanduser(repo)))
+            if here == repo or here.startswith(repo + os.sep):
+                return f
+    for f in folders:
+        full = os.path.normcase(os.path.abspath(str(f)))
+        if here == full or here.startswith(full + os.sep) or str(f) in command:
+            return f
+    return root
+
+
+def note_outward(payload: dict, calls: list) -> str | None:
+    """Write each outward action of the batch to its task's OUTSIDE_FILE; the note for the agent."""
+    found = outward(calls)
+    if not found:
+        return None
+    ss = _ss()
+    if ss.installed_twice():
+        return None
+    root, logbook = ss.config()
+    if not root.is_dir():
+        return None
+    cwd = str(payload.get("cwd") or "")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    said = []
+    for what, repo, command in found:
+        folder = _task_for(root, logbook, ss, repo or cwd, command)
+        path = folder / OUTSIDE_FILE
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(f"- done outside: {what}, {now}\n")
+        said.append(f"{what} -> {path}")
+    return ("Baton: done outside this machine, and noted -- " + "; ".join(said) + ". Put it in the "
+            f"next {logbook} entry of that task (what went out, and whether it arrived); the note "
+            "itself is not the record.")
+
+
+def _say(outside: str | None, note: str | None = None) -> int:
+    text = "\n\n".join(t for t in (note, outside) if t)
+    if text:
+        sys.stdout.buffer.write(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PostToolBatch", "additionalContext": text}},
+            ensure_ascii=False).encode("utf-8"))
+        sys.stdout.flush()
+    return 0
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -208,10 +314,14 @@ def main() -> int:
     calls = payload.get("tool_calls")
     calls = [c for c in calls if isinstance(c, dict)] if isinstance(calls, list) else []
     session = str(payload.get("session_id") or "")
+    try:
+        outside = note_outward(payload, calls)
+    except Exception:
+        outside = None        # a note that cannot be written must not cost the session
     failed = [(c, "empty" if is_empty(c) else "error") for c in calls
               if is_read(c) and (is_empty(c) or is_error(c))]
     if not failed and not _pending(session).is_file():
-        return 0
+        return _say(outside)
     try:
         ss = _ss()
         if ss.installed_twice():
@@ -221,13 +331,13 @@ def main() -> int:
         followed(session, calls, ss, state)
         if not failed:
             ss.lessons_save(state)
-            return 0
+            return _say(outside)
         for _ in failed:
             rec = ss.lesson_event(state, "L2", "fired", now)
         shown = rec.get("last_shown", "")
         if shown and shown > (now - timedelta(minutes=SHOW_EVERY_MINUTES)).isoformat(timespec="minutes"):
             ss.lessons_save(state)
-            return 0
+            return _say(outside)
         # `shown` and what came after are counted from v3.20.0 on, `fired` from earlier. Each says
         # its own start: a register from before reads "fired 147 since 3 Oct", not "shown 0 of 147".
         rec.setdefault("shown_since", now.isoformat(timespec="minutes"))
@@ -250,12 +360,8 @@ def main() -> int:
                 f"check {rec.get('checked_after', 0)} of {after}; fired {rec.get('fired', 0)} "
                 f"since {rec.get('since', '?')}.)")
     except Exception:
-        return 0              # a lesson that cannot count must not cost the session
-    sys.stdout.buffer.write(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolBatch", "additionalContext": note}},
-        ensure_ascii=False).encode("utf-8"))
-    sys.stdout.flush()
-    return 0
+        return _say(outside)  # a lesson that cannot count must not cost the session
+    return _say(outside, note)
 
 
 def _turn(event: str, session: object, extra: str = "") -> None:
