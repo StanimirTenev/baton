@@ -162,6 +162,29 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 ## Versions
 
+**v3.31.0** — the chat after the last entry survives /clear; work Baton cannot tie to the session is not handed back
+
+- **The chat after the last logbook entry survives /clear and a restart.** Each turn Stop keeps
+  the human's messages and the agent's replies since the last entry (no tool calls or output,
+  masked, at most 40k characters) in `<root>/.baton-chat/<session>.md`, and removes it once
+  everything is in a logbook. The next session after /clear or a restart gets its path and the
+  last 2,500 characters; the file then moves to Baton's private state folder. A turn the human
+  interrupts runs no Stop, so its last exchange is missing.
+- **Files a cron or another session wrote are not handed back as this session's work.** A file
+  counts if this session's Write/Edit named it, a non-reading tool call named its folder, a Bash
+  call ran inside it, or it changed while a Bash call ran. The rest is said to the human once and
+  stays on the next board. Misses: a background process writing later into a folder no call named.
+- **Outward actions are noted by themselves.** `git push`, `gh pr|issue create|comment`,
+  `gh release`, `twine upload`, `npm publish` and a send tool add one line to the task's
+  `.baton-outside.md`, with values after password and token flags masked.
+- **The board names `.batonignore` lines added since the last session.**
+- **`cat`, `head`, `tail` and `sed -n` count as reads** for the empty-read lesson (L2), not when
+  writing to a file, not after a pipe, not `sed -i`.
+- **The entry tool makes a page of the entry** (`<task>/.baton-etap.html`) and opens it only on
+  `--open`, offered at the end of a big stage.
+- **`tools/baton_rootcause.py`** checks that a fix's test fails on the base and passes here.
+- Fewer words for a login in the README and skills; no key-shaped values in the tests.
+
 **v3.30.0** — files a sync checked out are not counted as this session's work
 
 - **A task handed over by `git pull` is no longer handed back as unrecorded.** A pull gives every
