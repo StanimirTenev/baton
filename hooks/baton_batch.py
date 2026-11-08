@@ -214,7 +214,7 @@ OUTWARD = re.compile(
     r"(?P<cmd>(?:git\s+(?:-C\s+(?P<repo>\S+)\s+)?push|gh\s+(?:pr|issue)\s+(?:create|comment)"
     r"|gh\s+release\s+(?:create|upload|edit|delete)|twine\s+upload|python[\d.]*\s+-m\s+twine\s+upload"
     r"|npm\s+publish)\b[^;&|\n]*)")
-_SECRET_ARG = re.compile(r"(?<!\S)(-p|--password|--token|--otp|-u|--username|--api-key)(=|\s+)\S+")
+_SECRET_ARG = re.compile(r"(?<!\S)(-p|--password|--token|--otp|--api-key)(=|\s+)\S+")
 _URL_USER = re.compile(r"//[^/@\s]+@")
 _LONG_QUOTE = re.compile(r"'[^']{30,}'|\"(?:[^\"\\]|\\.){30,}\"")
 

@@ -78,7 +78,7 @@ def test_no_secret_is_written(tmp_path):
                             "git push " + "https" + ":" + "//me:ghp_abcdefghijklmnopqrstuvwxyz0123@git.invalid/x/y.git "
                             "&& npm publish --otp=123456 --token=npm_secret")])
     said = (root / ".baton-outside.md").read_text("utf-8")
-    for secret in ("pypi-AgEI", "__token__", "ghp_abc", "me:", "123456", "npm_secret"):
+    for secret in ("pypi-AgEI", "ghp_abc", "me:", "123456", "npm_secret"):
         assert secret not in said, (secret, said)
 
 
@@ -92,7 +92,8 @@ def test_what_is_only_written_about_is_not_an_action(tmp_path):
 
 def test_the_note_is_not_counted_as_unrecorded_work(tmp_path):
     root = _tasks(tmp_path)
-    _batch(tmp_path, [_bash("git push")], cwd=str(tmp_path / "dev" / "scanner"))
+    _batch(tmp_path, [_bash("git push -u origin main")], cwd=str(tmp_path / "dev" / "scanner"))
+    assert "git push -u origin main," in (root / "scanner" / ".baton-outside.md").read_text("utf-8")
     note = root / "scanner" / ".baton-outside.md"
     t = time.time() - 600
     os.utime(note, (t, t))
