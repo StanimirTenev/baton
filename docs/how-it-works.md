@@ -759,7 +759,11 @@ SessionStart says something only when a lesson has earned it: caught twice in 14
 not holding — propose the next rung: a check on the result, or a tool that makes the mistake
 impossible), or silent for 60 days (ask whether to retire it). For L3 a catch is the opposite
 fact -- a listed claim shown wrong means the section did its work -- so two of them say that,
-with the two numbers, and propose nothing. The same holds for L4.
+with the two numbers, and propose nothing. The same holds for L4. For L1 both rungs exist, so
+since v3.32.0 (rows 132, 139) the line names them with their counts and leaves the next one --
+refusing such a write, or Stop correcting the hour itself -- to the human. A lesson that has never
+fired counts its 60 days from the first session start that looked at it (row 89, v3.32.0; before,
+it was never offered for retirement).
 
 ## The board
 

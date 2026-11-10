@@ -543,6 +543,13 @@ def lessons_notice(now: datetime | None = None) -> str | None:
     """At most one line per lesson, and only when it has earned one."""
     now = now or datetime.now()
     state, lines = lessons_load(), []
+    # Row 89 (23.10): a lesson with no record had `since` = now on every look, so one that never
+    # fired was never offered for retirement. The first look records when the watching began.
+    unseen = [lid for lid in LESSONS if not (state.get(lid) or {}).get("since")]
+    for lid in unseen:
+        state.setdefault(lid, {})["since"] = now.isoformat(timespec="minutes")
+    if unseen:
+        lessons_save(state)
     recent = (now - timedelta(days=RECUR_DAYS)).isoformat(timespec="minutes")
     old = (now - timedelta(days=RETIRE_DAYS)).isoformat(timespec="minutes")
     for lid, text in LESSONS.items():

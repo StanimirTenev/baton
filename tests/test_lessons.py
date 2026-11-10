@@ -226,6 +226,18 @@ def test_notice_only_when_a_lesson_recurs_or_goes_unused(tmp_path):
     assert "L2 has not come up in 60 days" in ss.lessons_notice(now)
 
 
+def test_a_lesson_that_never_fired_is_offered_for_retirement(tmp_path):
+    """ZA-OPRAVYANE row 89 (Ruben Hassid, 23.10): with no record a lesson's `since` was "now" on
+    every look, so a rule that never fired was never offered for retirement. The first look
+    records when Baton began watching for it."""
+    env = _env(tmp_path, tmp_path / "tasks")
+    ss = _ss(env)
+    now = datetime.now()
+    assert ss.lessons_notice(now) is None
+    later = ss.lessons_notice(now + timedelta(days=61)) or ""
+    assert "L3 has not come up in 60 days" in later, later
+
+
 def test_l1_is_not_offered_a_rung_it_already_has(tmp_path):
     """ZA-OPRAVYANE row 132 (09.11): the board said "L1 recurred 6 times ... Propose the next rung:
     a check that catches it by its result, or a tool that makes the mistake impossible" -- both
