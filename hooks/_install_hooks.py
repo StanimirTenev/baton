@@ -90,7 +90,7 @@ def main() -> int:
         "StopFailure": os.path.join(hookdir, "baton_stop_failure.py"),
     }
     # Only PreToolUse is filtered to the tools it speaks to, so it does not spawn on every call.
-    matchers = {"PreToolUse": "Write|Edit|MultiEdit|Bash"}
+    matchers = {"PreToolUse": "Write|Edit|MultiEdit|Bash|Skill"}
 
     # One of the five hook files by name, as installed_twice reads it (row 61). Any "baton_" in a
     # command was taken for Baton's, and a human's ~/bin/my_baton_notes.sh was rewritten (row 68).

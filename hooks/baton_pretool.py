@@ -12,6 +12,9 @@ It never blocks and never auto-approves: it only adds context. A PreToolUse hook
 auto-approving every write. Only `additionalContext` reaches the model (plain stdout from a
 PreToolUse hook goes to debug logs), so that is all it emits. A hook that cannot be sure says
 nothing and costs the session nothing.
+
+Since v3.32.0 it also counts calls of Baton's own skills (the Skill tool; row 134) for
+/baton-doctor, and says nothing about them.
 """
 from __future__ import annotations
 
@@ -84,12 +87,34 @@ def _written_text(tool: str, ti: dict) -> str:
     return ""
 
 
+# Row 134 (Ivan Petrakov, 09.11): a skill that does not load fails silently, and Baton counted none
+# of its own. Each call of the Skill tool for one of Baton's skills is counted with its time in the
+# lessons register; /baton-doctor shows them. Another skill is not counted. When one should have
+# fired and did not is a different measure, made outside the hooks (row 136).
+def count_skill(name: object) -> None:
+    short = str(name or "").rsplit(":", 1)[-1]
+    if not re.fullmatch(r"baton-[a-z]+", short):
+        return
+    try:
+        ss = _ss()
+        state = ss.lessons_load()
+        rec = state.setdefault("skills", {}).setdefault(short, {})
+        rec["used"] = rec.get("used", 0) + 1
+        rec["last"] = datetime.now().isoformat(timespec="minutes")
+        ss.lessons_save(state)
+    except Exception:
+        pass                          # counting is a courtesy; never a reason to fail the call
+
+
 def main() -> int:
     try:
         event = json.load(sys.stdin)
     except Exception:
         return 0
     tool = event.get("tool_name") or ""
+    if tool == "Skill":
+        count_skill((event.get("tool_input") or {}).get("skill"))
+        return 0
     if tool not in WRITERS and tool != "Bash":
         return 0
     ti = event.get("tool_input") or {}

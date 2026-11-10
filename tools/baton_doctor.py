@@ -197,6 +197,23 @@ def lesson_l2(where: Path) -> str | None:
             "calls, not necessarily of what came back empty; it may have been planned anyway.)")
 
 
+def skills_used(where: Path) -> str | None:
+    """When each of Baton's skills was last called (row 134), counted by the PreToolUse hook."""
+    path = Path(os.environ.get("BATON_LESSONS_STATE") or where / "baton.lessons.json")
+    try:
+        rec = json.loads(path.read_text("utf-8")).get("skills") or {}
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not rec:
+        return None
+    names = sorted({p.name for p in (Path(__file__).resolve().parent.parent / "skills").iterdir()
+                    if p.is_dir()} | set(rec))
+    said = "; ".join(f"{n}: {rec[n].get('used', 0)}, last {rec[n].get('last', '?')}" if n in rec
+                     else f"{n}: never" for n in names)
+    return (f"Baton's skills, calls counted since v3.32.0 -- {said}.\n   (Calls of the Skill tool; "
+            "a skill that should have loaded and did not is not counted here.)")
+
+
 def lesson_fixes(where: Path) -> str | None:
     """Was each lesson followed? (since v3.21.0, ZA-OPRAVYANE row 44). L1, L3, L4: after Stop asked,
     the next three Stops looked at the entry with the test that raised the ask. L2: the next tool
@@ -345,6 +362,9 @@ def main() -> int:
     l2 = lesson_l2(where)
     if l2:
         print(l2 + "\n")
+    used = skills_used(where)
+    if used:
+        print(used + "\n")
     fixes = lesson_fixes(where)
     if fixes:
         print(fixes + "\n")

@@ -139,7 +139,26 @@ def test_a_bash_read_or_a_clock_read_hour_says_nothing(tmp_path):
         assert _bash(cmd, tmp_path) == "", cmd
 
 
+def test_a_baton_skill_call_is_counted_and_the_doctor_shows_it(tmp_path):
+    """ZA-OPRAVYANE row 134 (Ivan Petrakov, 09.11): a skill that does not load fails silently;
+    Baton counted none of its five. The numerator: each call of the Skill tool for one of Baton's
+    skills is counted with its time, and /baton-doctor shows it. Another skill is not counted.
+    (When a skill should have fired and did not -- the denominator -- is row 136, not here.)"""
+    import os
+    for name in ("baton:baton-task", "baton-task", "someone-elses-skill"):
+        out = _run({"hook_event_name": "PreToolUse", "tool_name": "Skill",
+                    "tool_input": {"skill": name}}, tmp_path)
+        assert out == {}, "counted, never a note"
+    state = json.loads((tmp_path / "baton.lessons.json").read_text("utf-8"))
+    assert state["skills"]["baton-task"]["used"] == 2 and "someone-elses-skill" not in state["skills"]
+    doctor = subprocess.run([sys.executable, str(HOOK.parent.parent / "tools" / "baton_doctor.py")],
+                            capture_output=True, text=True,
+                            env={**os.environ, "CLAUDE_PLUGIN_DATA": str(tmp_path),
+                                 "BATON_LESSONS_STATE": str(tmp_path / "baton.lessons.json")})
+    assert "baton-task: 2" in doctor.stdout and "baton-plan: never" in doctor.stdout, doctor.stdout
+
+
 def test_the_plugin_and_the_installer_send_bash_to_it():
     hooks = json.loads((HOOK.parent / "hooks.json").read_text("utf-8"))
-    assert "Bash" in hooks["hooks"]["PreToolUse"][0]["matcher"].split("|")
+    assert {"Bash", "Skill"} <= set(hooks["hooks"]["PreToolUse"][0]["matcher"].split("|"))
     assert '"PreToolUse": "Write|Edit|MultiEdit|Bash' in (HOOK.parent / "_install_hooks.py").read_text("utf-8")

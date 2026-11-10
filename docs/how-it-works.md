@@ -535,6 +535,12 @@ by a check", which said more than is counted). Anything else
 second read may have been planned anyway, and a sentence written without one may be right; it says
 whether the next step was a read, not whether it was the right one or the note caused it.
 
+And since v3.32.0, when each of Baton's five skills was last called (ZA-OPRAVYANE row 134, Ivan
+Petrakov: a skill that does not load fails silently). The PreToolUse hook is registered for the
+Skill tool too, and counts a call of `baton-*` -- with or without the `baton:` prefix -- in
+`baton.lessons.json` (`skills`); another skill is not counted, and nothing is said to the agent.
+This is the numerator only: a skill that should have loaded and did not leaves no call to count.
+
 And since v3.21.0, the same question for every lesson (ZA-OPRAVYANE row 44, after Sentry's
 "recovery verification"): **fixed after the lesson: N of M**, per lesson. After Stop asks about an
 entry -- L1 an hour off the clock, L3 a public/private claim, L4 a tests claim -- the next three
