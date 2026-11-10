@@ -162,6 +162,27 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 ## Versions
 
+**v3.32.0** — a background job no longer brings the same hand-back every turn; L1's note reaches Bash
+
+- **A folder a turn let through without an entry is not handed back again for the same directories.**
+  A background agent of the session wrote into one folder every minute, and Stop handed it back
+  twice a turn for an answer already given, 8+ times in an hour (row 141). For the rest of the
+  session such a folder is handed back again only for a file in another directory of it; a new
+  entry ends this. Said to the human once; the next session's board still lists the folder.
+- **L1's note before the write runs on Bash too.** Every caught heading with a typed hour that
+  could be traced here was written by `python3 - <<'EOF'` or `sed -i`, never by Write or Edit, so
+  the note had never run where the mistake happens (row 139). Still only a note, never a block;
+  each Bash call costs one Python start (~70 ms measured).
+- **The board no longer proposes a rung L1 already has** (row 132): it names the tool, the note
+  and the hand-back with their counts, and leaves the next rung to the human.
+- **Calls of Baton's skills are counted**, and `/baton-doctor` shows when each was last called
+  (row 134). Calls only: a skill that should have loaded and did not leaves nothing to count.
+- **An unverified claim with no date is counted as undated**, not skipped without a word (row 140).
+- **A lesson that never fired is offered for retirement after 60 days** (row 89); a retired lesson
+  moves to `RETIRED` with its date and reason (row 135).
+- `/baton-doctor`: "followed by a read", not "a check" (row 137); no more "never asks twice"
+  (row 130). The memory lint says when it has no memory of the index yet (row 138).
+
 **v3.31.0** — the chat after the last entry survives /clear; work Baton cannot tie to the session is not handed back
 
 - **The chat after the last logbook entry survives /clear and a restart.** Each turn Stop keeps
