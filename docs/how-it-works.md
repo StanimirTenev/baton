@@ -685,6 +685,12 @@ the situation arose, `caught` when the mistake happened. The counters are in
   text about to go into a file named as the logbook and, when it carries a `## <date> <hour>`
   heading, tells the agent to use `baton_entry.py` instead (counted as `surfaced_before`). It
   never blocks the write and returns no permission decision -- only a note; Stop still checks after.
+  Since v3.32.0 it is registered for Bash too (ZA-OPRAVYANE row 139): every caught heading the
+  transcripts here could trace (15.10, 22.10, 24.10, 07.11) was written by `python3 - <<'EOF'` or
+  `sed -i`, never by Write or Edit, so the note had never run where the mistake happens. A Bash
+  call that names the logbook, writes (heredoc, `>`/`>>` into it, `tee`, `sed -i`, `.write(`) and
+  holds a `## <date> <hour>` heading gets the same note; a heading built from a variable
+  (`## $t`) is left alone. It costs every Bash call one Python start (~70 ms measured here).
 - **L2 — an empty result, or an error instead of one, is a failed read** (`baton_batch.py`,
   PostToolBatch). After a read —
   web, a shell command that searches or fetches, or an MCP tool whose name says it reads

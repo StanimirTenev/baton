@@ -89,8 +89,8 @@ def test_the_same_heading_in_a_non_logbook_file_is_left_alone(tmp_path):
 def test_other_tools_say_nothing(tmp_path):
     event = {
         "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": "echo '## 2026-10-28 14:30 — x' >> DNEVNIK.md"},
+        "tool_name": "Read",
+        "tool_input": {"file_path": "DNEVNIK.md"},
     }
     assert _run(event, tmp_path) == {}
 
@@ -107,3 +107,39 @@ def test_a_surfaced_before_event_is_counted(tmp_path):
     _run(event, tmp_path)
     state = json.loads((tmp_path / "baton.lessons.json").read_text("utf-8"))
     assert state.get("L1", {}).get("surfaced_before", 0) == 1
+
+
+# Row 139 / the L1 board line ("recurred 6 times in 14 days"): every heading L1 caught that could
+# be traced in the transcripts here (15.10, 22.10, 24.10, 07.11) was written by a Bash call --
+# `python3 - <<'EOF'` or `sed -i` -- never by Write or Edit, so the note above never ran on the path
+# the mistake takes. A Bash call that writes the logbook with a typed hour gets the same note.
+def _bash(command: str, tmp_path) -> str:
+    return _context(_run({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                          "tool_input": {"command": command}}, tmp_path))
+
+
+def test_a_bash_heredoc_that_writes_a_typed_hour_into_the_logbook_is_flagged(tmp_path):
+    cmd = ("cd ~/zadachi/vps-agent && python3 - <<'EOF'\np='DNEVNIK.md'\ns=open(p).read()\n"
+           "e='''## 2026-11-07 15:10 — Доставчик\\n\\n### Направено\\n'''\nopen(p,'w').write(e+s)\nEOF")
+    assert "baton_entry.py" in _bash(cmd, tmp_path)
+    state = json.loads((tmp_path / "baton.lessons.json").read_text("utf-8"))
+    assert state["L1"]["surfaced_before"] == 1
+
+
+def test_a_sed_that_types_the_hour_into_the_logbook_is_flagged(tmp_path):
+    cmd = "sed -i 's/^## 2026-10-15 08:40 — x/## 2026-10-15 16:49 — x/' ~/zadachi/a/DNEVNIK.md"
+    assert "baton_entry.py" in _bash(cmd, tmp_path)
+
+
+def test_a_bash_read_or_a_clock_read_hour_says_nothing(tmp_path):
+    for cmd in ("grep -n '^## 2026-11-10 12:16' ~/zadachi/a/DNEVNIK.md 2>/dev/null",
+                "t=$(date '+%Y-%m-%d %H:%M') && sed -i \"s/^## 2026-11-07 15:10 — x/## $t — x/\" DNEVNIK.md",
+                "python3 ~/dev/baton/tools/baton_entry.py ~/zadachi/a/DNEVNIK.md body.md --title x",
+                "echo '## 2026-10-28 14:30 — x' >> notes.md"):
+        assert _bash(cmd, tmp_path) == "", cmd
+
+
+def test_the_plugin_and_the_installer_send_bash_to_it():
+    hooks = json.loads((HOOK.parent / "hooks.json").read_text("utf-8"))
+    assert "Bash" in hooks["hooks"]["PreToolUse"][0]["matcher"].split("|")
+    assert '"PreToolUse": "Write|Edit|MultiEdit|Bash' in (HOOK.parent / "_install_hooks.py").read_text("utf-8")

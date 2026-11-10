@@ -2,7 +2,7 @@
 """Baton -- PreToolUse hook: lesson L1, before the write, not only after it.
 
 L1 (the hour in a logbook heading is read from the clock, never typed) is caught at Stop, once
-the entry is already on disk. This surfaces it one step earlier: when a Write or Edit is about
+the entry is already on disk. This surfaces it one step earlier: when a Write, Edit or Bash call is about
 to put a `## YYYY-MM-DD HH:MM --` heading into a logbook by hand, it says -- before the write --
 to use tools/baton_entry.py, which stamps the time itself. It is the first lesson keyed to the
 action that is about to happen, not to one already made.
@@ -28,6 +28,16 @@ _TYPED_HOUR = re.compile(
     r"^## (?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})[ T]\d{1,2}:\d{2}\b", re.MULTILINE)
 
 WRITERS = {"Write", "Edit", "MultiEdit"}
+
+# Row 139 (10.11): every heading L1 caught that the transcripts here could trace was written by a
+# Bash call -- `python3 - <<'EOF'` or `sed -i` -- and none by Write or Edit, so the note never ran
+# on the path the mistake takes. A Bash call that names the logbook, writes (a heredoc, a redirect,
+# tee, sed -i, a .write) and holds a heading with a typed hour gets the same note. A heading built
+# from a variable (`## $t`, `## {now}`) read the clock: silent.
+_TYPED_ANYWHERE = re.compile(
+    r"## (?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})[ T]\d{1,2}:\d{2}\b")
+_CLOCK_HEADING = re.compile(r"## [$({]")
+_WRITES = re.compile(r"<<|\btee\b|\bsed\s+(?:-\w+\s+)*-i|\.write(?:_text)?\(")
 
 
 def _load_baton():
@@ -80,22 +90,30 @@ def main() -> int:
     except Exception:
         return 0
     tool = event.get("tool_name") or ""
-    if tool not in WRITERS:
+    if tool not in WRITERS and tool != "Bash":
         return 0
     ti = event.get("tool_input") or {}
     path = ti.get("file_path") or ""
-    if not path:
+    command = ti.get("command") if tool == "Bash" else None
+    if not path and not isinstance(command, str):
         return 0
+    if command is not None and not _TYPED_ANYWHERE.search(command):
+        return 0                      # every Bash call comes here: the cheap test first
 
     try:
         ss = _ss()
         _, logbook = ss.config()
     except Exception:
         return 0
-    if os.path.basename(path) != logbook:
+    if command is not None:
+        into = re.search(r">>?\s*[\"']?\S*" + re.escape(logbook), command)
+        if (logbook not in command or not (into or _WRITES.search(command))
+                or not _TYPED_ANYWHERE.search(command) or _CLOCK_HEADING.search(command)):
+            return 0                  # not a write of a typed hour into a logbook
+        path = logbook
+    elif os.path.basename(path) != logbook:
         return 0                      # only a logbook heading is read from the clock
-
-    if not _TYPED_HOUR.search(_written_text(tool, ti)):
+    elif not _TYPED_HOUR.search(_written_text(tool, ti)):
         return 0                      # no typed hour: nothing baton_entry.py would change
 
     try:
