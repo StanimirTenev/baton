@@ -400,6 +400,12 @@ LESSONS = {
           "to verify` at the top of the entry, with its result line, and marked `refuted:` there "
           "in a later entry if it proves wrong.",
 }
+# Retired lessons, with the date and the reason (ZA-OPRAVYANE row 135, Gleb Rosev, 09.11: the
+# removed rule is written down with why, so it does not come back). Retiring was deleting the line
+# above; the reason stayed in a commit, and nothing stopped the same rule from being added again.
+# A test holds that no id or text here is in LESSONS. None retired yet (10.11.2026).
+# Shape: "L9": {"text": "...", "retired": "YYYY-MM-DD", "why": "..."}
+RETIRED: dict = {}
 RECUR_DAYS, RECUR_MIN, RETIRE_DAYS = 14, 2, 60
 # For L1 and L2 `caught` is the mistake made again. For L3 and L4 it is a listed claim later shown
 # wrong: the section did its work, and two of those in a fortnight are not a lesson failing
@@ -579,7 +585,8 @@ def lessons_notice(now: datetime | None = None) -> str | None:
                          "by its result, or a tool that makes the mistake impossible.")
         elif rec.get("since", now.isoformat()) < old and rec.get("last_fired", "") < old:
             lines.append(f"- {lid} has not come up in {RETIRE_DAYS} days: \"{text}\" -- ask the "
-                         "human whether to retire it.")
+                         "human whether to retire it; if so, it moves from LESSONS to RETIRED in "
+                         "hooks/baton_session_start.py with the date and the reason.")
     if not lines:
         return None
     return "Baton -- lessons (each counted by the hook that watches for it):\n" + "\n".join(lines)

@@ -770,7 +770,8 @@ with the two numbers, and propose nothing. The same holds for L4. For L1 both ru
 since v3.32.0 (rows 132, 139) the line names them with their counts and leaves the next one --
 refusing such a write, or Stop correcting the hour itself -- to the human. A lesson that has never
 fired counts its 60 days from the first session start that looked at it (row 89, v3.32.0; before,
-it was never offered for retirement).
+it was never offered for retirement). A retired lesson moves to `RETIRED` beside `LESSONS`, with the
+date and the reason, and a test keeps its id and text out of `LESSONS` (row 135, v3.32.0).
 
 ## The board
 

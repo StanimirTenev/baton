@@ -226,6 +226,23 @@ def test_notice_only_when_a_lesson_recurs_or_goes_unused(tmp_path):
     assert "L2 has not come up in 60 days" in ss.lessons_notice(now)
 
 
+def test_a_retired_lesson_keeps_its_reason_and_does_not_come_back(tmp_path):
+    """ZA-OPRAVYANE row 135 (Gleb Rosev, 09.11): retiring was deleting the line from LESSONS; the
+    reason stayed only in a commit, and nothing stopped the same rule from being added again.
+    Retired lessons live in RETIRED with the date and the reason; an id or a text there is never
+    in LESSONS, and the retirement question says where it goes."""
+    env = _env(tmp_path, tmp_path / "tasks")
+    ss = _ss(env)
+    assert isinstance(ss.RETIRED, dict)
+    for lid, rec in ss.RETIRED.items():
+        assert lid not in ss.LESSONS and rec["text"] not in ss.LESSONS.values()
+        assert rec.get("retired") and rec.get("why"), lid
+    now = datetime.now()
+    ss.lessons_save({"L2": {"since": (now - timedelta(days=90)).isoformat(timespec="minutes"),
+                            "last_fired": (now - timedelta(days=70)).isoformat(timespec="minutes")}})
+    assert "RETIRED" in ss.lessons_notice(now) and "reason" in ss.lessons_notice(now)
+
+
 def test_a_lesson_that_never_fired_is_offered_for_retirement(tmp_path):
     """ZA-OPRAVYANE row 89 (Ruben Hassid, 23.10): with no record a lesson's `since` was "now" on
     every look, so a rule that never fired was never offered for retirement. The first look
