@@ -385,6 +385,7 @@ SHELL_TOOLS = {"Bash", "PowerShell"}
 _TOOL_USE = re.compile(rb'"type":\s*"tool_use"')
 _CALLS: dict = {}
 FOREIGN: dict = {}      # folder name -> files newer than the logbook no call of this session touched
+NEWER: dict = {}        # folder name -> this session's files newer than the logbook (row 141)
 
 
 def _epoch(stamp) -> float | None:
@@ -500,6 +501,7 @@ def unrecorded(root: Path, name: str, since: float | None = None,
     session's tool calls saved (see session_calls); the rest goes to FOREIGN."""
     out = []
     FOREIGN.clear()
+    NEWER.clear()
     REWRITTEN.clear()
     GREW.clear()
     TOPPED.clear()
@@ -544,6 +546,7 @@ def unrecorded(root: Path, name: str, since: float | None = None,
                     FOREIGN[folder.name] = files
                     continue
                 files = mine
+            NEWER[folder.name] = files
             if logbook.is_file():
                 out.append(f"{folder.name} (newest: {_named(files)})")
             else:
@@ -1546,7 +1549,7 @@ def second_try(payload: dict) -> tuple[str | None, list]:
     if not root.is_dir():
         return None, []
     since = session_started(str(payload.get("transcript_path") or ""))
-    unrecorded(root, name, since)
+    unrecorded(root, name, since, str(payload.get("transcript_path") or ""))
     # Judged by the logbook, not by `unrecorded`'s verdict: a folder whose newest file was saved
     # seconds ago is left out of it by the grace period, recorded or not.
     wrote = set(TOPPED)
@@ -1557,8 +1560,30 @@ def second_try(payload: dict) -> tuple[str | None, list]:
                   | {"blocked:" + f for f in still} | {HANDED_BACK_AGAIN})
         return None, still
     _count(recorded_after=len(pending & wrote), passed=len(still))
-    _remember(session, {a for a in asked if not a.startswith("blocked:") and a != HANDED_BACK_AGAIN})
+    _remember(session, {a for a in asked if not a.startswith("blocked:") and a != HANDED_BACK_AGAIN}
+              | {_passed(f, rel) for f in still for rel in NEWER.get(f, [])})
     return (lost_note(LOST, FORGOT) if LOST or FORGOT else None), []
+
+
+# Let through, then asked again every turn (ZA-OPRAVYANE row 141, 10.11): a background agent of the
+# session wrote into `v0.3.0/mer/` every minute, and each turn handed the folder back twice for an
+# answer already given -- "no entry needed, already described", 8+ times in an hour. A folder a turn
+# let through without an entry keeps, for this session, the directories its new files were in. While
+# its new files stay in them it is not handed back; a file anywhere else in it, or a new entry in its
+# logbook, ends that. Said to the human once; the next session's board still lists the folder.
+def _passed(folder: str, rel: str) -> str:
+    return f"passed:{folder}:{os.path.dirname(rel).replace(os.sep, '/')}"
+
+
+def let_through(stale: list, asked: set) -> tuple[list, list]:
+    """(folders still to hand back, folders let through before whose new files are all where
+    they were then)."""
+    keep, quiet = [], []
+    for item in stale:
+        f = _folder_of(item)
+        files = NEWER.get(f) or []
+        (quiet if files and all(_passed(f, r) in asked for r in files) else keep).append(item)
+    return keep, quiet
 
 
 def answer_check(payload: dict) -> str | None:
@@ -1809,6 +1834,12 @@ def main() -> int:
     stale = unrecorded(root, name, since, str(payload.get("transcript_path") or ""))
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
+    ended = {a for a in asked if a.startswith("passed:") and a.split(":")[1] in TOPPED}
+    if ended:                     # a new entry in the folder: what was let through is over (row 141)
+        asked -= ended
+        _remember(session, asked)
+    stale, quiet = let_through(stale, asked)
+    quiet = [_folder_of(f) for f in quiet]
     if since is not None:         # without a session start, an entry cannot be called this one's
         stale_names = {_folder_of(f) for f in stale}
         _count(unasked=sum(1 for f in GREW if f not in stale_names
@@ -1884,6 +1915,16 @@ def main() -> int:
                 "If they stay without an entry, the next session's board lists them.")
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), said)))}
         _remember(session, _already_asked(session) | {f"foreign:{f}" for f in foreign})
+    hushed = [f for f in quiet if f"quiet:{f}" not in asked]
+    if hushed:
+        listed = "; ".join(f"{f}: " + ", ".join(sorted({os.path.dirname(r) or "." for r in NEWER[f]}))
+                           for f in hushed)
+        said = (f"Baton: not handed back again this session -- folders an earlier turn let through "
+                f"without an entry keep changing in the same places ({listed}), as a background job "
+                f"does. A file elsewhere in them, or a new entry, ends this; without an entry the "
+                f"next session's board lists them.")
+        note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), said)))}
+        _remember(session, _already_asked(session) | {f"quiet:{f}" for f in hushed})
     try:      # Р5: a .baton-pulled saved this session is also a way past the check -- said once
         fresh = [f for f in sorted(PULLED) if f"pulled:{f}" not in asked and since is not None
                  and (root / f / PULLED_FILE).stat().st_mtime >= since]
