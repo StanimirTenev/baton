@@ -189,12 +189,12 @@ def lesson_l2(where: Path) -> str | None:
     if not rec:
         return None
     after = rec.get("checked_after", 0) + rec.get("no_check_after", 0)
-    shown = (f"since {rec['shown_since']}: shown {rec.get('shown', 0)}, followed by a check: "
+    shown = (f"since {rec['shown_since']}: shown {rec.get('shown', 0)}, followed by a read: "
              f"{rec.get('checked_after', 0)} of {after}" if rec.get("shown_since")
-             else "shown and followed by a check: not counted yet (from v3.20.0 on)")
+             else "shown and followed by a read: not counted yet (from v3.20.0 on)")
     return (f"Lesson L2 (a failed read): fired {rec.get('fired', 0)} since {rec.get('since', '?')}; "
-            f"{shown}.\n   (A proxy, not proof: \"a check\" is a read in the agent's next tool "
-            "calls; it may have been planned anyway.)")
+            f"{shown}.\n   (A proxy, not proof: \"a read\" is any read in the agent's next tool "
+            "calls, not necessarily of what came back empty; it may have been planned anyway.)")
 
 
 def lesson_fixes(where: Path) -> str | None:

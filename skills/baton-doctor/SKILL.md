@@ -60,8 +60,9 @@ check below.
   read the four numbers as they are. Unasked against handed back says how often the agent wrote
   the entry without Stop asking; "passed" is a turn Stop asked about and then let through, since
   it never asks twice. No verdict: the human decides what the numbers mean.
-- **Lesson L2 … fired / shown / followed by a check: N of M** — say it is a proxy: "a check" is a
-  read among the agent's next tool calls after a shown note, which may have been planned anyway.
+- **Lesson L2 … fired / shown / followed by a read: N of M** — say it is a proxy: "a read" is any
+  read among the agent's next tool calls after a shown note, not necessarily of what came back
+  empty, and it may have been planned anyway.
 - **Followed? … fixed after the lesson: N of M** (since v3.21.0, per lesson) — read the numbers as
   they are and say it is a proxy: a new entry written on top of the flagged one counts as fixed.
 

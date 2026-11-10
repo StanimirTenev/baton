@@ -357,7 +357,7 @@ def main() -> int:
         after = rec.get("checked_after", 0) + rec.get("no_check_after", 0)
         note = (f"Baton, lesson L2 -- {what} just came back ({tools}). {ss.LESSONS['L2']} "
                 f"(Counted since {rec['shown_since']}: shown {rec.get('shown', 0)}, followed by a "
-                f"check {rec.get('checked_after', 0)} of {after}; fired {rec.get('fired', 0)} "
+                f"read {rec.get('checked_after', 0)} of {after}; fired {rec.get('fired', 0)} "
                 f"since {rec.get('since', '?')}.)")
     except Exception:
         return _say(outside)  # a lesson that cannot count must not cost the session

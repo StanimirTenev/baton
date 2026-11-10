@@ -526,10 +526,12 @@ note gets through, and until now that left no trace.
 
 And since v3.20.0, for lesson L2, how often its note was **shown** (it is said at most once every
 30 minutes, and counted every time the situation arises: `fired`), and how often a shown note was
-**followed by a check**: the agent's next tool calls in that session include a read. Anything else
+**followed by a read**: the agent's next tool calls in that session include a read -- any read, not
+necessarily of what came back empty (named so since v3.32.0, ZA-OPRAVYANE row 137; it was "followed
+by a check", which said more than is counted). Anything else
 -- a write, or the turn ending first -- counts as not followed. **This is a proxy, not proof.** The
 second read may have been planned anyway, and a sentence written without one may be right; it says
-whether the next step looked like a check, not whether the note caused it.
+whether the next step was a read, not whether it was the right one or the note caused it.
 
 And since v3.21.0, the same question for every lesson (ZA-OPRAVYANE row 44, after Sentry's
 "recovery verification"): **fixed after the lesson: N of M**, per lesson. After Stop asks about an
@@ -540,7 +542,7 @@ changes the heading, reads the newest) with the same test that raised the ask: t
 gone counts as fixed (`fixed_after` in `baton.lessons.json`), still there after three Stops as not
 (`not_fixed_after`). The second pass after a hand-back is one of the three, and is where the
 answer usually lands. A Stop, not a turn, is what the hook can count. For L2 the line is row 40's
-"followed by a check". **The same proxy:** for L1, a new entry written on top of the flagged one
+"followed by a read". **The same proxy:** for L1, a new entry written on top of the flagged one
 counts as fixed too, and a fix made because the agent would have made it anyway looks the same.
 
 ## After compaction: the agent writes the logbook first
