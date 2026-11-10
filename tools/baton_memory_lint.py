@@ -120,6 +120,7 @@ def main(argv: list[str]) -> int:
         state = json.loads(_state_path().read_text("utf-8"))
     except Exception:
         state = {}
+    fresh = str(index.resolve()) not in state       # row 138: nothing remembered for this index
     after = changed_after(index, state, accept)
     try:
         _state_path().write_text(json.dumps(state, indent=1), "utf-8")
@@ -132,6 +133,10 @@ def main(argv: list[str]) -> int:
     print("\n".join(f"  ⚠️ {u}" for u in unindexed) or "  (none)")
     print(f"\nFiles changed after their line ({len(after)}) -- read the line again:")
     print("\n".join(f"  🔁 {a}" for a in after) or "  (none)")
+    if fresh:
+        print(f"   (no memory of this index yet, in {_state_path()}: every line took the index's "
+              "own file time, so a file changed before the index was last saved is not named. "
+              "From now on each line keeps the time remembered here.)")
     if accept:
         print("\nThe lines whose files had changed are accepted as re-read.")
     print("\nNothing in the index was changed. Fix it by hand, or ask the agent to propose the lines.")

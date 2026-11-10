@@ -102,6 +102,20 @@ def test_the_line_rewritten_or_accepted_is_quiet(tmp_path):
     assert "changed after their line (0)" in _run(index).stdout, "re-read and still right"
 
 
+def test_a_first_run_says_the_third_check_has_no_memory_yet(tmp_path):
+    """ZA-OPRAVYANE row 138 (10.11): on the real index (138 links) it printed 0/0/0 with no state
+    for that index, so every line took the index's own time -- saved last -- and "0" read as
+    clean. A run with nothing remembered for this index says so, and where the memory is kept."""
+    import os
+    index = _memory(tmp_path)
+    state = tmp_path / "memlint.json"
+    env = {**os.environ, "BATON_MEMLINT_STATE": str(state)}
+    first = subprocess.run([sys.executable, str(TOOL), str(index)], capture_output=True, text=True, env=env)
+    assert "no memory of this index yet" in first.stdout and str(state) in first.stdout, first.stdout
+    again = subprocess.run([sys.executable, str(TOOL), str(index)], capture_output=True, text=True, env=env)
+    assert "no memory of this index yet" not in again.stdout, again.stdout
+
+
 def test_a_logbook_growing_under_its_line_is_not_named(tmp_path):
     """A logbook changes with every entry by design; its line in the index only points to it.
     Measured on the author's index (21.10): all four lines named were logbooks."""
