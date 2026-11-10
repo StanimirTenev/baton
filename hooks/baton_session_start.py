@@ -553,6 +553,18 @@ def lessons_notice(now: datetime | None = None) -> str | None:
             lines.append(f"- {lid} caught {len(caught)} wrong claims in {RECUR_DAYS} days "
                          f"(asked {len(fired)} times): the claims section is doing its work. "
                          "Nothing to change; tell the human the two numbers if they ask.")
+        elif len(caught) >= RECUR_MIN and lid == "L1":
+            # Row 132 (09.11): the generic line below proposed "a check ... or a tool" -- both
+            # exist for L1. What is left above them is not Baton's to choose.
+            lines.append(f"- L1 recurred {len(caught)} times in {RECUR_DAYS} days "
+                         f"({len(fired)} times the situation arose): \"{text}\" -- it is not "
+                         "holding, and its rungs are all in place: the tool (tools/baton_entry.py "
+                         "--title), the note before the write: "
+                         f"{rec.get('surfaced_before', 0)}, Stop's hand-back after it (corrected "
+                         f"after the hand-back: {rec.get('fixed_after', 0)}). The next rung is the "
+                         "human's decision -- a hook that refuses such a write, or Stop correcting "
+                         "the hour itself. Tell the human the numbers; do not propose the tool, it "
+                         "exists.")
         elif len(caught) >= RECUR_MIN:
             lines.append(f"- {lid} recurred {len(caught)} times in {RECUR_DAYS} days "
                          f"({len(fired)} times the situation arose): \"{text}\" -- it is not "

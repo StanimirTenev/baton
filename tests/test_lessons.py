@@ -226,6 +226,27 @@ def test_notice_only_when_a_lesson_recurs_or_goes_unused(tmp_path):
     assert "L2 has not come up in 60 days" in ss.lessons_notice(now)
 
 
+def test_l1_is_not_offered_a_rung_it_already_has(tmp_path):
+    """ZA-OPRAVYANE row 132 (09.11): the board said "L1 recurred 6 times ... Propose the next rung:
+    a check that catches it by its result, or a tool that makes the mistake impossible" -- both
+    exist for L1 (Stop's check, tools/baton_entry.py). It says what is there, with its numbers, and
+    names what is left as the human's decision."""
+    env = _env(tmp_path, tmp_path / "tasks")
+    ss = _ss(env)
+    now = datetime.now()
+    state = {}
+    for days in (3, 1):
+        ss.lesson_event(state, "L1", "fired", now - timedelta(days=days))
+        ss.lesson_event(state, "L1", "caught", now - timedelta(days=days))
+    ss.lesson_event(state, "L1", "surfaced_before", now - timedelta(days=1))
+    ss.lessons_save(state)
+    notice = ss.lessons_notice(now)
+    assert "L1 recurred 2 times" in notice
+    assert "a tool that makes the mistake impossible" not in notice, notice
+    assert "baton_entry.py" in notice and "before the write: 1" in notice, notice
+    assert "refuse" in notice and "human" in notice, notice
+
+
 def test_l3_caught_is_the_section_working_not_a_lesson_failing(tmp_path):
     """ZA-OPRAVYANE row 33: for L1 and L2 `caught` is the mistake made again; for L3 it is a
     claim listed at the top and later shown wrong -- the section did its job. Two of those in a
