@@ -56,10 +56,10 @@ check below.
   ended normally is Stop not running. **✅ Turns ended** says each one was followed by one, and
   names an API error (StopFailure) where one ended the turn.
 
-- **Logbook entries … written unasked / handed back / recorded on the second try / passed** —
-  read the four numbers as they are. Unasked against handed back says how often the agent wrote
-  the entry without Stop asking; "passed" is a turn Stop asked about and then let through, since
-  it never asks twice. No verdict: the human decides what the numbers mean.
+- **Logbook entries … written unasked / handed back / recorded after a hand-back / passed** —
+  read the four numbers as they are, counted by folder, not by turn. Unasked against handed back
+  says how often the agent wrote the entry without Stop asking; "passed" is a folder still without
+  an entry after Stop handed the turn back, at most twice. No verdict: the human decides what the numbers mean.
 - **Lesson L2 … fired / shown / followed by a read: N of M** — say it is a proxy: "a read" is any
   read among the agent's next tool calls after a shown note, not necessarily of what came back
   empty, and it may have been planned anyway.

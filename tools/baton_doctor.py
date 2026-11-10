@@ -173,10 +173,10 @@ def handback(where: Path) -> str | None:
     if not rec:
         return None
     return (f"Logbook entries since {rec.get('since', '?')}: written unasked: "
-            f"{rec.get('unasked', 0)}; handed back: {rec.get('handed_back', 0)} -- recorded on "
-            f"the second try: {rec.get('recorded_after', 0)}, passed without one: "
-            f"{rec.get('passed', 0)}.\n   (Counted by folder. \"Passed\" is a turn Stop asked about "
-            "and let through, since it never asks twice.)")
+            f"{rec.get('unasked', 0)}; handed back: {rec.get('handed_back', 0)} -- recorded after "
+            f"a hand-back: {rec.get('recorded_after', 0)}, passed without one: "
+            f"{rec.get('passed', 0)}.\n   (Counted by folder, not by turn. Stop hands a turn back at "
+            "most twice (since v3.29.0); \"passed\" is a folder still without an entry after that.)")
 
 
 def lesson_l2(where: Path) -> str | None:

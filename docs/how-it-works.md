@@ -520,9 +520,10 @@ session, and the check says nothing until new ones exist.
 It also shows whether Stop's hand-back does any work -- the one number that says it (ZA-OPRAVYANE
 row 27, from a question about how often the agent writes the entry only because it was made to).
 Stop counts, by folder, in `baton.lessons.json`: entries the agent **wrote unasked** this session,
-turns **handed back** for unrecorded work, and of those how many were **recorded on the second
-try** and how many **passed without one** -- Stop never asks twice, so an agent that ignores the
-note gets through, and until now that left no trace.
+turns **handed back** for unrecorded work, and of those how many were **recorded after a
+hand-back** and how many **passed without one** -- Stop hands a turn back at most twice (since
+v3.29.0; once before), so an agent that ignores the note gets through, and until now that left no
+trace.
 
 And since v3.20.0, for lesson L2, how often its note was **shown** (it is said at most once every
 30 minutes, and counted every time the situation arises: `fired`), and how often a shown note was

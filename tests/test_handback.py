@@ -153,6 +153,10 @@ def test_doctor_shows_the_three_numbers(tmp_path):
     out = subprocess.run([sys.executable, str(DOCTOR)], capture_output=True, text=True, env=env)
     assert "written unasked: 0" in out.stdout and "handed back: 1" in out.stdout, out.stdout
     assert "passed without one: 1" in out.stdout, out.stdout
+    # Row 130 (09.11): it said "since it never asks twice" and "on the second try"; Stop hands a
+    # turn back up to twice since v3.29.0, and the counts are by folder.
+    assert "never asks twice" not in out.stdout and "second try" not in out.stdout, out.stdout
+    assert "at most twice" in out.stdout and "by folder" in out.stdout, out.stdout
 
 
 def test_more_work_instead_of_an_entry_is_passed_not_recorded(tmp_path):
