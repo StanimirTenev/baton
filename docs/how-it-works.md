@@ -75,7 +75,9 @@ hand-back is counted (see `/baton-doctor`). A folder a turn let through that way
 back again in the same session while its new files stay in the directories they were in then --
 a background job of the session writing into `results/` every minute was handed back twice a
 turn, 8+ times in an hour, for an answer already given (since v3.32.0, ZA-OPRAVYANE row 141). A
-file anywhere else in the folder, or a new entry in its logbook, ends that; it is said to the
+file anywhere else in the folder, or a new entry in its logbook, ends that (the directories are
+those of the turn's first hand-back: when it is let through, a writer still at work has a file
+too fresh for Stop to look at); it is said to the
 human once, and the next session's board still lists the folder. The entry written in answer to a hand-back gets the
 same quality checks as any other -- hollow, L1, L3, L4 -- on that second pass, said to the human
 in one message (`systemMessage`) and never handed back again (since v3.22.0, ZA-OPRAVYANE row 55: it was the one

@@ -1560,8 +1560,13 @@ def second_try(payload: dict) -> tuple[str | None, list]:
                   | {"blocked:" + f for f in still} | {HANDED_BACK_AGAIN})
         return None, still
     _count(recorded_after=len(pending & wrote), passed=len(still))
-    _remember(session, {a for a in asked if not a.startswith("blocked:") and a != HANDED_BACK_AGAIN}
-              | {_passed(f, rel) for f in still for rel in NEWER.get(f, [])})
+    # The directories come from the first hand-back: at this pass a writer still at work has a file
+    # inside the grace period, and the folder's files are not looked at (row 141).
+    seen = {"passed:" + a[len("dir:"):] for a in asked
+            if a.startswith("dir:") and any(a.startswith(f"dir:{f}:") for f in still)}
+    _remember(session, {a for a in asked if not a.startswith(("blocked:", "dir:"))
+                        and a != HANDED_BACK_AGAIN}
+              | seen | {_passed(f, rel) for f in still for rel in NEWER.get(f, [])})
     return (lost_note(LOST, FORGOT) if LOST or FORGOT else None), []
 
 
@@ -1834,7 +1839,7 @@ def main() -> int:
     stale = unrecorded(root, name, since, str(payload.get("transcript_path") or ""))
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
-    ended = {a for a in asked if a.startswith("passed:") and a.split(":")[1] in TOPPED}
+    ended = {a for a in asked if any(a.startswith(f"passed:{f}:") for f in TOPPED)}
     if ended:                     # a new entry in the folder: what was let through is over (row 141)
         asked -= ended
         _remember(session, asked)
@@ -1976,8 +1981,10 @@ def main() -> int:
         # A new turn: its hand-back is the only one pending. A turn the human interrupted after
         # its hand-back ran no second Stop, and its marks would be handed back here (row 115).
         _remember(session, {a for a in _already_asked(session)
-                            if not a.startswith("blocked:") and a != HANDED_BACK_AGAIN}
-                  | {"blocked:" + _folder_of(f) for f in stale})
+                            if not a.startswith(("blocked:", "dir:")) and a != HANDED_BACK_AGAIN}
+                  | {"blocked:" + _folder_of(f) for f in stale}
+                  | {"dir:" + _passed(_folder_of(f), r)[len("passed:"):]
+                     for f in stale for r in NEWER.get(_folder_of(f), [])})
     if open_ended:
         listed = "\n".join(f"  - {folder}" for folder in open_ended)
         parts.append(

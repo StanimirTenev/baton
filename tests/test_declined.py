@@ -49,6 +49,22 @@ def test_a_folder_let_through_is_not_handed_back_again_for_the_same_directory(tm
     assert _counts(env).get("handed_back") == 1, "one hand-back, not one a turn"
 
 
+def test_it_holds_while_the_writer_is_still_writing_when_the_turn_is_let_through(tmp_path):
+    """The case itself: a file a minute. At the pass that lets the turn through the newest file is
+    seconds old -- inside Stop's grace period, so that pass does not see the folder's files. The
+    directories are taken at the first hand-back, which did."""
+    env, folder, book, tr = _setup(tmp_path)
+    _file(folder, "mer/run-1.json", ago=900)
+    assert _stop(env, tr).get("decision") == "block"
+    assert _stop(env, tr, active=True).get("decision") == "block"
+    (folder / "mer" / "run-2.json").write_text("fresh", "utf-8")        # written just now
+    assert _stop(env, tr, active=True).get("decision") != "block"
+    _file(folder, "mer/run-3.json", ago=300)
+    os.utime(folder / "mer" / "run-2.json", (time.time() - 300,) * 2)
+    out = _stop(env, tr)
+    assert out.get("decision") != "block", out
+
+
 def test_a_file_outside_those_directories_is_handed_back(tmp_path):
     env, folder, book, tr = _setup(tmp_path)
     _file(folder, "mer/run-1.json", ago=900)
