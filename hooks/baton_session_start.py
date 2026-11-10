@@ -964,6 +964,44 @@ def review_due(fm: dict, today: date):
     return (due, (today - due).days) if due <= today else None
 
 
+def _claims_text(folder: Path) -> str | None:
+    for candidate in CLAIMS_FILES:
+        facts = folder / candidate
+        if facts.is_file():
+            try:
+                return facts.read_text(encoding="utf-8-sig", errors="replace")
+            except OSError:
+                return None
+    return None
+
+
+def _claim_dates(text: str) -> list:
+    """The date of each I/A row: its own date cell, else the dated heading above it, else None."""
+    blocks = [(m.start(), _as_date(m.group(1))) for m in CLAIM_BLOCK.finditer(text)]
+    out = []
+    for row in UNVERIFIED_ROW.finditer(text):
+        end = text.find("\n", row.start())
+        line = text[row.start():end if end != -1 else len(text)]
+        written = None
+        for cell in line.strip().strip("|").split("|"):
+            stamp = ROW_DATE.match(cell.strip())
+            if stamp:
+                written = _as_date(stamp.group(1))
+                break
+        if written is None:
+            written = next((d for start, d in reversed(blocks) if start < row.start()), None)
+        out.append(written)
+    return out
+
+
+def undated_claims(folder: Path) -> int:
+    """I/A rows with no date of their own and none above them (ZA-OPRAVYANE row 140, Anirudh
+    Jwala, 10.11). They cannot age, so `unverified_debt` never counted them -- skipped without a
+    word; on 10.11 three registers here held 84. The board says how many."""
+    text = _claims_text(folder)
+    return sum(1 for d in _claim_dates(text) if d is None) if text else 0
+
+
 def unverified_debt(folder: Path, today: date) -> tuple[int, int] | None:
     """Claims this task has written down and nobody has checked, and how old.
 
@@ -980,32 +1018,14 @@ def unverified_debt(folder: Path, today: date) -> tuple[int, int] | None:
     above it. Both, because a register filled a row at a time has no block date
     and a table written in one sitting has no row dates.
     """
-    for candidate in CLAIMS_FILES:
-        facts = folder / candidate
-        if facts.is_file():
-            break
-    else:
-        return None
-    try:
-        text = facts.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError:
+    text = _claims_text(folder)
+    if text is None:
         return None
 
-    blocks = [(m.start(), _as_date(m.group(1))) for m in CLAIM_BLOCK.finditer(text)]
     count, oldest = 0, None
-    for row in UNVERIFIED_ROW.finditer(text):
-        end = text.find("\n", row.start())
-        line = text[row.start():end if end != -1 else len(text)]
-        written = None
-        for cell in line.strip().strip("|").split("|"):
-            stamp = ROW_DATE.match(cell.strip())
-            if stamp:
-                written = _as_date(stamp.group(1))
-                break
+    for written in _claim_dates(text):
         if written is None:
-            written = next((d for start, d in reversed(blocks) if start < row.start()), None)
-        if written is None:
-            continue
+            continue                  # cannot age: counted by undated_claims (row 140)
         age = (today - written).days
         if age >= STALE_CLAIM_DAYS:
             count += 1
@@ -2191,6 +2211,11 @@ def main() -> int:
             count, age = debt
             stale.append(f"- {f.name} — {count} unverified claims (status I/A), "
                          f"the oldest {age} days old")
+        undated = undated_claims(f)
+        if undated:
+            stale.append(f"- {f.name} — {undated} unverified "
+                         f"{'claim' if undated == 1 else 'claims'} (status I/A) with no date of "
+                         f"its own and none above it: it cannot age, so give it a date cell")
         moved = kod_drift(fm)
         if moved:
             stale.append(f"- {f.name} — {moved}")

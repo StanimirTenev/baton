@@ -139,3 +139,35 @@ def test_a_standard_reference_is_not_a_date(tmp_path):
     folder = _task(tmp_path, "TVARDENIYA.md",
                    "| claim | s |\n|---|---|\n| ISO 17065 4.2.6 applies | А |\n")
     assert bss.unverified_debt(folder, TODAY) is None
+
+
+def test_an_undated_unverified_claim_is_counted_as_undated_not_skipped(tmp_path):
+    """ZA-OPRAVYANE row 140 (Anirudh Jwala, 10.11): a row with status I/A and no date of its own,
+    under a heading with no date, was skipped without a word -- it could not age, so it was never
+    a debt. On 10.11 three registers here held 84 such rows. Now they are counted as undated."""
+    folder = _task(tmp_path, "TVARDENIYA.md",
+                   "## Round 1\n\n| c | s |\n|---|---|\n| no date | И |\n| also none | А |\n"
+                   "| checked | П |\n")
+    assert bss.unverified_debt(folder, TODAY) is None, "it cannot age; it is not a 30-day debt"
+    assert bss.undated_claims(folder) == 2
+    dated = _task(tmp_path / "b", "TVARDENIYA.md",
+                  f"| c | s | d |\n|---|---|---|\n| dated | И | {FRESH} |\n"
+                  f"## Round 2 — {OLD}\n| in a dated block | А |\n")
+    assert bss.undated_claims(dated) == 0
+
+
+def test_the_board_names_undated_claims(tmp_path):
+    import json
+    import os
+    import subprocess
+    folder = tmp_path / "tasks" / "t"
+    folder.mkdir(parents=True)
+    (folder / "LOGBOOK.md").write_text("---\nstate: active\nturn: us\nnext: x\n---\n", "utf-8")
+    (folder / "FAKTI.md").write_text("| c | s |\n|---|---|\n| no date | А |\n", "utf-8")
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR", "BATON_HOME"))}
+    env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
+               HOME=str(tmp_path / "home"))
+    out = subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"source": "startup"}),
+                         capture_output=True, text=True, env=env, timeout=30)
+    assert "1 unverified claim (status I/A) with no date of its own" in out.stdout, out.stdout[-3000:]

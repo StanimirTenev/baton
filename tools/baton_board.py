@@ -138,6 +138,10 @@ def collect(root: Path, logbook: str) -> tuple[list[dict], date]:
             count, age = debt
             warnings.append(f"{count} unverified claims (status I/A); "
                             f"the oldest {age} days old.")
+        undated = hook.undated_claims(folder)
+        if undated:
+            warnings.append(f"{undated} unverified claims (status I/A) with no date: "
+                            "they cannot age.")
         for item in hook.retired_but_present(folder):
             warnings.append(f"Marked as retired, but still there: {item}")
         state = str(fm.get("state", "")).strip().lower()

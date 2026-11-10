@@ -392,7 +392,8 @@ anything else — checked against a source, or checked on the spot — are never
 A row dates itself when it can — a date, optionally with a time, in **a cell of its own** — and
 otherwise takes the date of the heading above it (`## Round 2 — 2026-09-19`). Both, because a
 register filled a row at a time over weeks has no meaningful block date, and a table written in
-one sitting has no row dates. The date has to be its own cell: matching a date anywhere in the row
+one sitting has no row dates. A row with neither cannot age; until v3.32.0 it was skipped without
+a word, and since then the board counts it as undated (ZA-OPRAVYANE row 140). The date has to be its own cell: matching a date anywhere in the row
 read `| last release 0.12.0 (14.08.2026) | A |` as a claim made in August, which is a date inside
 the claim. A detector that fires on the wrong thing gets switched off, and then the real ones go
 unread too.
