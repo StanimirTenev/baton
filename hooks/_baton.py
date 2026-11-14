@@ -16,6 +16,7 @@ The heartbeat never raises: a hook must do its work even if its own bookkeeping 
 Also here, since the core's stage 1 (2026-11-14): `config`, where the tasks are and what the
 logbook is called. It was three copies of the same code in SessionStart, Stop and the prompt
 hook; each hook keeps a `config()` of its own that calls this one with its own `_local_file`.
+Since stage 5: `turn`, the line each hook adds to `baton.turns/<session>` (four copies before).
 Since stage 4: `words` and `alternation`, the recognised words of every language file in
 hooks/lang, joined into the patterns of Stop and the prompt hook.
 
@@ -122,6 +123,24 @@ def config(local_file) -> tuple[Path, str]:
     logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
                or cfg.get("logbook") or "LOGBOOK.md")
     return Path(home).expanduser(), logbook
+
+def turn(hookfile: str, event: str, session: object, extra: str = "") -> None:
+    """One line in `baton.turns/<session>` per run: the time, the event and `extra` (row 49). The
+    doctor asks of it, per session, whether the last activity was followed by a Stop or a
+    StopFailure. In ${CLAUDE_PLUGIN_DATA} if set, else beside the calling hook (`hookfile`), the
+    folder SessionStart's _prune_turns reads. Never raises."""
+    try:
+        sid = re.sub(r"[^\w-]", "", str(session or ""))[:80]
+        if not sid:
+            return
+        data = os.environ.get("CLAUDE_PLUGIN_DATA")
+        folder = (Path(data) if data else Path(hookfile).resolve().parent) / "baton.turns"
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / sid, "a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now().isoformat()} {event} {extra}".rstrip() + "\n")
+    except Exception:
+        pass
+
 
 def words(lang_dir, slot: str) -> list:
     """The pattern fragments every installed language gives for `slot`, from the `words` of each

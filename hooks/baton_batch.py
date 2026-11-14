@@ -372,20 +372,9 @@ def main() -> int:
 
 
 def _turn(event: str, session: object, extra: str = "") -> None:
-    """One line in `baton.turns/<session>` per run: the time, the event and `extra` (row 49). The
-    doctor asks of it, per session, whether the last activity was followed by a Stop or a
-    StopFailure. Never raises."""
-    try:
-        sid = re.sub(r"[^\w-]", "", str(session or ""))[:80]
-        if not sid:
-            return
-        data = os.environ.get("CLAUDE_PLUGIN_DATA")
-        folder = (Path(data) if data else Path(__file__).resolve().parent) / "baton.turns"
-        folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / sid, "a", encoding="utf-8") as fh:
-            fh.write(f"{datetime.now().isoformat()} {event} {extra}".rstrip() + "\n")
-    except Exception:
-        pass
+    """One line in `baton.turns/<session>`: `turn` in hooks/_baton.py. Never raises."""
+    if _baton is not None:
+        _baton.turn(__file__, event, session, extra)
 
 
 def _load_baton():

@@ -126,19 +126,20 @@ def test_the_hook_asks_the_shared_copy(clean, name):
     assert seen == [mod._local_file], "the hook's own _local_file, not another"
 
 
-@pytest.mark.parametrize("name", NAMES + ("baton_batch", "baton_pretool"))
+@pytest.mark.parametrize("name", NAMES + ("baton_batch", "baton_pretool", "baton_stop_failure"))
 def test_a_hook_without_baton_py_says_so(tmp_path, name):
     """Until stage 3 a hook alone ran a fallback copy of config(); before that copy existed, it
     crashed inside main() and exited 0 with nothing on stderr -- the heartbeat that would have
     recorded the crash lives in _baton.py too. Now it names the missing file, and still exits 0,
     as run.sh does when there is no Python: a hook never breaks the session. Batch and pretool
-    ask SessionStart's config() (`ss.config()`), so they need _baton.py as much."""
+    ask SessionStart's config() (`ss.config()`), so they need _baton.py as much; StopFailure's one
+    job, the turn line, is _baton.turn since stage 5."""
     import shutil
     import subprocess
     import sys
     alone = tmp_path / "hooks"
     alone.mkdir()
-    for hook in NAMES + ("baton_batch", "baton_pretool"):    # all but _baton.py
+    for hook in NAMES + ("baton_batch", "baton_pretool", "baton_stop_failure"):   # not _baton.py
         shutil.copy(HOOKS / f"{hook}.py", alone)
     out = subprocess.run([sys.executable, str(alone / f"{name}.py")], input="{}",
                          capture_output=True, text=True, timeout=30)
