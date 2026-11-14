@@ -1,0 +1,3 @@
+Baton: this message touches a task with a record. Read its logbook -- the entries on this topic, not only the top one -- before proposing or acting:
+  - проба-диск: last entry "<today-2> <HH:MM> — дискът е поръчан"; next: смени диска
+  If the human says it is finished: set `state: done` in the header of its LOGBOOK.md (that is what puts it under ✅ Finished on the board) and add an entry saying so; and close every PLAN.md / PLAN-*.md in its folder with `state: done` OR `abandoned`, AND `result:` -- what came of it -- or the board keeps it under ⛔ UNCLOSED PLANS.

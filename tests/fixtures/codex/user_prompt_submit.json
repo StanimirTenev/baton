@@ -1,0 +1,10 @@
+{
+ "session_id": "01a1d951-b863-7a90-90ea-2a752d4126b7",
+ "turn_id": "01a1d951-ba8a-71d0-aa11-833b8050f393",
+ "transcript_path": "/work/codex-probe/home/sessions/2026/11/14/rollout-2026-11-14T11-09-33-01a1d951-b863-7a90-90ea-2a752d4126b7.jsonl",
+ "cwd": "/work/codex-probe/proj",
+ "hook_event_name": "UserPromptSubmit",
+ "model": "gpt-6.1-sol",
+ "permission_mode": "bypassPermissions",
+ "prompt": "This is a probe of hooks; keep every answer short. This message is about the task kotka-proba.\n1) If your context contains text starting with \"[baton:board\", quote its first line and its first task line exactly; otherwise write NO BOARD.\n2) If your context contains a line starting with \"Baton: this message touches a task\", quote that line and the line after it exactly; otherwise write NO POINTER.\n3) Run exactly this shell command and wait for it to finish (it takes about 100 seconds, allow 150): sh -c 'echo work > /work/codex-probe/tasks/kotka-proba/cat.txt; sleep 100'\n4) Then write DONE.\nIf you are later given a message that starts with \"Baton:\", do what it asks using your file-editing tool (apply_patch) on /work/codex-probe/tasks/kotka-proba/LOGBOOK.md: insert a short entry with a \"## \" heading right below the front matter (the second '---' line). Do not use shell for that edit."
+}

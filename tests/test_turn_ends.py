@@ -181,3 +181,52 @@ def test_a_broken_turn_record_does_not_crash_the_doctor(tmp_path):
     (data / "baton.turns" / "x").write_bytes(b"\xff\xfe garbage\n\nnot-a-time Stop\n")
     out = _doctor(tmp_path, data)
     assert out.returncode == 0 and "Traceback" not in out.stderr, out.stderr
+
+
+# Core stage 5 (2026-11-14): the line was written by four copies of the same function, in
+# batch, prompt, Stop and StopFailure. It is `turn` in hooks/_baton.py now.
+HOOKS_THAT_TURN = ("baton_batch", "baton_prompt", "baton_stop", "baton_stop_failure")
+
+
+def _module(path, name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_shared_turn_writes_one_line_per_run(tmp_path, monkeypatch):
+    baton = _module(ROOT / "hooks" / "_baton.py", "turn_baton")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+    baton.turn(str(ROOT / "hooks" / "baton_stop.py"), "Stop", "a/b c-1", "again")
+    baton.turn(str(ROOT / "hooks" / "baton_stop.py"), "Stop", "a/b c-1")
+    lines = (tmp_path / "data" / "baton.turns" / "abc-1").read_text("utf-8").splitlines()
+    assert [ln.split(" ", 1)[1] for ln in lines] == ["Stop again", "Stop"], "no trailing space"
+    datetime.fromisoformat(lines[0].split(" ", 1)[0])
+    baton.turn(str(ROOT / "hooks" / "baton_stop.py"), "Stop", None)       # no session: nothing
+    baton.turn(str(ROOT / "hooks" / "baton_stop.py"), "Stop", "../..")
+    assert sorted(p.name for p in (tmp_path / "data" / "baton.turns").iterdir()) == ["abc-1"]
+
+
+def test_without_plugin_data_the_turns_are_beside_the_calling_hook(tmp_path, monkeypatch):
+    baton = _module(ROOT / "hooks" / "_baton.py", "turn_baton2")
+    monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
+    hook = tmp_path / "installed" / "baton_prompt.py"
+    hook.parent.mkdir()
+    baton.turn(str(hook), "UserPromptSubmit", "s")
+    assert (tmp_path / "installed" / "baton.turns" / "s").is_file()
+    (tmp_path / "ro").write_text("a file, not a folder", "utf-8")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ro"))
+    baton.turn(str(hook), "UserPromptSubmit", "s")                          # never raises
+
+
+def test_each_hook_writes_its_turn_through_the_shared_copy(tmp_path):
+    """Without this the shared turn could be dead code with every case above still passing."""
+    for name in HOOKS_THAT_TURN:
+        mod = _module(ROOT / "hooks" / f"{name}.py", f"turn_{name}")
+        seen = []
+        mod._baton.turn = lambda *a: seen.append(a)
+        mod._turn("Event", "sid", "x")
+        assert seen == [(mod.__file__, "Event", "sid", "x")], name
+        assert '"baton.turns"' not in Path(mod.__file__).read_text("utf-8"), "no copy of its own"

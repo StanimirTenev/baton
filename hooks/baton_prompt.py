@@ -30,6 +30,28 @@ import re
 import sys
 from pathlib import Path
 
+
+# Loaded before the patterns below, which are built from the language files at import (stage 4).
+def _load_baton():
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_baton", Path(__file__).with_name("_baton.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None          # bookkeeping must never stop the hook doing its work
+
+
+_baton = _load_baton()
+_LANG = Path(__file__).with_name("lang")
+
+
+def _words(slot: str) -> str:
+    """The alternatives for `slot` from every language file in hooks/lang: _baton.words."""
+    return _baton.alternation(_baton.words(_LANG, slot)) if _baton else "(?!)"
+
+
 MAX_TASKS = 3
 RESTART_AT = 200_000      # tokens of context at which a restart is first suggested
 RESTART_STEP = 100_000    # and again every this many more
@@ -53,17 +75,8 @@ def _local_file(name: str) -> Path:
 
 
 def config() -> tuple[Path, str]:
-    """Task root and logbook name -- the same resolution as the other two hooks."""
-    cfg = {}
-    try:
-        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
-    except Exception:
-        cfg = {}
-    home = (os.environ.get("BATON_HOME") or os.environ.get("CLAUDE_PLUGIN_OPTION_TASKS_FOLDER")
-            or cfg.get("home") or str(Path.home() / "tasks"))
-    logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
-               or cfg.get("logbook") or "LOGBOOK.md")
-    return Path(home).expanduser(), logbook
+    """Task root and logbook name: one resolution for every hook, `config` in hooks/_baton.py."""
+    return _baton.config(_local_file)
 
 
 def header(text: str) -> dict:
@@ -173,7 +186,7 @@ def last_entry(text: str) -> str:
 # `task 12` anywhere; a bare number only as the first word of the message, or the last of one of
 # at most five words (`преди 11 дни` is three words and names nothing). Never a number touching
 # a letter or digit, after `.:/,-`, or before `.:/,-)` -- `0.37.0`, `10:30`, `2026-10-28`, `1.`.
-_MARKED_ID = re.compile(r"(?:#|№\s?|\b(?:задача(?:та)?|task)\s+)([1-9]\d*)(?![\w.:/,\-)])",
+_MARKED_ID = re.compile(r"(?:#|№\s?|\b(?:" + _words("task_word") + r")\s+)([1-9]\d*)(?![\w.:/,\-)])",
                         re.IGNORECASE)
 _BARE_ID = re.compile(r"(?<![\w.:/,\-#№])([1-9]\d*)(?![\w.:/,\-)])")
 SHORT_WORDS = 5
@@ -360,7 +373,9 @@ def main() -> int:
     session = str(payload.get("session_id") or "")
     if not prompt.strip():
         return 0
-    tokens = context_tokens(str(payload.get("transcript_path") or ""))
+    transcript = str(payload.get("transcript_path") or "")
+    tokens = (_baton.codex_context_tokens(transcript, TAIL_BYTES)
+              if _baton.host(payload, os.environ) == "codex" else context_tokens(transcript))
     restart = restart_due(session, tokens) if tokens else False
     root, logbook = config()
     new = []
@@ -429,35 +444,11 @@ def main() -> int:
 
 
 def _turn(event: str, session: object, extra: str = "") -> None:
-    """One line in `baton.turns/<session>` per run: the time, the event and `extra` (row 49). The
-    doctor asks of it, per session, whether the last activity was followed by a Stop or a
-    StopFailure. Never raises."""
-    try:
-        from datetime import datetime
-        sid = re.sub(r"[^\w-]", "", str(session or ""))[:80]
-        if not sid:
-            return
-        data = os.environ.get("CLAUDE_PLUGIN_DATA")
-        folder = (Path(data) if data else Path(__file__).resolve().parent) / "baton.turns"
-        folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / sid, "a", encoding="utf-8") as fh:
-            fh.write(f"{datetime.now().isoformat()} {event} {extra}".rstrip() + "\n")
-    except Exception:
-        pass
+    """One line in `baton.turns/<session>`: `turn` in hooks/_baton.py. Never raises."""
+    if _baton is not None:
+        _baton.turn(__file__, event, session, extra)
 
 
-def _load_baton():
-    try:
-        spec = importlib.util.spec_from_file_location(
-            "_baton", Path(__file__).with_name("_baton.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-    except Exception:
-        return None          # bookkeeping must never stop the hook doing its work
-
-
-_baton = _load_baton()
 _HEARTBEAT = _baton.Heartbeat(__file__) if _baton else None
 
 
@@ -477,6 +468,12 @@ def _beat(crash: BaseException | None = None) -> None:
 
 
 if __name__ == "__main__":
+    if _baton is None:
+        # config() lives in _baton.py, so without it there is nothing this hook can do. Said
+        # on stderr with exit 1: a non-blocking error the host shows, never a block (that is 2).
+        print(f"Baton: {Path(__file__).name} could not load _baton.py beside it; "
+              "the hook did not run.", file=sys.stderr)
+        sys.exit(1)
     _start()
     try:
         code = main()

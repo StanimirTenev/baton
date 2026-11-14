@@ -27,6 +27,28 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+
+# Loaded before the patterns below, which are built from the language files at import (stage 4).
+def _load_baton():
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_baton", Path(__file__).with_name("_baton.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None          # bookkeeping must never stop the hook doing its work
+
+
+_baton = _load_baton()
+_LANG = Path(__file__).with_name("lang")
+
+
+def _words(slot: str) -> str:
+    """The alternatives for `slot` from every language file in hooks/lang: _baton.words."""
+    return _baton.alternation(_baton.words(_LANG, slot)) if _baton else "(?!)"
+
+
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache"}
 # A file saved moments ago is still being worked on. This is a grace against NOW —
 # not against the logbook's own timestamp, which is what it used to be compared with.
@@ -193,18 +215,8 @@ def _local_file(name: str) -> Path:
 
 
 def config() -> tuple[Path, str]:
-    """Task root and logbook name: env var, then baton.local.json next to this file,
-    then the defaults — the same resolution the SessionStart hook uses."""
-    cfg = {}
-    try:
-        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
-    except Exception:
-        cfg = {}
-    home = (os.environ.get("BATON_HOME") or os.environ.get("CLAUDE_PLUGIN_OPTION_TASKS_FOLDER")
-            or cfg.get("home") or str(Path.home() / "tasks"))
-    logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
-               or cfg.get("logbook") or "LOGBOOK.md")
-    return Path(home).expanduser(), logbook
+    """Task root and logbook name: one resolution for every hook, `config` in hooks/_baton.py."""
+    return _baton.config(_local_file)
 
 
 def newest_work(folder: Path, logbook: str) -> tuple[float, str]:
@@ -384,6 +396,9 @@ LOOK_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "TodoWrite"
 SHELL_TOOLS = {"Bash", "PowerShell"}
 _TOOL_USE = re.compile(rb'"type":\s*"tool_use"')
 _CALLS: dict = {}
+# Who called this run (_baton.host, set in main). Under Codex the transcript is its rollout, read
+# by _baton.codex_calls, where apply_patch is the write tool; anything else reads as Claude Code.
+HOST = "unknown"
 FOREIGN: dict = {}      # folder name -> files newer than the logbook no call of this session touched
 NEWER: dict = {}        # folder name -> this session's files newer than the logbook (row 141)
 
@@ -402,6 +417,9 @@ def session_calls(transcript: str | None) -> dict | None:
     if not transcript:
         return None
     if transcript in _CALLS:
+        return _CALLS[transcript]
+    if HOST == "codex" and _baton is not None:
+        _CALLS[transcript] = _baton.codex_calls(transcript)
         return _CALLS[transcript]
     main = Path(transcript)
     files, texts, cwds, started, windows = set(), [], set(), {}, []
@@ -809,14 +827,12 @@ def _names(rel: str) -> set:
 # whose full name stands on a line with a verb of change: measured 23.10 on the 36 top entries of
 # the author's logbooks, 0 asked; without the verb, 2 (files cited as sources); asked whenever the
 # file is older, 2 more (a name, cbom.json, that many subfolders hold).
-_CHANGED = re.compile(r"(?i)\b(?:(?:re)?(?:wr[oi]te|written|fix|chang|updat|edit|creat|renam|refactor|"
-                      r"replac|remov|delet|patch|rework|implement)\w*|add(?:s|ed|ing)?|mov(?:e|es|ed|ing))\b"
-                      r"|поправ|пренаписа|промен|добав|написа|създад|обнов|изтри|преименува|замен|махна")
+_CHANGED = re.compile(r"(?i)" + _words("changed"))
 
 
 # A path named whole: /x/y.py, ~/x/y.py, C:\x\y.py. Not the path part of a web address.
 # On a line that deletes, moves or renames, a path is meant to be gone: not judged.
-_GONE = re.compile(r"(?i)\b(?:delet|remov|mov(?:e|es|ed|ing)\b|renam)|изтри|премест|преименува|махна")
+_GONE = re.compile(r"(?i)" + _words("gone"))
 _ABS_PATH = re.compile(r"(?<![\w~.:/\\])(?:~?/|[A-Za-z]:\\)(?:[\w.\-]+[/\\])*[\w\-][\w.\-]*\.\w+")
 
 
@@ -989,18 +1005,17 @@ def code_changes(root: Path, name: str, since: float | None) -> list[tuple]:
 # about one in eight (measured 20.10). So only that. It cannot tell whether the claim is true;
 # it puts the claim where a reader checks it. `caught` is a proven error only: a claim listed
 # in such a section and later marked `refuted:` -- a re-read of a correct claim is not one.
-_VISIBLE = re.compile(r"(?i)(?<![\w-])(public(?:ly)?|private(?:ly)?|публичен|частен|"
-                      r"(?:публичн|частн)(?:о|а|и|ия|ият|ото|ата|ите)?)(?![\w-])")
+_VISIBLE = re.compile(r"(?i)(?<![\w-])(" + _words("visible") + r")(?![\w-])")
 # Senses of the word that are not a thing's visibility, and mentions that are not claims:
 # a span of code (`"visibility":"PRIVATE"` pasted from a tool), a key in
 # cryptography, one word in quotes (the word talked about), and the pair named as a topic
 # (`public/private`). Kept to classes, not phrases: a phrase list is fitted to one machine.
 _CODE = re.compile(r"`[^`\n]*`")
-_KEY = re.compile(r"(?i)(?:public|private)[\s-]+keys?(?![\w-])|(?:публич|част)\w*\s+ключ")
+_KEY = re.compile(r"(?i)" + _words("key"))
 _QUOTED_WORD = re.compile(r"[„“\"«']\s*\w+\s*[“”\"»']")
 _PAIR = re.compile(r"\w+(?:\s*/\s*\w+)+")
-_CLAIMS = re.compile(r"(?i)^###\s+(?:claims to verify|за проверка)\s*:?\s*$")
-_REFUTED = re.compile(r"(?i)^\s*(?:[-*]\s+)?(?:refuted|оборено)\s*:")
+_CLAIMS = re.compile(r"(?i)^###\s+(?:" + _words("claims_heading") + r")\s*:?\s*$")
+_REFUTED = re.compile(r"(?i)^\s*(?:[-*]\s+)?(?:" + _words("refuted") + r")\s*:")
 _SEEN_CAP = 1000
 
 
@@ -1028,13 +1043,7 @@ def visibility_words(text: str) -> list[str]:
 # Row 60 (22.10): the plain sentence was missed -- "tests are passing", "the suite passes", "CI is
 # green", and Bulgarian without the article or with "преминаха"/"са зелени" (two real claims in
 # investicii-sec, never asked).
-_TESTS = re.compile(r"(?i)(?<![\w-])((?:all\s+)?tests?\s+(?:all\s+)?(?:are\s+|is\s+)?pass(?:es|ed|ing)?"
-                    r"|(?:test\s+)?suite\s+pass(?:es|ed|ing)?|CI\s+(?:is\s+)?green|all\s+green"
-                    r"|(?<!failed, )(?<![\d,./])\d[\d,]*\s+passed"
-                    r"|(?<![\d,./])(?P<n>\d+)\s*/\s*(?P=n)\s+(?:tests?\s+)?pass(?:es|ed)?"
-                    r"|тестове(?:те)?\s+(?:минават|минаха|преминават|преминаха|са\s+зелени)(?!\s+през)"
-                    r"|минаха\s+(?:всички\s+)?тестовете)"
-                    r"(?![\w-])")
+_TESTS = re.compile(r"(?i)(?<![\w-])(" + _words("tests_pass") + r")(?![\w-])")
 _QUOTE = re.compile(r"[„“\"«][^„“”\"«»\n]{1,160}[“”\"»]")
 
 
@@ -1783,6 +1792,8 @@ def main() -> int:
     # `{}` it had no session start, so every folder's old debt was handed back to this turn.
     if not isinstance(payload, dict):
         return 0
+    global HOST
+    HOST = _baton.host(payload, os.environ)
     # "again": the pass after a hand-back (`stop_hook_active`). Any Stop counts as the end of the
     # turn; two in one turn are by design, so the doctor does not count them (row 49). Whether
     # and when Claude Code resets the flag is not documented, and nothing here depends on it.
@@ -2074,34 +2085,11 @@ def main() -> int:
 
 
 def _turn(event: str, session: object, extra: str = "") -> None:
-    """One line in `baton.turns/<session>` per run: the time, the event and `extra` (row 49). The
-    doctor asks of it, per session, whether the last activity was followed by a Stop or a
-    StopFailure. Never raises."""
-    try:
-        sid = re.sub(r"[^\w-]", "", str(session or ""))[:80]
-        if not sid:
-            return
-        data = os.environ.get("CLAUDE_PLUGIN_DATA")
-        folder = (Path(data) if data else Path(__file__).resolve().parent) / "baton.turns"
-        folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / sid, "a", encoding="utf-8") as fh:
-            fh.write(f"{datetime.now().isoformat()} {event} {extra}".rstrip() + "\n")
-    except Exception:
-        pass
+    """One line in `baton.turns/<session>`: `turn` in hooks/_baton.py. Never raises."""
+    if _baton is not None:
+        _baton.turn(__file__, event, session, extra)
 
 
-def _load_baton():
-    try:
-        spec = importlib.util.spec_from_file_location(
-            "_baton", Path(__file__).with_name("_baton.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-    except Exception:
-        return None          # bookkeeping must never stop the hook doing its work
-
-
-_baton = _load_baton()
 _HEARTBEAT = _baton.Heartbeat(__file__) if _baton else None
 
 
@@ -2126,6 +2114,12 @@ if __name__ == "__main__":
             sys.exit(run_tests(sys.argv[2]))
         except Exception:
             sys.exit(0)
+    if _baton is None:
+        # config() lives in _baton.py, so without it there is nothing this hook can do. Said
+        # on stderr with exit 1: a non-blocking error the host shows, never a block (that is 2).
+        print(f"Baton: {Path(__file__).name} could not load _baton.py beside it; "
+              "the hook did not run.", file=sys.stderr)
+        sys.exit(1)
     _start()
     try:
         code = main()

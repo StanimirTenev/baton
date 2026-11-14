@@ -60,27 +60,28 @@ PRIORITY_LABEL = {"high": "high", "medium": "medium", "low": "low"}
 
 # The page's own words. The terminal board is translated by the agent; nobody translates a file
 # opened in a browser, so the language is a setting (`board_language` in baton.local.json, or
-# --lang). English is the default and the fallback for any word a language does not have.
-LABELS = {
-    "en": {},
-    "bg": {
-        "Our move": "Наш ход", "Waiting on someone outside": "Чакаме някого отвън",
-        "Frozen": "Замразени", "Finished": "Приключени", "live": "живи", "frozen": "замразени",
-        "finished": "приключени", "shelf-life notes": "бележки за срок на годност",
-        "waiting on:": "чакаме:", "deadline": "срок", "days": "дни", "passed": "изтекъл",
-        "no header — not ordered by state": "без заглавна част — не е подредена по състояние",
-        "active": "активна", "waiting": "чакаща", "ongoing": "постоянна",
-        "high": "висок", "medium": "среден", "low": "нисък",
-        "Generated from the logbooks. They are the record; this is a view of them. "
-        "Nothing leaves the machine.":
-            "Генерирано от дневниците. Те са записът; това е изглед към тях. "
-            "Нищо не напуска машината.",
-    },
-}
+# --lang). Each language is a file, hooks/lang/<code>.json, its `board` section: a new language
+# is a new file. English is the default and the fallback for any word a language does not have.
+LANG_DIR = Path(__file__).resolve().parent.parent / "hooks" / "lang"
+
+
+def _labels() -> dict:
+    out = {}
+    for path in sorted(LANG_DIR.glob("*.json")):
+        try:
+            board = json.loads(path.read_text("utf-8-sig")).get("board", {})
+        except Exception:
+            continue                    # a broken file is not a language
+        out[path.stem] = board if isinstance(board, dict) else {}
+    out.setdefault("en", {})
+    return out
+
+
+LABELS = _labels()
 
 
 def _t(lang: str, text: str) -> str:
-    return LABELS.get(lang, {}).get(text, text)
+    return LABELS.get(lang, {}).get(text) or LABELS["en"].get(text) or text
 
 CSS = """
 :root{--ink:#14171a;--dim:#5b6570;--line:#e3e6ea;--bg:#fbfcfd;--card:#fff;

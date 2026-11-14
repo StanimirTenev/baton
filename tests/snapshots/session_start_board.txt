@@ -1,0 +1,33 @@
+[baton:board v<VERSION>]
+The human has not seen this board -- only one line saying Baton is on. Whatever the human's first message is -- a greeting, a question or a task -- the first thing in your first reply is the WHOLE board, translated into the human's language; then answer them. Show every group and every line, nothing shortened or left out -- no summary, no merged lines, no "...and the rest", and the notes in parentheses too. Task names, file names, commands, fields in backticks and identifiers stay as they are.
+
+Baton — the tasks in <ROOT>, ordered by whose move it is and by priority:
+
+⏳ Waiting on YOU / can continue now:
+- 1 · проба-диск 🔴 [high] — смени диска
+- 2 · alpha-web 🟡 [medium] — publish the page
+- 3 · zeta-work 🟡 [medium] — finish the draft
+
+⛔ Waiting on someone OUTSIDE / blocked (for information):
+- 4 · gamma-supplier 🟡 [medium] — the part arrives  (waiting on: supplier)
+- 5 · beta-docs 🟢 [low] — approve the text  (waiting on: human)
+
+⛔ UNCLOSED PLANS — the task counts as not done:
+- проба-диск — PLAN.md is `open`, last touched 3 days ago
+(Close it with `state: done` OR `abandoned`, AND `result:` in PLAN.md — what came of it. An abandoned plan is closed the same way.)
+
+⏳ Past its shelf life — read this before relying on it:
+- alpha-web — 1 unverified claims (status I/A), the oldest 45 days old
+(A claim with status I or A is not a fact — it is a debt. Either it gets checked, or it is dropped.)
+
+📝 Work newer than its logbook, from before this session:
+- zeta-work (newest: draft.md)
+(Write the entry it is missing. A .batonignore line is for a file that changes on its own, and is the human's to add.)
+
+❄️ Frozen (not offered): 6 · delta-old
+
+✅ Finished (not touched): 7 · epsilon-done
+
+(The number before a task is its own and stays: name a task by it -- "12 is finished", "go to 12".)
+
+Before working on one, read its LOGBOOK.md (the record of earlier sessions; the front-matter header on top carries the current state). After working, add a new entry at the top and update the header if the state has changed.

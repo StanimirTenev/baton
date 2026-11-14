@@ -47,7 +47,7 @@ def _hooks(tmp_path, plugin):
         return ROOT / "hooks"
     copy = tmp_path / "hooks"
     copy.mkdir(exist_ok=True)
-    for h in HOOKS:
+    for h in HOOKS + ("_baton",):                  # install.sh copies _baton.py too
         shutil.copy(ROOT / "hooks" / f"{h}.py", copy)
     return copy
 

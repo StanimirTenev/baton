@@ -1,0 +1,56 @@
+{
+  "board": {
+    "Our move": "Our move",
+    "Waiting on someone outside": "Waiting on someone outside",
+    "Frozen": "Frozen",
+    "Finished": "Finished",
+    "live": "live",
+    "frozen": "frozen",
+    "finished": "finished",
+    "shelf-life notes": "shelf-life notes",
+    "waiting on:": "waiting on:",
+    "deadline": "deadline",
+    "days": "days",
+    "passed": "passed",
+    "no header — not ordered by state": "no header — not ordered by state",
+    "active": "active",
+    "waiting": "waiting",
+    "ongoing": "ongoing",
+    "high": "high",
+    "medium": "medium",
+    "low": "low",
+    "Generated from the logbooks. They are the record; this is a view of them. Nothing leaves the machine.": "Generated from the logbooks. They are the record; this is a view of them. Nothing leaves the machine."
+  },
+  "words": {
+    "changed": [
+      "\\b(?:(?:re)?(?:wr[oi]te|written|fix|chang|updat|edit|creat|renam|refactor|replac|remov|delet|patch|rework|implement)\\w*|add(?:s|ed|ing)?|mov(?:e|es|ed|ing))\\b"
+    ],
+    "gone": [
+      "\\b(?:delet|remov|mov(?:e|es|ed|ing)\\b|renam)"
+    ],
+    "visible": [
+      "public(?:ly)?",
+      "private(?:ly)?"
+    ],
+    "key": [
+      "(?:public|private)[\\s-]+keys?(?![\\w-])"
+    ],
+    "claims_heading": [
+      "claims to verify"
+    ],
+    "refuted": [
+      "refuted"
+    ],
+    "tests_pass": [
+      "(?:all\\s+)?tests?\\s+(?:all\\s+)?(?:are\\s+|is\\s+)?pass(?:es|ed|ing)?",
+      "(?:test\\s+)?suite\\s+pass(?:es|ed|ing)?",
+      "CI\\s+(?:is\\s+)?green",
+      "all\\s+green",
+      "(?<!failed, )(?<![\\d,./])\\d[\\d,]*\\s+passed",
+      "(?<![\\d,./])(?P<n>\\d+)\\s*/\\s*(?P=n)\\s+(?:tests?\\s+)?pass(?:es|ed)?"
+    ],
+    "task_word": [
+      "task"
+    ]
+  }
+}

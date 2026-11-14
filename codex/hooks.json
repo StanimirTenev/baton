@@ -1,0 +1,50 @@
+{
+  "description": "Baton: task folders and logbooks (https://github.com/StanimirTenev/baton). The hooks are the ones Claude Code runs; they tell the host apart themselves.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "sh \"$HOME/.codex/baton/hooks/run.sh\" \"$HOME/.codex/baton/hooks/baton_session_start.py\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "sh \"$HOME/.codex/baton/hooks/run.sh\" \"$HOME/.codex/baton/hooks/baton_prompt.py\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 10,
+            "command": "sh \"$HOME/.codex/baton/hooks/run.sh\" \"$HOME/.codex/baton/hooks/baton_pretool.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "sh \"$HOME/.codex/baton/hooks/run.sh\" \"$HOME/.codex/baton/hooks/baton_stop.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

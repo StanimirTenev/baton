@@ -1,0 +1,14 @@
+{
+ "session_id": "01a1d951-b863-7a90-90ea-2a752d4126b7",
+ "turn_id": "01a1d951-ba8a-71d0-aa11-833b8050f393",
+ "transcript_path": "/work/codex-probe/home/sessions/2026/11/14/rollout-2026-11-14T11-09-33-01a1d951-b863-7a90-90ea-2a752d4126b7.jsonl",
+ "cwd": "/work/codex-probe/proj",
+ "hook_event_name": "PreToolUse",
+ "model": "gpt-6.1-sol",
+ "permission_mode": "bypassPermissions",
+ "tool_name": "Bash",
+ "tool_input": {
+  "command": "sh -c 'echo work > /work/codex-probe/tasks/kotka-proba/cat.txt; sleep 100'"
+ },
+ "tool_use_id": "exec-714a46eb-ce79-4256-9296-6c795bfc915b"
+}

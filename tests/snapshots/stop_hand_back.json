@@ -1,0 +1,4 @@
+{
+  "decision": "block",
+  "reason": "Baton: these task folders hold work newer than their LOGBOOK.md:\n  - zeta-work (newest: draft.md)\n\nPrepend an entry to each one's LOGBOOK.md before finishing — what was asked, what was done, the result, and what is still open. Write it for the next session, which will have none of this conversation.\n\nIf the change was incidental and genuinely needs no entry, say so in one line and finish."
+}
