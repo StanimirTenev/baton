@@ -193,8 +193,12 @@ def _local_file(name: str) -> Path:
 
 
 def config() -> tuple[Path, str]:
-    """Task root and logbook name: env var, then baton.local.json next to this file,
-    then the defaults — the same resolution the SessionStart hook uses."""
+    """Task root and logbook name: one resolution for every hook, `config` in hooks/_baton.py.
+    The body below is that resolution again, for a hook run without a loadable _baton.py beside
+    it (tests run hooks alone so); tests/test_config.py holds the two equal."""
+    shared = getattr(_baton, "config", None)
+    if shared is not None:
+        return shared(_local_file)
     cfg = {}
     try:
         cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))

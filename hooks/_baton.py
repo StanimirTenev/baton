@@ -13,6 +13,10 @@ wrappers in each hook forward to its bound Heartbeat.
 
 The heartbeat never raises: a hook must do its work even if its own bookkeeping fails.
 
+Also here, since the core's stage 1 (2026-11-14): `config`, where the tasks are and what the
+logbook is called. It was three copies of the same code in SessionStart, Stop and the prompt
+hook; each hook keeps a `config()` of its own that calls this one with its own `_local_file`.
+
 Also here, since v3.29.0: everything a hook does with the session's environment or with a
 secret -- the board process's environment (BOARD_ENV), the masking of a key pasted into a
 message, and whether the review's key file exists. The plugin directory's scan flagged
@@ -25,6 +29,7 @@ makes no network request; keep it that way (tests/test_shipped_text.py holds it)
 
 from __future__ import annotations   # `str | None`: Python 3.8 and 3.9 too
 
+import json
 import os
 import re
 import subprocess
@@ -100,6 +105,21 @@ class Heartbeat:
             except (OSError, ValueError):
                 continue
 
+
+def config(local_file) -> tuple[Path, str]:
+    """Task root and logbook name, for every hook. Each comes from the first that is set: the
+    BATON_* variable, the plugin's option given at enable, baton.local.json (`home`, `logbook`;
+    a BOM is fine, an unreadable or broken file counts as empty), then ~/tasks and LOGBOOK.md.
+    `local_file(name)` is the calling hook's: where its baton.local.json lives."""
+    try:
+        cfg = json.loads((local_file("baton.local.json")).read_text("utf-8-sig"))
+    except Exception:
+        cfg = {}
+    home = (os.environ.get("BATON_HOME") or os.environ.get("CLAUDE_PLUGIN_OPTION_TASKS_FOLDER")
+            or cfg.get("home") or str(Path.home() / "tasks"))
+    logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
+               or cfg.get("logbook") or "LOGBOOK.md")
+    return Path(home).expanduser(), logbook
 
 # What the board process gets from the session's environment: where to run and what to read
 # (PATH, home, temp, locale; Windows needs SYSTEMROOT to start Python at all), where Baton keeps
