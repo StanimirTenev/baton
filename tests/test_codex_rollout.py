@@ -43,13 +43,16 @@ def _load(name: str, file: str):
 def test_the_calls_of_a_codex_session_are_read_from_its_rollout():
     core = _load("_baton_rollout", "_baton.py")
     calls = core.codex_calls(str(ROLLOUT))
+    # Spelled as the reader spells them: on Windows abspath puts the current drive before a
+    # POSIX path from the fixture, so normcase alone gives `\work\...` and the reader `c:\work\...`.
+    full = lambda p: os.path.normcase(os.path.abspath(p))
     assert calls["files"] == {
-        os.path.normcase("/work/codex-probe/tasks/kotka-proba/LOGBOOK.md"),   # inside exec's script
-        os.path.normcase("/work/codex-probe/tasks/riba-proba/notes.md"),      # relative, own call
+        full("/work/codex-probe/tasks/kotka-proba/LOGBOOK.md"),   # inside exec's script
+        full("/work/codex-probe/tasks/riba-proba/notes.md"),      # relative, own call
     }
     assert any("cat /work/codex-probe/tasks/kotka-proba/LOGBOOK.md" in t for t in calls["texts"])
     assert not any("fish" in t for t in calls["texts"]), "an apply_patch alone is a write, not a text"
-    assert calls["cwds"] == {os.path.normcase("/work/codex-probe/proj")}
+    assert calls["cwds"] == {full("/work/codex-probe/proj")}
     assert len(calls["windows"]) == 3 and all(a <= b for a, b in calls["windows"])
 
 
