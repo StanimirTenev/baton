@@ -21,6 +21,9 @@ Since stage 4: `words` and `alternation`, the recognised words of every language
 hooks/lang, joined into the patterns of Stop and the prompt hook.
 Since stage 7: `host`, which agent host is calling -- Claude Code, Codex, or not known. One set
 of hooks serves every host; anything not recognised is treated as Claude Code.
+Since stage 8: what Baton reads of Codex -- `patch_files` (the files an apply_patch names and
+the lines it adds), `codex_calls` and `codex_context_tokens` (its rollout transcript). Claude
+Code's transcript is still read where it always was, in Stop and the prompt hook.
 
 Also here, since v3.29.0: everything a hook does with the session's environment or with a
 secret -- the board process's environment (BOARD_ENV), the masking of a key pasted into a
@@ -174,6 +177,134 @@ def host(payload, environ=None) -> str:
     if claude and not codex:
         return "claude"
     return "unknown"
+
+
+# An apply_patch text (Codex's file edit): `*** Add File: <path>`, `*** Update File: <path>`,
+# `*** Delete File: <path>`, and `*** Move to: <path>` under an Update, each followed by its hunks;
+# a line the edit adds starts with `+`. The format is in Codex's apply_patch tool description.
+_PATCH_FILE = re.compile(r"^\*\*\* (Add File|Update File|Delete File|Move to): (.+?)\s*$")
+
+
+def patch_files(patch: str, cwd: str = "") -> list:
+    """(path, added text) for each file an apply_patch text names, in order. A relative path is
+    read against `cwd`, as Codex applies it. A moved file is named twice, old and new path, both
+    with the lines the edit adds. Nothing that does not parse raises: an empty list."""
+    out, lines = [], None
+    for line in str(patch or "").splitlines():
+        m = _PATCH_FILE.match(line)
+        if m:
+            path = os.path.expanduser(m.group(2))
+            if cwd and not os.path.isabs(path):
+                path = os.path.join(cwd, path)
+            if m.group(1) != "Move to" or lines is None:
+                lines = []
+            out.append((path, lines))
+        elif line.startswith("*** End Patch"):
+            lines = None
+        elif lines is not None and line.startswith("+"):
+            lines.append(line[1:])
+    return [(path, "\n".join(added)) for path, added in out]
+
+
+def _epoch(stamp) -> float | None:
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+# Codex's rollout (`$CODEX_HOME/sessions/.../rollout-*.jsonl`): one `{timestamp, ordinal, type,
+# payload}` per line. Seen in the live probe of 14.11 (Codex CLI 0.169.0): the line types, and
+# that tool calls are `response_item` lines of payload type `custom_tool_call` (`exec`) and
+# `function_call` (`wait`), each answered by a `*_output`; the edit tool, apply_patch, did not
+# appear as an item of its own -- `exec` runs JavaScript that calls the tools inside it. The
+# fields read inside a payload (`name`, `input` / `arguments`, `call_id`, `cwd` of
+# `turn_context`, `info.last_token_usage.input_tokens` of `token_count`) are Codex's names as its
+# binary holds them, not a line the probe kept: the rollout carries account ids and was not
+# saved. Codex calls the format "not a stable interface for hooks", so every reader here fails
+# to None or 0, which is what Baton did before it read Codex at all.
+_CODEX_CALLS = {"function_call", "custom_tool_call"}
+_CODEX_OUTPUTS = {"function_call_output", "custom_tool_call_output"}
+
+
+def codex_calls(transcript: str) -> dict | None:
+    """What a Codex session's tool calls touched, as Stop's session_calls gives it for Claude
+    Code: {"files", "texts", "cwds", "windows"}. `files`: every path an apply_patch in a call
+    names (a call of its own, or inside exec's script, its newlines escaped or not); `texts`:
+    each call's input, apply_patch on its own excepted, as a Write's is; `cwds`: the turn's
+    working directory, for a call that runs commands; `windows`: from a call to its output,
+    ten minutes when none came. None when the file cannot be read or holds no call."""
+    files, texts, cwds, started, windows = set(), [], set(), {}, []
+    cwd = ""
+    try:
+        fh = open(transcript, "rb")
+    except (OSError, TypeError, ValueError):
+        return None
+    with fh:
+        for raw in fh:
+            if b'"payload"' not in raw:
+                continue
+            try:
+                obj = json.loads(raw.decode("utf-8", "replace"))
+                body = obj.get("payload")
+            except (ValueError, AttributeError):
+                continue
+            if not isinstance(body, dict):
+                continue
+            if obj.get("type") == "turn_context":
+                cwd = body.get("cwd") if isinstance(body.get("cwd"), str) else cwd
+                continue
+            if obj.get("type") != "response_item":
+                continue
+            kind, at, cid = body.get("type"), _epoch(obj.get("timestamp")), body.get("call_id")
+            if kind in _CODEX_OUTPUTS:
+                if cid in started:
+                    begun = started.pop(cid)
+                    windows.append((begun, at if at is not None else begun))
+                continue
+            if kind not in _CODEX_CALLS:
+                continue
+            name = str(body.get("name") or "")
+            args = body.get("input") if kind == "custom_tool_call" else body.get("arguments")
+            args = args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)
+            for text in {args, args.replace("\\n", "\n")}:
+                for path, _ in patch_files(text, cwd):
+                    files.add(os.path.normcase(os.path.abspath(path)))
+            if name == "apply_patch":
+                continue
+            texts.append(args)
+            if cwd:
+                cwds.add(os.path.normcase(os.path.abspath(cwd)))
+            if at is not None and cid:
+                started[cid] = at
+    windows += [(t, t + 600) for t in started.values()]
+    return ({"files": files, "texts": texts, "cwds": cwds, "windows": windows}
+            if files or texts or windows else None)
+
+
+def codex_context_tokens(transcript: str, tail_bytes: int) -> int:
+    """How much context Codex's last request was sent with: `input_tokens` of the last
+    `token_count` event's `last_token_usage` (cached input is part of it; Codex counts
+    non-cached input as a separate figure). Only the tail is read. 0 when nothing can be."""
+    try:
+        path = Path(transcript)
+        size = path.stat().st_size
+        with path.open("rb") as f:
+            f.seek(max(0, size - tail_bytes))
+            tail = f.read().decode("utf-8", "replace")
+    except (OSError, ValueError, TypeError):
+        return 0
+    for line in reversed(tail.splitlines()):
+        if '"token_count"' not in line:
+            continue
+        try:
+            body = json.loads(line)["payload"]
+            if body.get("type") != "token_count":
+                continue
+            return int(body["info"]["last_token_usage"]["input_tokens"])
+        except Exception:
+            continue
+    return 0
 
 
 def words(lang_dir, slot: str) -> list:

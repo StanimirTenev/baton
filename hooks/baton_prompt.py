@@ -373,7 +373,9 @@ def main() -> int:
     session = str(payload.get("session_id") or "")
     if not prompt.strip():
         return 0
-    tokens = context_tokens(str(payload.get("transcript_path") or ""))
+    transcript = str(payload.get("transcript_path") or "")
+    tokens = (_baton.codex_context_tokens(transcript, TAIL_BYTES)
+              if _baton.host(payload, os.environ) == "codex" else context_tokens(transcript))
     restart = restart_due(session, tokens) if tokens else False
     root, logbook = config()
     new = []

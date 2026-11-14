@@ -396,6 +396,9 @@ LOOK_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "TodoWrite"
 SHELL_TOOLS = {"Bash", "PowerShell"}
 _TOOL_USE = re.compile(rb'"type":\s*"tool_use"')
 _CALLS: dict = {}
+# Who called this run (_baton.host, set in main). Under Codex the transcript is its rollout, read
+# by _baton.codex_calls, where apply_patch is the write tool; anything else reads as Claude Code.
+HOST = "unknown"
 FOREIGN: dict = {}      # folder name -> files newer than the logbook no call of this session touched
 NEWER: dict = {}        # folder name -> this session's files newer than the logbook (row 141)
 
@@ -414,6 +417,9 @@ def session_calls(transcript: str | None) -> dict | None:
     if not transcript:
         return None
     if transcript in _CALLS:
+        return _CALLS[transcript]
+    if HOST == "codex" and _baton is not None:
+        _CALLS[transcript] = _baton.codex_calls(transcript)
         return _CALLS[transcript]
     main = Path(transcript)
     files, texts, cwds, started, windows = set(), [], set(), {}, []
@@ -1786,6 +1792,8 @@ def main() -> int:
     # `{}` it had no session start, so every folder's old debt was handed back to this turn.
     if not isinstance(payload, dict):
         return 0
+    global HOST
+    HOST = _baton.host(payload, os.environ)
     # "again": the pass after a hand-back (`stop_hook_active`). Any Stop counts as the end of the
     # turn; two in one turn are by design, so the doctor does not count them (row 49). Whether
     # and when Claude Code resets the flag is not documented, and nothing here depends on it.
