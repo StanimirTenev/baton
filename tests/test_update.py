@@ -99,6 +99,7 @@ def test_the_hook_tells_the_agent_even_when_there_are_no_tasks(tmp_path, root_ex
     hooks = tmp_path / "hooks"
     hooks.mkdir()
     shutil.copy(HOOK, hooks)
+    shutil.copy(HOOK.with_name("_baton.py"), hooks)     # the hook does nothing without it
     if root_exists:
         (tmp_path / "tasks").mkdir()
     (hooks / "baton.local.json").write_text(json.dumps(
@@ -129,6 +130,7 @@ def _hook_with_empty_root(tmp_path, talks: int, payload: str = ""):
     hooks = tmp_path / "hooks"
     hooks.mkdir()
     shutil.copy(HOOK, hooks)
+    shutil.copy(HOOK.with_name("_baton.py"), hooks)     # the hook does nothing without it
     (tmp_path / "tasks").mkdir()
     (hooks / "baton.local.json").write_text(json.dumps(
         {"home": str(tmp_path / "tasks"), "update_check": False}), "utf-8")

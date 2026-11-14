@@ -2,8 +2,8 @@
 
 Until stage 1 of the shared core (2026-11-14) it was three copies of the same code, in
 SessionStart, Stop and the prompt hook, that differed only in their docstrings. Each hook now
-calls the shared one, and keeps its old body for a hook run without a loadable _baton.py beside
-it -- which several tests do. Every case below is run both ways, so the two cannot drift apart.
+calls the shared one and nothing else (stage 3 removed the fallback bodies); a hook without
+_baton.py beside it says so on stderr instead of doing nothing (the last test below).
 
 The order, first set wins: BATON_HOME / BATON_LOGBOOK, the plugin's option, baton.local.json
 (`home`, `logbook`), then ~/tasks and LOGBOOK.md.
@@ -41,12 +41,10 @@ def clean(tmp_path, monkeypatch):
 
 
 def _both(name):
-    """config() through the shared copy, then through the hook's own fallback body."""
+    """config() as the hook answers it, and as _baton.config answers it directly."""
     mod = _load(name)
     shared = mod.config()
-    mod._baton = None
-    alone = mod.config()
-    assert shared == alone, "the hook's fallback and _baton.config disagree"
+    assert shared == mod._baton.config(mod._local_file)
     return shared
 
 
@@ -126,3 +124,24 @@ def test_the_hook_asks_the_shared_copy(clean, name):
     mod._baton.config = lambda local_file: seen.append(local_file) or ("sentinel", "S.md")
     assert mod.config() == ("sentinel", "S.md")
     assert seen == [mod._local_file], "the hook's own _local_file, not another"
+
+
+@pytest.mark.parametrize("name", NAMES + ("baton_batch", "baton_pretool"))
+def test_a_hook_without_baton_py_says_so(tmp_path, name):
+    """Until stage 3 a hook alone ran a fallback copy of config(); before that copy existed, it
+    crashed inside main() and exited 0 with nothing on stderr -- the heartbeat that would have
+    recorded the crash lives in _baton.py too. Now it names the missing file, and still exits 0,
+    as run.sh does when there is no Python: a hook never breaks the session. Batch and pretool
+    ask SessionStart's config() (`ss.config()`), so they need _baton.py as much."""
+    import shutil
+    import subprocess
+    import sys
+    alone = tmp_path / "hooks"
+    alone.mkdir()
+    for hook in NAMES + ("baton_batch", "baton_pretool"):    # all but _baton.py
+        shutil.copy(HOOKS / f"{hook}.py", alone)
+    out = subprocess.run([sys.executable, str(alone / f"{name}.py")], input="{}",
+                         capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, "a hook never breaks the session"
+    assert "_baton.py" in out.stderr and "did not run" in out.stderr, out.stderr
+    assert not out.stdout.strip()

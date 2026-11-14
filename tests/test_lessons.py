@@ -85,7 +85,7 @@ def test_l1_names_the_tool_where_install_sh_left_it(tmp_path):
     import shutil
     hookdir = tmp_path / "installed" / "hooks"
     hookdir.mkdir(parents=True)
-    for name in ("baton_stop.py", "baton_session_start.py"):
+    for name in ("baton_stop.py", "baton_session_start.py", "_baton.py"):
         shutil.copy(HOOKS / name, hookdir / name)
     tasks = tmp_path / "tasks"
     env = _env(tmp_path, tasks)

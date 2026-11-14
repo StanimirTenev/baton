@@ -198,22 +198,8 @@ def _local_file(name: str) -> Path:
 
 
 def config() -> tuple[Path, str]:
-    """Task root and logbook name: one resolution for every hook, `config` in hooks/_baton.py.
-    The body below is that resolution again, for a hook run without a loadable _baton.py beside
-    it (tests run hooks alone so); tests/test_config.py holds the two equal."""
-    shared = getattr(_baton, "config", None)
-    if shared is not None:
-        return shared(_local_file)
-    cfg = {}
-    try:
-        cfg = json.loads((_local_file("baton.local.json")).read_text("utf-8-sig"))
-    except Exception:
-        cfg = {}
-    home = (os.environ.get("BATON_HOME") or os.environ.get("CLAUDE_PLUGIN_OPTION_TASKS_FOLDER")
-            or cfg.get("home") or str(Path.home() / "tasks"))
-    logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
-               or cfg.get("logbook") or "LOGBOOK.md")
-    return Path(home).expanduser(), logbook
+    """Task root and logbook name: one resolution for every hook, `config` in hooks/_baton.py."""
+    return _baton.config(_local_file)
 
 
 BATON_VERSION = "3.33.0"   # bumped with every release; a test holds it to the README's top version
@@ -2413,6 +2399,12 @@ def _prune_turns(folder: Path, days: int = 14) -> None:
 
 
 if __name__ == "__main__":
+    if _baton is None:
+        # config() lives in _baton.py, so without it there is nothing this hook can do. Said
+        # on stderr with exit 0, as run.sh says "no Python": loud, but never breaking the session.
+        print(f"Baton: {Path(__file__).name} could not load _baton.py beside it; "
+              "the hook did not run.", file=sys.stderr)
+        sys.exit(0)
     _start()
     try:
         code = main()
