@@ -162,6 +162,17 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 ## Versions
 
+**v3.33.0** — a backslashed bar in a grep pattern is no longer noted as something sent out
+
+- **A `\|` in a search pattern is not a pipe to the outward-action note.** A `grep` whose pattern
+  held a release command between `\|` was written to `.baton-outside.md` as a release (row 142).
+  In Bash a backslashed `|`, `;`, `&` or `(` is a literal, so it no longer starts a command; a
+  backslash at the end of a line still joins it to the next. PowerShell, where `\` is a path
+  separator, keeps the old rule. Replayed over the Bash calls recorded on one machine: six false
+  notes go away and no real one is lost. A bare `|` inside quotes (`grep -E "a|b"`) still counts.
+- **A file let through once is not asked about every turn without a background agent either**
+  (row 146): the fix of v3.32.0 already covered it; a test now holds it.
+
 **v3.32.0** — a background job no longer brings the same hand-back every turn; L1's note reaches Bash
 
 - **A folder a turn let through without an entry is not handed back again for the same directories.**
