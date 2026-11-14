@@ -53,6 +53,7 @@ answers the hand-back with no entry is handed back once more, and then let throu
 | Code tab of the Claude desktop app | yes |
 | claude.ai chat (web, desktop, mobile) | **no** -- hooks are ignored, only the skills load, nothing is enforced |
 | Cowork | loads hooks, but Baton is untested there |
+| OpenAI Codex CLI | yes, since v3.34.0 -- four of the six hooks, set up by hand: [codex/README.md](codex/README.md) |
 
 **In a claude.ai chat nothing warns you:** the plugin looks installed and the skills load,
 but no hook runs ([platform support](https://claude.com/docs/plugins/platform-support)).
@@ -87,6 +88,8 @@ or that it crashed.
 - [Review tools](docs/review-tools.md) -- the optional review of an index against its files, duplicated state, reading order, the corpus
 - [Memory layout](docs/memory-layout.md) -- where an agent keeps what is true, beside the logbook of what was done
 - [Why this exists, and what it does not solve](docs/why.md)
+- [Codex CLI](codex/README.md) -- the same hooks under OpenAI Codex: setup, trust, what does not run there
+- [Languages](hooks/lang/README.md) -- the words the hooks recognise, one file per language
 
 Below: [Uninstall](#uninstall), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](#versions).
 
@@ -161,6 +164,29 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 
 ## Versions
+
+**v3.34.0** — the same hooks run under OpenAI Codex CLI; the words they recognise come from language files
+
+- **The same hooks run under OpenAI Codex CLI.** They are not copied for Codex: each one works out from what it is sent
+  which host called it (`host()` in `hooks/_baton.py`), and a host it does not recognise is treated
+  exactly like Claude Code. Under Codex the transcript is read by a reader of its own, and a file
+  edit made with `apply_patch` counts as a write, so lesson L1 and the Stop check see it.
+  [codex/README.md](codex/README.md) has the install steps, `codex/hooks.json` and the rules as an
+  `AGENTS.md` snippet. Checked with Codex CLI 0.169.0 in four live `codex exec` sessions on a
+  scratch home: the board reached the model, L1 fired on an `apply_patch`, Stop handed back the
+  one task with a newer file. **Not done yet:** four of six hooks only (Codex has no PostToolBatch
+  or StopFailure); the one line meant for the human is shown nowhere under `codex exec`, while the
+  board tells the model the human saw it; trusting the hooks through `/hooks` and Windows under
+  Codex were not tried.
+- **The words the hooks recognise come from language files.** Baton is in English; the words the hooks recognise in your logbooks and
+  messages (changed, gone, tests, the word for "task", ...) and the HTML board's labels now live in
+  `hooks/lang/<code>.json` -- `en` and `bg` today. Every installed language is recognised at once; a
+  new language is a new file, no code change ([hooks/lang/README.md](hooks/lang/README.md)).
+- **Nothing changes in Claude Code.** Tests replay the hooks of v3.33.0 and these on the same
+  inputs, and the output is the same byte for byte; two real sessions gave the same too.
+- **A hook whose `_baton.py` is missing now exits 1**, with the same line on stderr, so Claude Code
+  reports it as a failed hook instead of reading 0 as success. The hooks no longer carry their own
+  copies of the shared code. Only a broken install (a hook copied without `_baton.py`) sees it.
 
 **v3.33.0** — a backslashed bar in a grep pattern is no longer noted as something sent out
 
