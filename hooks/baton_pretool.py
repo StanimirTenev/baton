@@ -2,7 +2,7 @@
 """Baton -- PreToolUse hook: lesson L1, before the write, not only after it.
 
 L1 (the hour in a logbook heading is read from the clock, never typed) is caught at Stop, once
-the entry is already on disk. This surfaces it one step earlier: when a Write, Edit or Bash call is about
+the entry is already on disk. This surfaces it one step earlier: when a Write, Edit or Bash call (or Codex's apply_patch) is about
 to put a `## YYYY-MM-DD HH:MM --` heading into a logbook by hand, it says -- before the write --
 to use tools/baton_entry.py, which stamps the time itself. It is the first lesson keyed to the
 action that is about to happen, not to one already made.
@@ -115,12 +115,19 @@ def main() -> int:
     if tool == "Skill":
         count_skill((event.get("tool_input") or {}).get("skill"))
         return 0
-    if tool not in WRITERS and tool != "Bash":
-        return 0
     ti = event.get("tool_input") or {}
+    # Codex edits files with apply_patch: no file_path, the patch text in `command` (live probe,
+    # 14.11, Codex CLI 0.169.0 -- L1 said nothing there). Its paths and `+` lines are read per
+    # file. Only when host() says Codex: any other host keeps what it had.
+    patch = ti.get("command") if tool == "apply_patch" and _baton.host(event, os.environ) == "codex" else None
+    if patch is not None:
+        if not isinstance(patch, str) or not _TYPED_ANYWHERE.search(patch):
+            return 0
+    elif tool not in WRITERS and tool != "Bash":
+        return 0
     path = ti.get("file_path") or ""
     command = ti.get("command") if tool == "Bash" else None
-    if not path and not isinstance(command, str):
+    if not path and not isinstance(command, str) and patch is None:
         return 0
     if command is not None and not _TYPED_ANYWHERE.search(command):
         return 0                      # every Bash call comes here: the cheap test first
@@ -130,7 +137,13 @@ def main() -> int:
         _, logbook = ss.config()
     except Exception:
         return 0
-    if command is not None:
+    if patch is not None:
+        hits = [f for f, added in _baton.patch_files(patch, str(event.get("cwd") or ""))
+                if os.path.basename(f) == logbook and _TYPED_HOUR.search(added)]
+        if not hits:
+            return 0                  # no logbook gets a typed hour from this patch
+        path = hits[0]
+    elif command is not None:
         into = re.search(r">>?\s*[\"']?\S*" + re.escape(logbook), command)
         if (logbook not in command or not (into or _WRITES.search(command))
                 or not _TYPED_ANYWHERE.search(command) or _CLOCK_HEADING.search(command)):
