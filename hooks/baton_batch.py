@@ -210,12 +210,15 @@ def followed(session: str, calls: list | None, ss=None, state=None) -> bool:
 # user:password in a URL too, then every known key shape; a send keeps only its tool and recipient.
 # A backslashed `\|`, `\;`, `\&`, `\(` is a literal to the shell, quoted or not: `grep "a\|gh release
 # create"` was noted as a release (row 142, 10.11). A backslash before a newline joins the lines.
+# Bash only: in PowerShell a backslash is a path separator (`cd C:\dev\x\; git push`).
 OUTSIDE_FILE = ".baton-outside.md"
-OUTWARD = re.compile(
-    r"(?:^|(?<!\\)[|;&(\n])\s*(?:\w+=\S*\s+)*(?:sudo\s+)?"
+_OUTWARD_CMD = (
+    r"\s*(?:\w+=\S*\s+)*(?:sudo\s+)?"
     r"(?P<cmd>(?:git\s+(?:-C\s+(?P<repo>\S+)\s+)?push|gh\s+(?:pr|issue)\s+(?:create|comment)"
     r"|gh\s+release\s+(?:create|upload|edit|delete)|twine\s+upload|python[\d.]*\s+-m\s+twine\s+upload"
     r"|npm\s+publish)\b[^;&|\n]*)")
+OUTWARD = re.compile(r"(?:^|(?<!\\)[|;&(\n])" + _OUTWARD_CMD)
+OUTWARD_PS = re.compile(r"(?:^|[|;&(\n])" + _OUTWARD_CMD)          # PowerShell: `\` is a path separator
 _SECRET_ARG = re.compile(r"(?<!\S)(-p|--password|--token|--otp|--api-key)(=|\s+)\S+")
 _URL_USER = re.compile(r"//[^/@\s]+@")
 _LONG_QUOTE = re.compile(r"'[^']{30,}'|\"(?:[^\"\\]|\\.){30,}\"")
@@ -244,7 +247,9 @@ def outward(calls: list) -> list[tuple[str, str | None, str]]:
                 out.append((tool + (f" to {_short(to)[:60]}" if to else ""), None, ""))
         elif tool in ("Bash", "PowerShell"):
             command = _carried(HEREDOC_BODY.sub(r"\1", str(args.get("command", ""))))
-            for m in OUTWARD.finditer(command.replace("\\\n", " ")):     # `\` + newline: a space
+            found = (OUTWARD.finditer(command.replace("\\\n", " ")) if tool == "Bash"    # `\`+newline: a space
+                     else OUTWARD_PS.finditer(command))
+            for m in found:
                 out.append((_short(m.group("cmd")), m.group("repo"), command))
     return out
 

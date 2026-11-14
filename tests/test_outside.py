@@ -113,6 +113,17 @@ def test_a_real_separator_before_an_outward_command_is_still_one(tmp_path):
         assert what in said, (what, said)
 
 
+def test_in_powershell_a_backslash_is_a_path_not_an_escape(tmp_path):
+    """Row 142's rule is the shell's: in PowerShell `C:\\dev\\x\\` ends in a path separator."""
+    root = _tasks(tmp_path)
+    _batch(tmp_path, [{"tool_name": "PowerShell", "tool_input": {"command": "cd C:\\dev\\x\\; git push origin main"},
+                       "tool_response": "ok"},
+                      {"tool_name": "PowerShell", "tool_input": {"command": "cd C:\\dev\\x\\\nnpm publish"},
+                       "tool_response": "ok"}])
+    said = (root / ".baton-outside.md").read_text("utf-8")
+    assert "git push origin main" in said and "npm publish" in said, said
+
+
 def test_the_note_is_not_counted_as_unrecorded_work(tmp_path):
     root = _tasks(tmp_path)
     _batch(tmp_path, [_bash("git push -u origin main")], cwd=str(tmp_path / "dev" / "scanner"))
