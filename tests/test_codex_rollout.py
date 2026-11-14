@@ -79,7 +79,9 @@ def test_a_reader_that_cannot_read_says_none():
     assert core.codex_context_tokens("/nonexistent/rollout.jsonl", 1024) == 0
 
 
-# Through the hook: the probe's r4, made a test.
+# Through the hook: the shape of the probe's r4 -- a file another process wrote, in a folder no
+# call named. In r4 itself bird.txt was saved 1.3 s before the `sleep` call began, inside
+# CALL_SLACK_S, so that very timing would still be handed back; here it is outside every call.
 
 def _ts(t: float) -> str:
     return datetime.fromtimestamp(t, timezone.utc).isoformat().replace("+00:00", "Z")
