@@ -93,6 +93,8 @@ if [ "$DRY_RUN" = 1 ]; then
 else
   mkdir -p "$HOOKDIR"
   cp "$REPO/hooks/baton_session_start.py" "$REPO/hooks/baton_stop.py" "$REPO/hooks/baton_prompt.py" "$REPO/hooks/baton_batch.py" "$REPO/hooks/baton_stop_failure.py" "$REPO/hooks/baton_pretool.py" "$REPO/hooks/_baton.py" "$HOOKDIR/"
+  mkdir -p "$HOOKDIR/lang"
+  cp "$REPO"/hooks/lang/*.json "$HOOKDIR/lang/"   # the words each language is recognised by
   say "hooks copied to $HOOKDIR"
 fi
 

@@ -16,6 +16,8 @@ The heartbeat never raises: a hook must do its work even if its own bookkeeping 
 Also here, since the core's stage 1 (2026-11-14): `config`, where the tasks are and what the
 logbook is called. It was three copies of the same code in SessionStart, Stop and the prompt
 hook; each hook keeps a `config()` of its own that calls this one with its own `_local_file`.
+Since stage 4: `words` and `alternation`, the recognised words of every language file in
+hooks/lang, joined into the patterns of Stop and the prompt hook.
 
 Also here, since v3.29.0: everything a hook does with the session's environment or with a
 secret -- the board process's environment (BOARD_ENV), the masking of a key pasted into a
@@ -120,6 +122,37 @@ def config(local_file) -> tuple[Path, str]:
     logbook = (os.environ.get("BATON_LOGBOOK") or os.environ.get("CLAUDE_PLUGIN_OPTION_LOGBOOK")
                or cfg.get("logbook") or "LOGBOOK.md")
     return Path(home).expanduser(), logbook
+
+def words(lang_dir, slot: str) -> list:
+    """The pattern fragments every installed language gives for `slot`, from the `words` of each
+    lang_dir/<code>.json: en first, then the rest by code, each file's own order kept (an
+    alternation takes the first that matches, not the longest). A file that is not a JSON object,
+    a slot that is not a list, or a fragment that does not compile is skipped: one bad language
+    file must not stop every hook. hooks/lang/README.md says how to add a language."""
+    out = []
+    try:
+        files = sorted(Path(lang_dir).glob("*.json"), key=lambda f: (f.stem != "en", f.stem))
+    except OSError:
+        return out
+    for f in files:
+        try:
+            got = json.loads(f.read_text("utf-8-sig")).get("words", {}).get(slot, [])
+        except Exception:
+            continue
+        for fragment in got if isinstance(got, list) else ():
+            try:
+                re.compile(fragment)
+            except (re.error, TypeError):
+                continue
+            out.append(fragment)
+    return out
+
+
+def alternation(fragments: list) -> str:
+    """`a|b|c`; with nothing installed, a pattern that never matches. The empty one would match
+    everywhere: with no lang folder, every line would read as a claim."""
+    return "|".join(fragments) if fragments else "(?!)"
+
 
 # What the board process gets from the session's environment: where to run and what to read
 # (PATH, home, temp, locale; Windows needs SYSTEMROOT to start Python at all), where Baton keeps

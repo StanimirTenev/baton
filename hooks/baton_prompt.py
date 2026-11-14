@@ -30,6 +30,28 @@ import re
 import sys
 from pathlib import Path
 
+
+# Loaded before the patterns below, which are built from the language files at import (stage 4).
+def _load_baton():
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_baton", Path(__file__).with_name("_baton.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None          # bookkeeping must never stop the hook doing its work
+
+
+_baton = _load_baton()
+_LANG = Path(__file__).with_name("lang")
+
+
+def _words(slot: str) -> str:
+    """The alternatives for `slot` from every language file in hooks/lang: _baton.words."""
+    return _baton.alternation(_baton.words(_LANG, slot)) if _baton else "(?!)"
+
+
 MAX_TASKS = 3
 RESTART_AT = 200_000      # tokens of context at which a restart is first suggested
 RESTART_STEP = 100_000    # and again every this many more
@@ -164,7 +186,7 @@ def last_entry(text: str) -> str:
 # `task 12` anywhere; a bare number only as the first word of the message, or the last of one of
 # at most five words (`преди 11 дни` is three words and names nothing). Never a number touching
 # a letter or digit, after `.:/,-`, or before `.:/,-)` -- `0.37.0`, `10:30`, `2026-10-28`, `1.`.
-_MARKED_ID = re.compile(r"(?:#|№\s?|\b(?:задача(?:та)?|task)\s+)([1-9]\d*)(?![\w.:/,\-)])",
+_MARKED_ID = re.compile(r"(?:#|№\s?|\b(?:" + _words("task_word") + r")\s+)([1-9]\d*)(?![\w.:/,\-)])",
                         re.IGNORECASE)
 _BARE_ID = re.compile(r"(?<![\w.:/,\-#№])([1-9]\d*)(?![\w.:/,\-)])")
 SHORT_WORDS = 5
@@ -437,18 +459,6 @@ def _turn(event: str, session: object, extra: str = "") -> None:
         pass
 
 
-def _load_baton():
-    try:
-        spec = importlib.util.spec_from_file_location(
-            "_baton", Path(__file__).with_name("_baton.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-    except Exception:
-        return None          # bookkeeping must never stop the hook doing its work
-
-
-_baton = _load_baton()
 _HEARTBEAT = _baton.Heartbeat(__file__) if _baton else None
 
 

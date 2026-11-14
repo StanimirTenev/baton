@@ -123,6 +123,8 @@ if ($DryRun) {
     Copy-Item (Join-Path $Repo "hooks\baton_stop_failure.py") $HookDir -Force
     Copy-Item (Join-Path $Repo "hooks\_baton.py") $HookDir -Force
     Copy-Item (Join-Path $Repo "hooks\baton_pretool.py") $HookDir -Force
+    New-Item -ItemType Directory -Force -Path (Join-Path $HookDir "lang") | Out-Null
+    Copy-Item (Join-Path $Repo "hooks\lang\*.json") (Join-Path $HookDir "lang") -Force   # the words each language is recognised by
     Say "hooks copied to $HookDir"
 }
 

@@ -254,10 +254,13 @@ def open_board(source, root: Path, logbook: str) -> None:
         if tool is None:
             return
         lang = str(cfg.get("board_language") or "en")
+        # Any language with a file beside the board's hooks (hooks/lang/<code>.json), the set
+        # the board's --lang accepts: matched against the names there, no path built from it.
+        langs = {f.stem for f in (tool.parent.parent / "hooks" / "lang").glob("*.json")}
         # Started by hooks/_baton.py with only the names in its BOARD_ENV: the environment is
         # handled in a file that names no address (the plugin directory's hold, 30.10).
         _baton.start_board([sys.executable, str(tool), "--out", str(_local_file("baton.board.html")),
-                            "--open", "--lang", lang if lang in ("en", "bg") else "en"],
+                            "--open", "--lang", lang if lang in langs else "en"],
                            root, logbook)
     except Exception:
         pass          # a view of the board is a courtesy; never a reason to fail the session
@@ -713,6 +716,12 @@ def install_drift() -> list[str]:
                   for d in sorted((src.parent / "skills").iterdir()) if (d / "SKILL.md").is_file()]
     except OSError:
         pass
+    # And the language files (stage 4): without them the hooks recognise no word, silently.
+    try:
+        pairs += [(f"lang/{f.name}", Path(__file__).with_name("lang") / f.name, f)
+                  for f in sorted((src / "lang").glob("*.json"))]
+    except OSError:
+        pass
     out = []
     for name, here, there in pairs:
         try:
@@ -787,6 +796,13 @@ def plugin_drift() -> str | None:
                     differ.append(hook)
             except OSError:
                 differ.append(f"{hook} (missing)")
+        # The language files too: without them no word is recognised (stage 4).
+        for f in sorted((release / "hooks" / "lang").glob("*.json")):
+            try:
+                if (root / "hooks" / "lang" / f.name).read_bytes() != f.read_bytes():
+                    differ.append(f"lang/{f.name}")
+            except OSError:
+                differ.append(f"lang/{f.name} (missing)")
         # The skills too, as install_drift has since row 51 (row 86, 23.10).
         try:
             released = sorted(d for d in (release / "skills").iterdir() if (d / "SKILL.md").is_file())
