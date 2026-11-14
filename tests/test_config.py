@@ -130,8 +130,9 @@ def test_the_hook_asks_the_shared_copy(clean, name):
 def test_a_hook_without_baton_py_says_so(tmp_path, name):
     """Until stage 3 a hook alone ran a fallback copy of config(); before that copy existed, it
     crashed inside main() and exited 0 with nothing on stderr -- the heartbeat that would have
-    recorded the crash lives in _baton.py too. Now it names the missing file, and still exits 0,
-    as run.sh does when there is no Python: a hook never breaks the session. Batch and pretool
+    recorded the crash lives in _baton.py too. Now it names the missing file and exits 1: a
+    non-blocking error the host shows (2 would block), so a broken install reports a failure, not a
+    success. Batch and pretool
     ask SessionStart's config() (`ss.config()`), so they need _baton.py as much; StopFailure's one
     job, the turn line, is _baton.turn since stage 5."""
     import shutil
@@ -143,6 +144,6 @@ def test_a_hook_without_baton_py_says_so(tmp_path, name):
         shutil.copy(HOOKS / f"{hook}.py", alone)
     out = subprocess.run([sys.executable, str(alone / f"{name}.py")], input="{}",
                          capture_output=True, text=True, timeout=30)
-    assert out.returncode == 0, "a hook never breaks the session"
+    assert out.returncode == 1, "an error the host shows, never 0 (silent) or 2 (a block)"
     assert "_baton.py" in out.stderr and "did not run" in out.stderr, out.stderr
     assert not out.stdout.strip()

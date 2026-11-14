@@ -2108,10 +2108,10 @@ if __name__ == "__main__":
             sys.exit(0)
     if _baton is None:
         # config() lives in _baton.py, so without it there is nothing this hook can do. Said
-        # on stderr with exit 0, as run.sh says "no Python": loud, but never breaking the session.
+        # on stderr with exit 1: a non-blocking error the host shows, never a block (that is 2).
         print(f"Baton: {Path(__file__).name} could not load _baton.py beside it; "
               "the hook did not run.", file=sys.stderr)
-        sys.exit(0)
+        sys.exit(1)
     _start()
     try:
         code = main()

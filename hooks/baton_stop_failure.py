@@ -68,10 +68,10 @@ def _beat(crash: BaseException | None = None) -> None:
 if __name__ == "__main__":
     if _baton is None:
         # The turn line is written by _baton.py, so without it there is nothing this hook can
-        # do. Said on stderr with exit 0, as the other hooks and run.sh do.
+        # do. Said on stderr with exit 1, as the other hooks do: shown, never a block.
         print(f"Baton: {Path(__file__).name} could not load _baton.py beside it; "
               "the hook did not run.", file=sys.stderr)
-        sys.exit(0)
+        sys.exit(1)
     _start()
     try:
         code = main()
