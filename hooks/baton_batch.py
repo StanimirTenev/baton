@@ -208,9 +208,11 @@ def followed(session: str, calls: list | None, ss=None, state=None) -> bool:
 # starts, after heredoc bodies and carried text are cut (L2's lesson: an entry that mentions
 # `gh pr create` is not one). Never a secret: what follows -p/--password/--token is masked, a
 # user:password in a URL too, then every known key shape; a send keeps only its tool and recipient.
+# A backslashed `\|`, `\;`, `\&`, `\(` is a literal to the shell, quoted or not: `grep "a\|gh release
+# create"` was noted as a release (row 142, 10.11). A backslash before a newline joins the lines.
 OUTSIDE_FILE = ".baton-outside.md"
 OUTWARD = re.compile(
-    r"(?:^|[|;&(\n])\s*(?:\w+=\S*\s+)*(?:sudo\s+)?"
+    r"(?:^|(?<!\\)[|;&(\n])\s*(?:\w+=\S*\s+)*(?:sudo\s+)?"
     r"(?P<cmd>(?:git\s+(?:-C\s+(?P<repo>\S+)\s+)?push|gh\s+(?:pr|issue)\s+(?:create|comment)"
     r"|gh\s+release\s+(?:create|upload|edit|delete)|twine\s+upload|python[\d.]*\s+-m\s+twine\s+upload"
     r"|npm\s+publish)\b[^;&|\n]*)")
@@ -242,7 +244,7 @@ def outward(calls: list) -> list[tuple[str, str | None, str]]:
                 out.append((tool + (f" to {_short(to)[:60]}" if to else ""), None, ""))
         elif tool in ("Bash", "PowerShell"):
             command = _carried(HEREDOC_BODY.sub(r"\1", str(args.get("command", ""))))
-            for m in OUTWARD.finditer(command):
+            for m in OUTWARD.finditer(command.replace("\\\n", " ")):     # `\` + newline: a space
                 out.append((_short(m.group("cmd")), m.group("repo"), command))
     return out
 

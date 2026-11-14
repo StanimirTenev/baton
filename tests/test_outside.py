@@ -90,6 +90,29 @@ def test_what_is_only_written_about_is_not_an_action(tmp_path):
     assert out == {} and not list(root.rglob(".baton-outside.md")), out
 
 
+def test_an_escaped_bar_in_a_pattern_is_no_pipe(tmp_path):
+    """Row 142 (10.11): `grep "...\\|gh release create\\|..."` was noted as a release. A `\\|` is a
+    literal bar to the shell, quoted or not; so are `\\;`, `\\&` and `\\(`."""
+    root = _tasks(tmp_path)
+    out = _batch(tmp_path, [_bash('grep -rn "marketplace update\\|gh release create\\|git tag -a" .'),
+                            _bash("grep 'a\\|git push\\|b' f"),
+                            _bash("find . -name x -exec echo {} \\; git push"),
+                            _bash("echo x \\& npm publish")])
+    assert out == {} and not list(root.rglob(".baton-outside.md")), out
+
+
+def test_a_real_separator_before_an_outward_command_is_still_one(tmp_path):
+    root = _tasks(tmp_path)
+    _batch(tmp_path, [_bash("git status | cat; git push origin main"),
+                      _bash('bash -c "cd /x && gh release create v2.0.0"'),
+                      _bash("ssh host 'cd x; npm publish'"),
+                      _bash("git tag -a v1.0.0 -m x && \\\ngh release create v1.0.0 --notes-file n.md")])
+    said = (root / ".baton-outside.md").read_text("utf-8")
+    for what in ("git push origin main", "gh release create v2.0.0", "npm publish",
+                 "gh release create v1.0.0"):
+        assert what in said, (what, said)
+
+
 def test_the_note_is_not_counted_as_unrecorded_work(tmp_path):
     root = _tasks(tmp_path)
     _batch(tmp_path, [_bash("git push -u origin main")], cwd=str(tmp_path / "dev" / "scanner"))
