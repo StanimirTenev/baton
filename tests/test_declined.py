@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
 
 from test_handback import _counts, _setup, _stop, _entry
 
@@ -93,3 +94,25 @@ def test_another_session_is_handed_back_as_before(tmp_path):
     _decline(env, tr)
     _file(folder, "mer/run-2.json", ago=300)
     assert _stop(env, tr, session="other").get("decision") == "block"
+
+
+def test_a_foreground_file_touched_after_this_session_s_entry_is_not_asked_every_turn(tmp_path):
+    """Row 146 (12.11, under 3.31.0): no background agent. The session wrote an entry, then fixed
+    an hour inside a file of the folder, which made it newer than the logbook; the agent said no
+    entry is needed, and Stop asked again three turns running. Here, and at the folder's root."""
+    for rel in ("konkurenti/kwant-2026-11-12.md", "kwant.md"):
+        here = tmp_path / rel.replace("/", "_")
+        env, folder, book, tr = _setup(here)
+        _file(folder, rel, ago=1200)
+        head, rest = book.read_text("utf-8").split("\n\n", 1)
+        book.write_text(f"{head}\n\n## {datetime.now():%Y-%m-%d %H:%M} — kwant\n\n" + "".join(
+            f"### {s}\n{s}: {rel}, a full sentence about the work, long enough to count as said.\n"
+            for s in ("What was asked", "Done", "Result", "Open")) + "\n" + rest, "utf-8")
+        old = time.time() - 900
+        os.utime(book, (old, old))
+        assert _stop(env, tr).get("decision") != "block"            # sees the new entry
+        _file(folder, rel, ago=500)                                   # the hour in it corrected
+        _decline(env, tr)
+        for _ in range(3):
+            out = _stop(env, tr)
+            assert out.get("decision") != "block", (rel, out)
