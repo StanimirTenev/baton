@@ -1,0 +1,9 @@
+{
+ "session_id": "01a1d951-b863-7a90-90ea-2a752d4126b7",
+ "transcript_path": "/work/codex-probe/home/sessions/2026/11/14/rollout-2026-11-14T11-09-33-01a1d951-b863-7a90-90ea-2a752d4126b7.jsonl",
+ "cwd": "/work/codex-probe/proj",
+ "hook_event_name": "SessionStart",
+ "model": "gpt-6.1-sol",
+ "permission_mode": "bypassPermissions",
+ "source": "startup"
+}

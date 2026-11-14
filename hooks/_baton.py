@@ -19,6 +19,8 @@ hook; each hook keeps a `config()` of its own that calls this one with its own `
 Since stage 5: `turn`, the line each hook adds to `baton.turns/<session>` (four copies before).
 Since stage 4: `words` and `alternation`, the recognised words of every language file in
 hooks/lang, joined into the patterns of Stop and the prompt hook.
+Since stage 7: `host`, which agent host is calling -- Claude Code, Codex, or not known. One set
+of hooks serves every host; anything not recognised is treated as Claude Code.
 
 Also here, since v3.29.0: everything a hook does with the session's environment or with a
 secret -- the board process's environment (BOARD_ENV), the masking of a key pasted into a
@@ -140,6 +142,38 @@ def turn(hookfile: str, event: str, session: object, extra: str = "") -> None:
             fh.write(f"{datetime.now().isoformat()} {event} {extra}".rstrip() + "\n")
     except Exception:
         pass
+
+
+# Which host is calling, from what it sends -- never from the environment. The environment is
+# inherited, so it proves nothing: Codex started from a Claude Code shell carries CLAUDE_CODE_*
+# and CLAUDE_PID (the live probe of 14.11, Codex CLI 0.169.0), and Codex itself sets
+# CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA for plugin hooks (its hooks docs). What does tell them
+# apart, in every payload the probe dumped: Codex's transcript is
+# `sessions/YYYY/MM/DD/rollout-<YYYY-MM-DDTHH-MM-SS>-<session_id>.jsonl`, and every event but
+# SessionStart carries `turn_id`, which its docs call a Codex-specific extension. Claude Code's
+# transcript is `<session_id>.jsonl` and it sends no `turn_id`. `model` and `permission_mode`
+# are not used: Codex sends both, and so does Claude Code (`permission_mode` on most events,
+# `model` on SessionStart). Evidence for both hosts, or none, is "unknown"; every caller treats
+# "unknown" exactly as "claude", so only a Codex payload changes what a hook does.
+_ROLLOUT = re.compile(r"rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.jsonl")
+
+
+def host(payload, environ=None) -> str:
+    """"claude", "codex" or "unknown" for one hook's stdin payload. `environ` is taken and not
+    read (see above): the signature says it was considered."""
+    if not isinstance(payload, dict):
+        return "unknown"
+    sid = str(payload.get("session_id") or "")
+    name = os.path.basename(str(payload.get("transcript_path") or "").replace("\\", "/"))
+    rollout = _ROLLOUT.fullmatch(name)
+    codex = (isinstance(payload.get("turn_id"), str) and bool(payload["turn_id"])) or bool(
+        rollout and (not sid or rollout.group(1) == sid))
+    claude = bool(sid) and name == f"{sid}.jsonl"
+    if codex and not claude:
+        return "codex"
+    if claude and not codex:
+        return "claude"
+    return "unknown"
 
 
 def words(lang_dir, slot: str) -> list:
