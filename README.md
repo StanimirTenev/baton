@@ -91,7 +91,7 @@ or that it crashed.
 - [Codex CLI](codex/README.md) -- the same hooks under OpenAI Codex: setup, trust, what does not run there
 - [Languages](hooks/lang/README.md) -- the words the hooks recognise, one file per language
 
-Below: [Uninstall](#uninstall), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](#versions).
+Below: [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](#versions).
 
 ## Uninstall
 
@@ -108,6 +108,57 @@ delete the Baton section from `~/.claude/CLAUDE.md` (the heading
 
 Either way, your task folders are plain directories of plain Markdown -- they keep working
 without any of this, which is the point.
+
+## What Baton reads, writes and injects
+
+Baton changes what Claude Code knows at the start of a session: that is what it is for, and
+you install it for that. Everything it hands over comes from files on your disk that you can
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.34.0.
+
+**Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
+Baton's own settings; the session's transcript file that Claude Code writes, for the times,
+the size of the context, and the messages you typed and the agent's text replies since the
+last logbook entry; at session start, the previous session's transcript in the same project
+folder (the messages you typed and their times, set beside the entries written then) and, while
+you have no task folders, how many earlier transcripts there are, to offer `/baton-inventory`;
+the text of tool results, for an empty or failed read; and the text about to go into a logbook,
+for a typed hour in a heading. These are Claude Code's own files on your disk; Baton reads them
+there and asks nothing of Claude's memory or of any service.
+
+**Writes:**
+
+| where | what |
+|---|---|
+| your task root | the root itself, if it is missing, at the first session |
+| `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear` |
+| `.baton-outside.md` in a task folder (or the task root) | one line when a command sent something off this machine (a push, a pull request or issue, a release, an upload to PyPI or npm), to be put in that task's next entry |
+| Baton's state folder (`${CLAUDE_PLUGIN_DATA}` as a plugin, beside the hooks for a script install) | when each hook last ran, per-session notes, the lesson counts, the output of a test command you pinned, and the moved conversation files, deleted at a later session start once 7 days old |
+| `~/.claude/settings.json`, `~/.claude/CLAUDE.md` | **script install only**: the six hook entries and the Baton section, each with a copy of the file as it was. As a plugin neither file is touched |
+
+The hooks never write a logbook; the agent does, and you can read every entry.
+
+**Injects** into the agent's context, as hook output:
+
+- at session start: the board (your task names and the header lines of their logbooks), the
+  last 2,500 characters of the kept conversation with the path to the rest, and notices about
+  Baton itself; as a plugin also Baton's rules, the text of `templates/CLAUDE.md` shipped with it;
+- when a message names a task: which task, the date of its last entry, its next step, and that
+  the logbook is to be read first;
+- before a write: a note when a logbook heading carries a typed hour. It never allows or blocks
+  a tool call;
+- after a batch of tool calls: a note when a read came back empty or failed, and the line
+  written to `.baton-outside.md`;
+- at the end of a turn: the turn is handed back when work is newer than the logbook, or when much
+  was said since the last entry.
+
+**Not done:** no profile of you is built, nothing of the conversation leaves the machine, and no
+instruction is fetched from anywhere. As a plugin the hooks make no network request. Installed
+by script, the opt-in weekly update check fetches the latest release number and its page
+address, and only those two go into a fixed sentence; see the table below. A test command
+you pinned yourself is the one command the hooks run that is not their own.
+
+**To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.34.0.
 
 ## What Baton sends over the network
 
