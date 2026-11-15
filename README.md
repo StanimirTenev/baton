@@ -151,8 +151,9 @@ The hooks never write a logbook; the agent does, and you can read every entry.
 - at the end of a turn: the turn is handed back when work is newer than the logbook, or when much
   was said since the last entry.
 
-**Not done:** no profile of you is built, nothing of the conversation leaves the machine, and no
-instruction is fetched from anywhere. As a plugin the hooks make no network request. Installed
+**Not done:** no profile of you is built, the hooks send nothing of the conversation anywhere,
+and no instruction is fetched from anywhere. As a plugin the hooks make no network request; the
+review tools you run by hand send the text under review, as the table below says. Installed
 by script, the opt-in weekly update check fetches the latest release number and its page
 address, and only those two go into a fixed sentence; see the table below. A test command
 you pinned yourself is the one command the hooks run that is not their own.
