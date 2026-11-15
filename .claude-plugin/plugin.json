@@ -1,7 +1,7 @@
 {
   "name": "baton",
   "displayName": "Baton",
-  "version": "3.34.0",
+  "version": "3.34.1",
   "description": "Baton is a Claude Code plugin: hooks that keep every task in a folder with a logbook. A session opens on the board of what is whose move, a turn that leaves work unrecorded is handed back, a message naming a task brings up its record. Hooks run in Claude Code (terminal, IDE, desktop Code tab); in claude.ai chat only the skills load. Installed from claude.ai? Open Claude Code on the same account. The hooks make no network requests; the opt-in review tools, run by hand, send text to OpenRouter.",
   "icon": "./icon.png",
   "author": {
@@ -35,7 +35,7 @@
     "tasks_folder": {
       "type": "directory",
       "title": "Task folder",
-      "description": "Where your task folders live: one folder per task, each with its logbook. Created at the first session if it is missing; Baton only reads it and names what it finds.",
+      "description": "Where your task folders live: one folder per task, each with its logbook. Created at the first session if it is missing. The agent writes the logbook entries; the hooks read the folders and keep a few files of their own there: the conversation since the last entry (.baton-chat/), the task numbers (.baton-ids.json) and a note of what was sent off this machine (.baton-outside.md).",
       "default": "~/tasks"
     },
     "logbook": {

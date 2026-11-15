@@ -121,8 +121,8 @@ the size of the context, and the messages you typed and the agent's text replies
 last logbook entry; at session start, the previous session's transcript in the same project
 folder (the messages you typed and their times, set beside the entries written then) and, while
 you have no task folders, how many earlier transcripts there are, to offer `/baton-inventory`;
-the text of tool results, for an empty or failed read; and the text about to go into a logbook,
-for a typed hour in a heading. These are Claude Code's own files on your disk; Baton reads them
+the text of tool results, for an empty or failed read (lesson L2); and the text about to go into a
+logbook, for a typed hour in a heading (lesson L1). These are Claude Code's own files on your disk; Baton reads them
 there and asks nothing of Claude's memory or of any service.
 
 **Writes:**
@@ -130,6 +130,7 @@ there and asks nothing of Claude's memory or of any service.
 | where | what |
 |---|---|
 | your task root | the root itself, if it is missing, at the first session |
+| `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear` |
 | `.baton-outside.md` in a task folder (or the task root) | one line when a command sent something off this machine (a push, a pull request or issue, a release, an upload to PyPI or npm), to be put in that task's next entry |
 | Baton's state folder (`${CLAUDE_PLUGIN_DATA}` as a plugin, beside the hooks for a script install) | when each hook last ran, per-session notes, the lesson counts, the output of a test command you pinned, and the moved conversation files, deleted at a later session start once 7 days old |
@@ -175,11 +176,8 @@ schedule except the opt-in update check above. The one command the hooks run tha
 own is a test command **you** pinned in `baton.local.json` (lesson L4, since v3.21.0): run on this
 machine after a turn whose entry says tests pass, and never without that pin.
 
-What the hooks read, all on this machine: the task folders and their logbooks; the session's
-transcript (`transcript_path`) — its first timestamp, for when the session began, and how
-full its context was at the last answer, for the restart reminder; at session start, the previous transcript
-in the same project folder — the messages the human typed and its times, to set beside the
-entries written then; the text of tool results, for an empty or failed read (lesson L2); and, before a Write or Edit, the text about to go into a logbook, for a typed hour in a heading (lesson L1). Nothing of it leaves the machine. The review tools send only with the
+What the hooks read, write and hand to the agent, all on this machine, is in
+[What Baton reads, writes and injects](#what-baton-reads-writes-and-injects). The review tools send only with the
 key given to Baton by `tools/baton_key.py` — never a key found in the environment or in
 another tool's files.
 
@@ -216,6 +214,20 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 
 ## Versions
+
+**v3.34.1** — the README says what Baton reads, writes and injects; no change to the hooks
+
+- **The README says in one place what Baton reads, writes and injects.** A new section,
+  [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), lists the files the
+  hooks read, every file they write (the kept conversation in `.baton-chat/`, the task numbers in
+  `.baton-ids.json`, `.baton-outside.md`, the state folder, and for a script install `~/.claude/settings.json` and `CLAUDE.md`), what each
+  hook puts into the agent's context, and how to remove what was kept. The shorter paragraph under
+  the network section that covered the same reads, without the kept conversation, now points there.
+- **The plugin's setting for the task folder no longer says Baton only reads it.** The agent writes
+  the logbook entries there, and the hooks keep `.baton-chat/`, `.baton-ids.json` and
+  `.baton-outside.md` in it; the description now says so. The README's table of what Baton writes
+  gains `.baton-ids.json`, which it had left out.
+- **The hooks are those of v3.34.0.** Only the version number changed in them.
 
 **v3.34.0** — the same hooks run under OpenAI Codex CLI; the words they recognise come from language files
 
