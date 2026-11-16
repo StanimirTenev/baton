@@ -269,6 +269,9 @@ SPHERE = (
     "our own office car park, we buy the equipment (no public network / not a CPO)",
     "a charging network open to the public sector and public bodies",
     "only public data and public records were read",
+    # The one live re-run on the fixed code (16.11, 17:14) still handed back, over this line:
+    "Still company-level public facts only; no individuals, no contact details.",
+    "only public reports and public filings", "публични факти и отчети",
     "от публични източници, без лични данни", "публична информация за фирмите",
     "частно лице, не фирма", "публичните данни на регистъра",
 )

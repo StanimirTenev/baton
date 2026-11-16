@@ -291,8 +291,9 @@ and wrong pointers it showed (ZA-OPRAVYANE rows 160-165).
   sessions of a desk-research task over them. A new class beside `key`, `sphere` in `hooks/lang`
   (en, bg): the word with the noun that gives it that sense. A repo, page, post or fork that is
   public or private still asks for the claims section. On the logbooks of the author's machine
-  379 of 2,906 entries fired before and 369 after; each of the 10 dropped was read, all were the
-  sphere sense. The other 369 were not read one by one, and other senses remain among them.
+  379 of 2,906 entries fired before and 368 after; each of the 11 dropped was read, all were the
+  sphere sense. The other 368 were not read one by one, and other senses remain among them: the
+  class is a list of nouns by sense, and a live re-run found one more ("public facts") it lacked.
 - **The L1 note before a write comes only for a typed hour the logbook does not hold yet.** It came
   three times for edits that kept an existing heading and added a section under it (a Claude
   Edit twice, a Codex Python replace once). The note compares the date-and-hour stamps of the

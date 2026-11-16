@@ -14,6 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from conftest import child_env
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -47,11 +48,13 @@ def test_the_plugin_rules_name_the_tool_s_path(tmp_path):
     _named_here(rules)
 
 
-def test_the_installed_rules_name_the_tool_s_path(tmp_path):
-    """install.sh, install.ps1 and the Codex install (AGENTS.md) all write the rules with this."""
+@pytest.mark.parametrize("template", ["templates/CLAUDE.md", "codex/AGENTS.md.snippet"])
+def test_the_installed_rules_name_the_tool_s_path(tmp_path, template):
+    """install.sh and install.ps1 pass templates/CLAUDE.md; the Codex install (codex/README.md,
+    step 4) passes codex/AGENTS.md.snippet. Both write the rules with the tool's path."""
     target = tmp_path / "AGENTS.md"
     r = subprocess.run([sys.executable, str(ROOT / "hooks" / "_install_rules.py"),
-                        str(ROOT / "templates" / "CLAUDE.md"), str(target), "/x/tasks", "LOGBOOK.md", "0"],
+                        str(ROOT / template), str(target), "/x/tasks", "LOGBOOK.md", "0"],
                        capture_output=True, text=True, env=child_env())
     assert r.returncode == 0, r.stderr
     _named_here(target.read_text("utf-8"))
