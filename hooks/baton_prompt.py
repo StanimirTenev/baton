@@ -374,8 +374,9 @@ def main() -> int:
     if not prompt.strip():
         return 0
     transcript = str(payload.get("transcript_path") or "")
+    host = _baton.host(payload, os.environ)
     tokens = (_baton.codex_context_tokens(transcript, TAIL_BYTES)
-              if _baton.host(payload, os.environ) == "codex" else context_tokens(transcript))
+              if host == "codex" else context_tokens(transcript))
     restart = restart_due(session, tokens) if tokens else False
     root, logbook = config()
     new = []
@@ -429,6 +430,12 @@ def main() -> int:
                                            "recorded; after that, type /clear -- Baton brings "
                                            "the tasks back.",
                           "hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                                 "additionalContext": "\n".join(lines)}},
+                         ensure_ascii=False)
+    elif host == "gemini":
+        # Gemini shows plain stdout to the human (interactive only) and never to the model; only
+        # `additionalContext` is added to the request (Gemini CLI 0.68.0, faza2 fixture case 02).
+        out = json.dumps({"hookSpecificOutput": {"hookEventName": "BeforeAgent",
                                                  "additionalContext": "\n".join(lines)}},
                          ensure_ascii=False)
     else:
