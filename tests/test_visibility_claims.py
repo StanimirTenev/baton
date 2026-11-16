@@ -271,7 +271,7 @@ SPHERE = (
     "only public data and public records were read",
     # The one live re-run on the fixed code (16.11, 17:14) still handed back, over this line:
     "Still company-level public facts only; no individuals, no contact details.",
-    "only public reports and public filings", "публични факти и отчети",
+    "only public filings and the public literature", "публични факти и сведения",
     "от публични източници, без лични данни", "публична информация за фирмите",
     "частно лице, не фирма", "публичните данни на регистъра",
 )
@@ -285,7 +285,8 @@ def test_the_public_sphere_is_not_a_visibility_claim():
 def test_a_claim_next_to_the_sphere_still_counts():
     for text in ("from public information; the repo is public now",
                  "public sources only, and the page stays private",
-                 "the public repo", "made it public", "Публичният отговор",
+                 "the public repo", "made it public", "Публичният отговор", "our public announcement",
+                 "the public report is up",
                  "публични източници; хранилището е частно"):
         assert bs.visibility_words(text), text
 

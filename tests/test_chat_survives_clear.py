@@ -111,9 +111,10 @@ def test_a_chat_older_than_another_session_s_entry_is_not_called_the_previous_on
     Claude on one logbook. The third session's board offered the first one's chat as "the previous
     session's conversation after its last logbook entry", though Codex had written two entries
     after it; its end said the task waited on a review that was by then done. A chat saved before
-    a logbook was last written is said to be older than that, with when and where."""
+    a logbook was last written is said to be older than that, with when and where -- for a task
+    the chat names, as the phase-1 one did ("Continue the task handoff-demo")."""
     env, tasks, book = _setup(tmp_path)
-    tr = _talk(tmp_path / "proj" / "a.jsonl", TURNS)
+    tr = _talk(tmp_path / "proj" / "a.jsonl", [("continue the task pricing", "Reading its logbook.")] + TURNS)
     _run("baton_stop.py", env, {"session_id": "a", "transcript_path": tr})
     kept = tasks / ".baton-chat" / "a.md"
     saved = time.time() - 600
@@ -140,3 +141,24 @@ def test_a_chat_newer_than_every_logbook_keeps_its_words(tmp_path):
     context = json.loads(board)["hookSpecificOutput"]["additionalContext"]
     assert "💬 The previous session's conversation after its last logbook entry" in context
     assert "NOT the latest" not in context
+
+
+def test_a_newer_logbook_of_a_task_the_chat_never_names_changes_nothing(tmp_path):
+    """Row 163: on a root with many tasks other sessions and scheduled agents write all day. A
+    newer logbook makes the chat out of date only for a task the chat talks about -- by its folder
+    name. Here the chat is about pricing, and only an unrelated task's logbook is newer."""
+    env, tasks, _ = _setup(tmp_path)
+    tr = _talk(tmp_path / "proj" / "a.jsonl", TURNS)
+    _run("baton_stop.py", env, {"session_id": "a", "transcript_path": tr})
+    kept = tasks / ".baton-chat" / "a.md"
+    saved = time.time() - 600
+    os.utime(kept, (saved, saved))
+    other = tasks / "nightly-mail" / "LOGBOOK.md"
+    other.parent.mkdir()
+    other.write_text(f"---\ndone_when: x\n---\n\n## {datetime.now():%Y-%m-%d %H:%M} — cron\n\n{BODY}", "utf-8")
+    os.utime(other, (saved + 240, saved + 240))
+    board = _run("baton_session_start.py", env, {"session_id": "b", "source": "startup",
+                                                 "transcript_path": str(tmp_path / "proj" / "b.jsonl")})
+    context = json.loads(board)["hookSpecificOutput"]["additionalContext"]
+    assert "💬 The previous session's conversation after its last logbook entry" in context
+    assert "NOT the latest" not in context and "nightly-mail's" not in context

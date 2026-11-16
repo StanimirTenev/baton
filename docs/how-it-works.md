@@ -111,8 +111,9 @@ line per claim, each checked against the source (the repository's or the page's 
 setting). The human reads that section instead of the prose. Adding it to the newest
 entry is completing the top entry, not rewriting an older one. Not counted as a claim: a word
 inside inline code (`"visibility":"PRIVATE"` pasted from a tool), a key in
-cryptography (`private key`, `публичен ключ`), one word in quotes (the word talked about,
-not used), and the pair named as a topic (`public/private`). "Said publicly" is left in: a
+cryptography (`private key`, `публичен ключ`), the public sphere (`public information`, `a public
+network`, `the public`, `a private person`: the `sphere` nouns in `hooks/lang`, since v3.36.0), one
+word in quotes (the word talked about, not used), and the pair named as a topic (`public/private`). "Said publicly" is left in: a
 promise made in a public comment is a claim about where something is, and a list of verbs to
 exclude would be fitted to one machine.
 
@@ -697,6 +698,8 @@ the situation arose, `caught` when the mistake happened. The counters are in
   text about to go into a file named as the logbook and, when it carries a `## <date> <hour>`
   heading, tells the agent to use `baton_entry.py` instead (counted as `surfaced_before`). It
   never blocks the write and returns no permission decision -- only a note; Stop still checks after.
+  Since v3.36.0 the note names the tool by its full path too, and comes only for a date and hour
+  the logbook on disk does not hold yet: an edit that keeps an existing heading gets none.
   Since v3.32.0 it is registered for Bash too (ZA-OPRAVYANE row 139): every caught heading the
   transcripts here could trace (15.10, 22.10, 24.10, 07.11) was written by `python3 - <<'EOF'` or
   `sed -i`, never by Write or Edit, so the note had never run where the mistake happens. A Bash

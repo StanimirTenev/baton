@@ -285,15 +285,16 @@ task from its `LOGBOOK.md` alone. The handoff itself held: each session recovere
 decision, the last result and the next step, and no entry was lost. These are the false warnings
 and wrong pointers it showed (ZA-OPRAVYANE rows 160-165).
 
-- **L3 no longer hands back over the public sphere.** "public information", "a typical public
+- **L3 hands back less often over the public sphere.** "public information", "a typical public
   source", "not a public network", "the public", "a private person" say where information comes
   from or whom a service is open to, not that a thing is visible. L3 handed back in 3 of 3
   sessions of a desk-research task over them. A new class beside `key`, `sphere` in `hooks/lang`
   (en, bg): the word with the noun that gives it that sense. A repo, page, post or fork that is
   public or private still asks for the claims section. On the logbooks of the author's machine
   379 of 2,906 entries fired before and 368 after; each of the 11 dropped was read, all were the
-  sphere sense. The other 368 were not read one by one, and other senses remain among them: the
-  class is a list of nouns by sense, and a live re-run found one more ("public facts") it lacked.
+  sphere sense. The other 368 were not read one by one, and other senses remain among them. It is
+  a list of nouns by sense, not a rule: a live re-run on the fix still fired, on "public facts",
+  which was then added. A sentence with a noun it does not hold still hands back.
 - **The L1 note before a write comes only for a typed hour the logbook does not hold yet.** It came
   three times for edits that kept an existing heading and added a section under it (a Claude
   Edit twice, a Codex Python replace once). The note compares the date-and-hour stamps of the

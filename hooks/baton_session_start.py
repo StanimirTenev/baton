@@ -1945,14 +1945,16 @@ def previous_chat(own: dict, root: Path, name: str = "LOGBOOK.md") -> str | None
     # v3.36.0, row 163 (phase-1 handoff test, 16.11): the chat is kept only from Claude Code's
     # transcripts, so a Codex session -- or any session that ran no Stop of this kind -- that wrote
     # a logbook after it left it the oldest word, not the latest. A logbook written after the chat
-    # was saved is named, and the chat is not called the previous session's.
+    # was saved, of a task the chat names by its folder (the phase-1 chat began "Continue the task
+    # handoff-demo"), is named, and the chat is not called the previous session's. A newer logbook
+    # of a task the chat never names -- a scheduled job, another task's session -- changes nothing.
     later = []
     for f in task_folders(root):
         try:
             when = (f / name).stat().st_mtime
         except OSError:
             continue
-        if when > saved + 1:
+        if when > saved + 1 and re.search(r"(?i)(?<![\w-])" + re.escape(f.name) + r"(?![\w-])", body):
             later.append((when, f.name))
     if later:
         when, folder = max(later)

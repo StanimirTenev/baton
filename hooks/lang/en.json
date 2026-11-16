@@ -36,7 +36,7 @@
       "(?:public|private)[\\s-]+keys?(?![\\w-])"
     ],
     "sphere": [
-      "public[\\s-]+(?:compan(?:y|ies)|information|facts?|knowledge|materials?|filings?|reports?|disclosures?|statements?|announcements?|literature|data|sources?|records?|registers?|networks?|sectors?|bod(?:y|ies)|authorit(?:y|ies)|procurement|tenders?|funding|money|transport|health|interest|domain)(?![\\w-])",
+      "public[\\s-]+(?:compan(?:y|ies)|information|facts?|knowledge|materials?|filings?|literature|data|sources?|records?|registers?|networks?|sectors?|bod(?:y|ies)|authorit(?:y|ies)|procurement|tenders?|funding|money|transport|health|interest|domain)(?![\\w-])",
       "private[\\s-]+(?:compan(?:y|ies)|sectors?|individuals?|persons?|citizens?|funding|money)(?![\\w-])",
       "the\\s+public(?=\\s*(?:[.,;:!?)\\n]|$))"
     ],
