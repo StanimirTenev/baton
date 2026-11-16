@@ -35,6 +35,11 @@
     "key": [
       "(?:public|private)[\\s-]+keys?(?![\\w-])"
     ],
+    "sphere": [
+      "public[\\s-]+(?:compan(?:y|ies)|information|data|sources?|records?|registers?|networks?|sectors?|bod(?:y|ies)|authorit(?:y|ies)|procurement|tenders?|funding|money|transport|health|interest|domain)(?![\\w-])",
+      "private[\\s-]+(?:compan(?:y|ies)|sectors?|individuals?|persons?|citizens?|funding|money)(?![\\w-])",
+      "the\\s+public(?=\\s*(?:[.,;:!?)\\n]|$))"
+    ],
     "claims_heading": [
       "claims to verify"
     ],

@@ -36,6 +36,7 @@ longer form before a shorter one that starts it.
 | `gone` | Stop | a line that says a file was deleted, moved or renamed |
 | `visible` | Stop | a word saying something is public or private |
 | `key` | Stop | "public key" / "private key": the cryptographic sense, not visibility |
+| `sphere` | Stop | the public sphere, not visibility: "public information", "a public network", "the public", "a private person" |
 | `claims_heading` | Stop | the heading of the claims section, after `### ` |
 | `refuted` | Stop | the word that marks a claim as refuted, before `:` |
 | `tests_pass` | Stop | a sentence claiming tests pass |

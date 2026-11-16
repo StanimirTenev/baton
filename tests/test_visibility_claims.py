@@ -251,3 +251,63 @@ def test_the_hook_counts_a_refuted_claim(tmp_path):
     assert _lessons()["L3"]["caught"] == 1
     _run(tmp_path, "s2")
     assert _lessons()["L3"]["caught"] == 1, "the same line is one catch"
+
+
+# -- the public sphere is not a thing's visibility (v3.36.0, ZA-OPRAVYANE row 160) ----------
+#
+# Phase-1 handoff test (16.11, Claude Code -> Codex -> Claude Code on one demo logbook): L3 handed
+# back in 3 of 3 sessions of a desk-research task, over "a typical public source", "public company
+# information", "from public information" and "not run a public network". None is a claim that a
+# repository, page or file is visible; each says where information comes from or whom a service
+# is open to. The lines below are those of the demo logbook.
+
+SPHERE = (
+    "each with what to record and a typical public source",
+    "Desk research only, from public company information; no personal data.",
+    "Public company product, support, ownership and financial materials, plus certificate records",
+    "all three categories compared against approved criteria from public information",
+    "our own office car park, we buy the equipment (no public network / not a CPO)",
+    "a charging network open to the public sector and public bodies",
+    "only public data and public records were read",
+    "от публични източници, без лични данни", "публична информация за фирмите",
+    "частно лице, не фирма", "публичните данни на регистъра",
+)
+
+
+def test_the_public_sphere_is_not_a_visibility_claim():
+    for text in SPHERE:
+        assert not bs.visibility_words(text), text
+
+
+def test_a_claim_next_to_the_sphere_still_counts():
+    for text in ("from public information; the repo is public now",
+                 "public sources only, and the page stays private",
+                 "the public repo", "made it public", "Публичният отговор",
+                 "публични източници; хранилището е частно"):
+        assert bs.visibility_words(text), text
+
+
+DEMO_ENTRY = """## {heading}
+
+### What was asked
+Continue the task: make a short table of comparison criteria (no personal data).
+
+### Done
+| Action | Detail |
+|--------|--------|
+| Drafted | `criteria.md` in this folder -- 11 criteria, each with what to record and a typical public source |
+
+### Result
+Draft v1 of the criteria, from public company information only.
+
+### Open / notes
+The human buys about ten AC chargers for the office car park; not a public network.
+"""
+
+
+def test_the_demo_entry_is_not_handed_back_by_the_hook(tmp_path):
+    """Through Stop, as the harness runs it: the entry of the demo session, without the claims
+    section the hand-back made it add."""
+    _folder(tmp_path / "tasks", DEMO_ENTRY.format(heading="2026-11-16 16:34 — Draft criteria table (v1)"))
+    out = _run(tmp_path, "s1")
+    assert "lesson L3" not in out.get("reason", ""), out

@@ -1010,8 +1010,16 @@ _VISIBLE = re.compile(r"(?i)(?<![\w-])(" + _words("visible") + r")(?![\w-])")
 # a span of code (`"visibility":"PRIVATE"` pasted from a tool), a key in
 # cryptography, one word in quotes (the word talked about), and the pair named as a topic
 # (`public/private`). Kept to classes, not phrases: a phrase list is fitted to one machine.
+# v3.36.0, ZA-OPRAVYANE row 160: the public sphere -- where information comes from (public
+# sources, information, data, records), whom a service or body is open to or run by (a public
+# network, sector, authority; "the public"), a private person or company. The phase-1 handoff
+# test (16.11) handed back in 3 of 3 sessions of a desk-research task over "public company
+# information", "a typical public source" and "not a public network": none says a thing is
+# visible. Like `key`, the class is the word with the noun that gives it this sense (`sphere` in
+# hooks/lang). The thing whose visibility is set -- a repo, page, post, fork -- keeps the word.
 _CODE = re.compile(r"`[^`\n]*`")
 _KEY = re.compile(r"(?i)" + _words("key"))
+_SPHERE = re.compile(r"(?i)(?<![\w-])(?:" + _words("sphere") + r")")
 _QUOTED_WORD = re.compile(r"[„“\"«']\s*\w+\s*[“”\"»']")
 _PAIR = re.compile(r"\w+(?:\s*/\s*\w+)+")
 _CLAIMS = re.compile(r"(?i)^###\s+(?:" + _words("claims_heading") + r")\s*:?\s*$")
@@ -1022,7 +1030,7 @@ _SEEN_CAP = 1000
 def visibility_words(text: str) -> list[str]:
     """The words in `text` that say something is public or private, as written."""
     t = _CODE.sub(" ", text)
-    for rx in (_KEY, _QUOTED_WORD):
+    for rx in (_KEY, _SPHERE, _QUOTED_WORD):
         t = rx.sub(lambda m: " " if _VISIBLE.search(m.group(0)) else m.group(0), t)
     t = _PAIR.sub(lambda m: " " if len(_VISIBLE.findall(m.group(0))) >= 2 else m.group(0), t)
     return [m.group(1) for m in _VISIBLE.finditer(t)]
