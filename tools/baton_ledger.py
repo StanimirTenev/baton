@@ -59,6 +59,11 @@ def where() -> tuple:
     return cfg["home"], cfg["logbook"], core.ledger_dir(lambda name: base / name)
 
 
+def off() -> int:
+    print('Baton ledger: off ("ledger": false in baton.local.json) -- nothing is recorded or checked.')
+    return 0
+
+
 def _named(found: list) -> list:
     return [f"  {f}: {h}" + (f" (#{n + 1} of that heading)" if n else "") for f, h, n in found]
 
@@ -74,6 +79,8 @@ def _remote(d: Path) -> tuple:
 
 def verify(remote: bool) -> int:
     root, logbook, d = where()
+    if d is None:
+        return off()
     print(f"Baton ledger: {d}")
     rep = core.ledger_check(root, logbook, d)
     if rep is None:
@@ -136,6 +143,8 @@ def anchored(d: Path) -> int:
 
 def ack(reason: str, folder: str | None, heading: str | None) -> int:
     root, logbook, d = where()
+    if d is None:
+        return off()
     added = core.ledger_ack(root, logbook, d, reason, folder, heading)
     print(f"Baton ledger: {d}")
     print(f"{added} line{'' if added == 1 else 's'} added: accepted, with the reason"
@@ -145,6 +154,8 @@ def ack(reason: str, folder: str | None, heading: str | None) -> int:
 
 def push() -> int:
     _, _, d = where()
+    if d is None:
+        return off()
     name, branch = _remote(d) if (d / ".git").exists() else (None, None)
     if not name or not branch:
         print(f"Baton ledger: {d}\nno remote: Baton never adds one. Add a private repository "

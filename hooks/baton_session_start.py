@@ -1870,6 +1870,8 @@ def ledger_notice(root: Path, name: str) -> str | None:
     """The ledger (row 153) against the logbooks as they are: said every session while there is
     something to say, never fixed. Nothing when there never was a ledger, or all is as recorded."""
     d = _baton.ledger_dir(_local_file)
+    if d is None:                 # "ledger": false
+        return None
     rep = _baton.ledger_check(root, name, d)
     if not rep or not (rep["changed"] or rep["gone"] or rep["chain"]):
         return None
@@ -1890,7 +1892,7 @@ def ledger_notice(root: Path, name: str) -> str | None:
     run = (f"BATON_HOME=\"{root}\" BATON_LOGBOOK=\"{name}\" BATON_LEDGER=\"{d}\" python3 \"{tool}\""
            if tool.is_file() else None)
     return ("🧾 Baton's ledger of logbook entries: " + "; ".join(said) + ". A logbook entry is a "
-            "record and is not edited; this may be a mistake, a correction Baton itself asked for, "
+            "record and is not edited; this may be a mistake, a correction made in a later turn, "
             "or something worse -- the human decides, Baton changes nothing. Tell the human."
             + (f" To see it: `{run} verify`; an edit the human accepts: `{run} ack --reason "
                "\"<why>\"` (adds a line to the ledger, edits none)." if run else

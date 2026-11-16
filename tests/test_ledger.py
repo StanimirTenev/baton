@@ -84,6 +84,15 @@ class World:
         assert out.returncode == 0, out.stderr
         return out
 
+    def through(self, **extra):
+        """Stops until one lets the turn through, as the turns of a session would (a new entry
+        with an old typed hour is asked about once by L1). Recording happens on that one."""
+        for _ in range(3):
+            out = self.stop(**extra)
+            if b'"block"' not in out.stdout:
+                return out
+        raise AssertionError(out.stdout)
+
     def start(self, **extra):
         out = subprocess.run([sys.executable, str(HOOKS / "baton_session_start.py")],
                              input=b'{"source":"startup"}', capture_output=True,
@@ -186,7 +195,7 @@ def test_a_new_entry_on_top_is_appended_and_nothing_old_is_rewritten(w):
     w.stop()
     before = (w.ledger / "ledger.jsonl").read_bytes()
     log.write_text(BOOK.replace(NEW, "## 2026-10-22 09:00 — third\n\nshipped\n\n" + NEW), "utf-8")
-    w.stop()
+    w.through()
     after = (w.ledger / "ledger.jsonl").read_bytes()
     assert after.startswith(before)
     assert w.records()[-1]["heading"] == "## 2026-10-22 09:00 — third"
@@ -212,6 +221,78 @@ def test_the_pass_after_a_hand_back_records_too(w):
     assert len(w.records()) == 2
 
 
+def _stale(log):
+    """Work in the folder newer than its logbook, past Stop's grace: Stop hands the turn back."""
+    work = log.parent / "draft.md"
+    work.write_text("work\n", "utf-8")
+    t = time.time() - 600
+    os.utime(work, (t, t))
+    os.utime(log, (t - 600, t - 600))
+
+
+@needs_git
+def test_a_stop_that_hands_the_turn_back_records_nothing(w):
+    log = w.task()
+    _stale(log)
+    out = w.stop()
+    assert json.loads(out.stdout)["decision"] == "block"
+    assert w.records() == [], "recorded only when the turn is let through"
+
+
+@needs_git
+def test_a_correction_asked_for_in_the_same_turn_is_recorded_as_corrected(w):
+    """Stop hands back, the agent completes its newest entry, the second Stop lets the turn
+    through: what is recorded is the entry as it ended the turn, and verify is clean."""
+    log = w.task()
+    _stale(log)
+    assert json.loads(w.stop().stdout)["decision"] == "block"
+    log.write_text(BOOK.replace("removed monitor.py", "removed monitor.py and draft.md"), "utf-8")
+    out = w.stop({"session_id": "s1", "stop_hook_active": True})
+    assert b'"block"' not in out.stdout
+    assert [r["sha256"] for r in w.records()][1] == _sha(
+        NEW.replace("removed monitor.py", "removed monitor.py and draft.md").rstrip())
+    assert w.tool("verify").returncode == 0
+
+
+@needs_git
+def test_a_stop_that_asks_about_the_chat_records_nothing(w, tmp_path):
+    """The other hand-back: many messages and no entry (chat_ask). Not let through, not recorded."""
+    from datetime import datetime, timedelta, timezone
+    w.task()
+    start, rows = datetime.now() - timedelta(hours=1), []
+    for i in range(8):
+        at = (start + timedelta(minutes=5 * i)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        rows.append({"type": "user", "timestamp": at,
+                     "message": {"role": "user", "content": f"we settle on option {i}"}})
+        rows.append({"type": "assistant", "timestamp": at, "message": {"content": "sure"}})
+    tr = tmp_path / "t.jsonl"
+    tr.write_text("\n".join(json.dumps(r) for r in rows) + "\n", "utf-8")
+    out = w.stop({"session_id": "s1", "transcript_path": str(tr)})
+    assert json.loads(out.stdout)["decision"] == "block", out.stdout
+    assert "no task file changed" in json.loads(out.stdout)["reason"]
+    assert w.records() == []
+
+
+@needs_git
+def test_the_pass_that_hands_back_a_second_time_records_nothing(w):
+    log = w.task()
+    _stale(log)
+    assert json.loads(w.stop().stdout)["decision"] == "block"
+    out = w.stop({"session_id": "s1", "stop_hook_active": True})    # no entry written: again
+    assert json.loads(out.stdout)["decision"] == "block", out.stdout
+    assert w.records() == []
+
+
+@needs_git
+def test_an_edit_in_a_later_turn_is_still_a_change(w):
+    """Intended: once a turn was let through, its entries stand as they were."""
+    log = w.task()
+    w.stop()
+    log.write_text(BOOK.replace("removed monitor.py", "removed monitor.py and more"), "utf-8")
+    w.stop({"session_id": "s2"})
+    assert w.tool("verify").returncode == 1
+
+
 @needs_git
 @pytest.mark.skipif(os.name == "nt", reason="a shell script stands in for git")
 def test_with_nothing_new_stop_starts_no_git_process(w, tmp_path):
@@ -226,7 +307,7 @@ def test_with_nothing_new_stop_starts_no_git_process(w, tmp_path):
     w.stop(PATH=path)
     assert not log.exists(), log.read_text("utf-8")
     w.task(text=BOOK.replace(NEW, "## 2026-10-22 09:00 — third\n\nx\n\n" + NEW))
-    w.stop(PATH=path)
+    w.through(PATH=path)
     assert log.exists(), "the fake git is on the path: a new entry is committed through it"
 
 
@@ -241,8 +322,8 @@ def test_without_git_the_lines_are_still_written(w, tmp_path):
 
 @needs_git
 def test_a_logbook_that_is_not_utf8_is_recorded(w):
-    """Recorded before Stop's other checks run. (Stop's `future_dated` still raises
-    UnicodeDecodeError on such a logbook, as it did before the ledger: a crash marker, exit 0.)"""
+    """Stop's `future_dated` raises UnicodeDecodeError on such a logbook, as it did before the
+    ledger: a crash marker, exit 0 -- the turn is let through, so the ledger records then too."""
     w.task(text=b"## 2026-10-20 09:00 \xff broken\n\nbody \xc3\x28\n")
     w.stop()
     assert len(w.records()) == 1
@@ -377,7 +458,7 @@ def test_a_change_not_committed_is_not_buried_by_the_next_commit_of_stop(w):
     f = w.ledger / "ledger.jsonl"
     f.write_bytes(f.read_bytes().replace(b'"n":0', b'"n": 0', 1))
     log.write_text(BOOK.replace(NEW, "## 2026-10-22 09:00 — third\n\nx\n\n" + NEW), "utf-8")
-    w.stop()
+    w.through()
     assert w.records()[-1]["heading"] == "## 2026-10-22 09:00 — third", "still recorded"
     out = w.tool("verify")
     assert out.returncode == 1 and "not committed" in out.stdout
@@ -569,6 +650,67 @@ def test_the_tool_finds_the_ledger_of_a_script_install(w):
     out = w.tool("verify", **env)
     assert out.returncode == 0 and str(hooks / "baton.ledger") in out.stdout
     assert "2 entries" in out.stdout
+
+
+@needs_git
+def test_no_home_path_goes_into_the_ledger_or_its_history(w):
+    """A push sends the ledger away: a root under home is written as `~/...`."""
+    root = w.home / "work" / "tasks"
+    (root / "alpha").mkdir(parents=True)
+    (root / "alpha" / "LOGBOOK.md").write_text(BOOK, "utf-8")
+    w.stop(BATON_HOME=str(root))
+    assert {r["root"] for r in w.records()} == {"~/work/tasks"}
+    history = subprocess.run([GIT, "-C", str(w.ledger), "log", "-p", "--format=%B"],
+                             capture_output=True, text=True).stdout
+    assert str(w.home) not in history
+    assert str(w.home) not in (w.ledger / "ledger.jsonl").read_text("utf-8")
+    (root / "alpha" / "LOGBOOK.md").write_text(BOOK.replace("3 formats", "4 formats"), "utf-8")
+    assert w.tool("verify", BATON_HOME=str(root)).returncode == 1
+
+
+@needs_git
+def test_lines_written_with_the_old_absolute_root_are_still_read(w):
+    """Lines from before the root was written relative carry the resolved absolute path."""
+    root = w.home / "tasks"
+    (root / "alpha").mkdir(parents=True)
+    log = root / "alpha" / "LOGBOOK.md"
+    log.write_text(BOOK, "utf-8")
+    w.ledger.mkdir()
+    prev, out = "0" * 64, []
+    for heading, n, digest in core.ledger_entries(log.read_bytes()):
+        line = json.dumps({"at": "2026-11-16T09:00:00", "kind": "entry",
+                           "root": str(root.resolve()), "folder": "alpha", "heading": heading,
+                           "n": n, "sha256": digest, "prev": prev},
+                          ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        prev = hashlib.sha256(line).hexdigest()
+        out.append(line)
+    (w.ledger / "ledger.jsonl").write_bytes(b"\n".join(out) + b"\n")
+    w.stop(BATON_HOME=str(root))
+    assert len(w.records()) == 2, "the old lines count: nothing recorded twice"
+    assert w.tool("verify", BATON_HOME=str(root)).returncode == 0
+    log.write_text(BOOK.replace("3 formats", "4 formats"), "utf-8")
+    out = w.tool("verify", BATON_HOME=str(root))
+    assert out.returncode == 1 and "first" in out.stdout
+
+
+@needs_git
+def test_ledger_false_turns_off_the_recording_and_the_notice(w, tmp_path):
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    off = dict(CLAUDE_PLUGIN_DATA=str(data), BATON_LEDGER="")
+    log = w.task()
+    w.stop(**off)                                              # on by default
+    assert (data / "baton.ledger" / "ledger.jsonl").is_file()
+    log.write_text(BOOK.replace("3 formats", "4 formats"), "utf-8")
+    assert "Baton's ledger" in w.start(**off)
+    (data / "baton.local.json").write_text(json.dumps({"ledger": False}), "utf-8")
+    before = (data / "baton.ledger" / "ledger.jsonl").read_bytes()
+    w.task("beta")
+    w.stop(**off)
+    assert (data / "baton.ledger" / "ledger.jsonl").read_bytes() == before, "nothing recorded"
+    assert "Baton's ledger" not in w.start(**off)
+    out = w.tool("verify", **off)
+    assert out.returncode == 0 and "off" in out.stdout
 
 
 @needs_git

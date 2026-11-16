@@ -1769,6 +1769,19 @@ def chat_ask(root: Path, name: str, transcript: str, session: str) -> str | None
         return None               # a count that cannot read must not cost the session
 
 
+def _ledger() -> None:
+    """The ledger (row 153): a line for each entry not yet in it. Only on a Stop that lets the
+    turn through: an entry a hand-back of this turn asked to correct is recorded corrected, not
+    as written first. Off with `"ledger": false`. Says nothing; never raises."""
+    try:
+        root, name = config()
+        d = _baton.ledger_dir(_local_file)
+        if d is not None and root.is_dir():
+            _baton.ledger_update(root, name, _ss().task_folders(root), d)
+    except Exception:
+        pass
+
+
 def _stands_down() -> bool:
     """Installed twice (see installed_twice in SessionStart): this plugin copy stays quiet."""
     try:
@@ -1806,12 +1819,6 @@ def main() -> int:
         save_chat(payload)
     except Exception:
         pass
-    try:      # the ledger (row 153): a line for each entry not yet in it, both passes; says nothing
-        root, name = config()
-        if root.is_dir():
-            _baton.ledger_update(root, name, _ss().task_folders(root), _baton.ledger_dir(_local_file))
-    except Exception:
-        pass
 
     # Already handed back this turn: count what came of it, and hand back once more only when
     # the first produced no entry (row 115). Never a third time.
@@ -1834,6 +1841,8 @@ def main() -> int:
             tested = []
         lost = " ".join(filter(None, (lost, checked, *tested)))
         out = {"systemMessage": lost} if lost else {}
+        if not again:
+            _ledger()             # the turn is let through: its entries as they end it
         if again:
             listed = "\n".join(f"  - {folder}" for folder in again)
             out.update(decision="block", reason=(
@@ -1973,6 +1982,8 @@ def main() -> int:
     if (not stale and not open_ended and not ahead and not typed and not thin and not claims
             and not passes and not rewritten):
         chat = chat_ask(root, name, str(payload.get("transcript_path") or ""), session)
+        if not chat:
+            _ledger()             # the turn is let through: its entries as they end it
         if chat:
             sys.stdout.buffer.write(json.dumps({"decision": "block", "reason": chat, **note},
                                                ensure_ascii=False).encode("utf-8"))
@@ -2133,6 +2144,7 @@ if __name__ == "__main__":
         # A hook must never break the session it is trying to help -- but the crash is left
         # for /baton-doctor and the next SessionStart (row 36).
         _beat(exc)
+        _ledger()             # a crash lets the turn through too: the ledger still records
         sys.exit(0)
     _beat()
     sys.exit(code)

@@ -454,14 +454,19 @@ LEDGER_FILE = "ledger.jsonl"
 _GENESIS = "0" * 64
 
 
-def ledger_dir(local_file) -> Path:
+def ledger_dir(local_file) -> Path | None:
     """BATON_LEDGER, else `ledger` in baton.local.json, else `baton.ledger` in Baton's state
-    folder. `local_file(name)` is the caller's, as for `config`."""
+    folder. `"ledger": false` there turns the ledger off: None, and nothing records or reports.
+    `local_file(name)` is the caller's, as for `config`."""
     try:
         cfg = json.loads(local_file("baton.local.json").read_text("utf-8-sig"))
     except Exception:
         cfg = {}
-    raw = os.environ.get("BATON_LEDGER") or (cfg.get("ledger") if isinstance(cfg, dict) else None)
+    cfg = cfg if isinstance(cfg, dict) else {}
+    raw = os.environ.get("BATON_LEDGER")
+    if not raw and cfg.get("ledger") is False:
+        return None
+    raw = raw or cfg.get("ledger")
     return Path(str(raw)).expanduser() if raw else Path(local_file("baton.ledger"))
 
 
@@ -492,11 +497,28 @@ def ledger_entries(raw: bytes) -> list:
     return out
 
 
-def _root_id(root) -> str:
+def _absolute(path) -> str:
     try:
-        return os.path.normcase(str(Path(root).expanduser().resolve()))
+        return os.path.normcase(str(Path(path).expanduser().resolve()))
     except (OSError, RuntimeError):
-        return os.path.normcase(str(root))
+        return os.path.normcase(str(path))
+
+
+def _root_id(root) -> str:
+    """How a line names its task root: `~/<path>` when the root is under home, so a pushed
+    ledger does not carry the home path; the absolute path otherwise."""
+    full, home = _absolute(root), _absolute(Path.home())
+    if full == home:
+        return "~"
+    if full.startswith(home.rstrip(os.sep) + os.sep):
+        return "~/" + full[len(home.rstrip(os.sep)) + 1:].replace(os.sep, "/")
+    return full
+
+
+def _root_ids(root) -> set:
+    """Every name a line may give this root: today's, and the absolute path lines carried before
+    the root was written relative to home (v3.35.0 before its release)."""
+    return {_root_id(root), _absolute(root)}
 
 
 def _ledger_lines(d: Path) -> list:
@@ -515,12 +537,12 @@ def _ledger_lines(d: Path) -> list:
     return out
 
 
-def _expected(records: list, rid: str) -> dict:
+def _expected(records: list, rids: set) -> dict:
     """(folder, heading, n) -> the hash the ledger stands by for this root: the latest entry or
     ack line of each; None for an entry acknowledged gone."""
     out = {}
     for rec in records:
-        if rec and rec.get("root") == rid and "heading" in rec:
+        if rec and rec.get("root") in rids and "heading" in rec:
             out[(rec.get("folder"), rec.get("heading"), rec.get("n"))] = rec.get("sha256")
     return out
 
@@ -651,10 +673,10 @@ def ledger_update(root: Path, logbook: str, folders: list, d: Path) -> int:
     """Stop's part: a line for every entry of `folders` the ledger has not seen. An entry it has
     seen is never recorded again, whatever its text is now -- that is for verify to say and the
     human to acknowledge. Nothing new: no lock, no git, nothing written. Returns lines added."""
-    rid = _root_id(root)
+    rid, rids = _root_id(root), _root_ids(root)
 
     def missing(lines):
-        known = _expected([r for _, r in lines], rid)
+        known = _expected([r for _, r in lines], rids)
         out = []
         for folder in folders:
             try:
@@ -699,13 +721,13 @@ def ledger_check(root: Path, logbook: str, d: Path) -> dict | None:
     if not lines and not (d / LEDGER_FILE).exists() and _seen(d) is None:
         return None
     records = [r for _, r in lines]
-    rid = _root_id(root)
+    rids = _root_ids(root)
     rep = {"dir": d, "lines": len(lines), "entries": 0, "changed": [], "gone": [], "chain": [],
            # lines kept for another task root: a root given wrong reads as "nothing recorded"
-           "roots": sorted({r["root"] for r in records if r and r.get("root") not in (None, rid)}),
+           "roots": sorted({r["root"] for r in records if r and r.get("root") is not None and r.get("root") not in rids}),
            # what was accepted, and why: an ack is a line anyone running as the human can add
            "acks": [r for r in records if r and r.get("kind") == "ack"
-                    and r.get("root", rid) == rid]}
+                    and r.get("root", _root_id(root)) in rids]}
     settled = {r.get("line") for r in records if r and r.get("kind") == "ack" and "line" in r}
     prev = _GENESIS
     for i, (raw, rec) in enumerate(lines, 1):
@@ -725,7 +747,7 @@ def ledger_check(root: Path, logbook: str, d: Path) -> dict | None:
                                    "commits every line it adds, so something else changed it "
                                    f"(git -C \"{d}\" diff)"))
     books = {}
-    for (folder, heading, n), digest in sorted(_expected(records, rid).items(), key=str):
+    for (folder, heading, n), digest in sorted(_expected(records, rids).items(), key=str):
         if digest is None:
             continue
         rep["entries"] += 1

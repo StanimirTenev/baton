@@ -227,6 +227,6 @@ there is no telemetry; if you would rather not answer, the question does not com
 | `CLAUDE_CONFIG_DIR` | config directory to install into (default `~/.claude`) |
 | `BATON_LOGBOOK` | name of the logbook file (default `LOGBOOK.md`) — set it to a word in your own language if you prefer |
 | `"tests"` in `baton.local.json` | a test command a human pins per task folder, run after a turn whose entry says tests pass (L4, since v3.21.0; see [What you get](how-it-works.md#what-you-get)). Only in the file, never from an environment variable |
-| `"ledger"` in `baton.local.json` | where [the ledger](../README.md#the-ledger-an-older-entry-edited-is-seen) of logbook entries is kept, a folder that becomes a git repository (default `baton.ledger` in Baton's state folder; `BATON_LEDGER` moves it too) |
+| `"ledger"` in `baton.local.json` | where [the ledger](../README.md#the-ledger-an-older-entry-edited-is-seen) of logbook entries is kept, a folder that becomes a git repository (default `baton.ledger` in Baton's state folder; `BATON_LEDGER` moves it too). On by default; `"ledger": false` turns it off: nothing recorded, nothing said at session start |
 
 `BATON_HOME=~/work ./install.sh` bakes that path into the installed hooks.
