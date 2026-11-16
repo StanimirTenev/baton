@@ -2069,6 +2069,9 @@ def plugin_rules() -> str | None:
     # The same filling the installers do (hooks/_install_rules.py): the template's
     # "`$BATON_HOME` (default `~/tasks`)" read as a second, empty task root.
     text = text.replace("`$BATON_HOME` (default `~/tasks`)", f"`{tasks}`")
+    entry = Path(root) / "tools" / "baton_entry.py"    # row 164: by its path, not its name
+    if entry.is_file():
+        text = text.replace("`tools/baton_entry.py`", f"`{entry}`")
     text = text.replace("$BATON_HOME", str(tasks)).replace("LOGBOOK.md", logbook)
     return (f"Baton's working rules. Baton is installed as a plugin, so they arrive here rather "
             f"than from CLAUDE.md. On this machine the task root is {tasks} and the logbook "

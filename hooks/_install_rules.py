@@ -19,9 +19,19 @@ MARKER = "Installed by Baton"
 END = "<!-- End of Baton section -->"
 
 
-def fill(text: str, tasks: str, logbook: str) -> str:
+def fill(text: str, tasks: str, logbook: str, entry: Path | None = None) -> str:
+    """The template with this machine's task root and logbook -- and, since v3.36.0 (row 164),
+    the path of tools/baton_entry.py beside the template, when it is there: an agent told only
+    the name searched the disk for one (Codex, 16.11)."""
     text = text.replace("`$BATON_HOME` (default `~/tasks`)", f"`{tasks}`")
+    if entry is not None and entry.is_file():
+        text = text.replace("`tools/baton_entry.py`", f"`{entry}`")
     return text.replace("$BATON_HOME", tasks).replace("LOGBOOK.md", logbook)
+
+
+def entry_tool(template) -> Path:
+    """tools/baton_entry.py of the repository (or plugin) the template is in."""
+    return Path(template).resolve().parent.parent / "tools" / "baton_entry.py"
 
 
 def read(path: Path) -> str:
@@ -79,7 +89,7 @@ def reinstall(existing: str, template: Path, target: Path, tasks: str, logbook: 
                   "  It was written by an older Baton or edited by hand, so it is left as it is:\n"
                   "  edit it, or delete the section and run the installer again.")
         return 0
-    body = fill(template.read_text("utf-8"), tasks, logbook).strip("\n")
+    body = fill(template.read_text("utf-8"), tasks, logbook, entry_tool(template)).strip("\n")
     start, end = span
     if existing[start:end] == body:
         print("  instructions already present - left as they are")
@@ -103,7 +113,7 @@ def main(argv: list[str]) -> int:
     if dry:
         print(f"  would append Baton section to {target} (task root {tasks}, logbook {logbook})")
         return 0
-    body = fill(Path(template).read_text("utf-8"), tasks, logbook)
+    body = fill(Path(template).read_text("utf-8"), tasks, logbook, entry_tool(template))
     if target.is_file():
         print(f"  copy of CLAUDE.md as it was: {backup(target)}")
         body = "\n\n---\n\n" + body

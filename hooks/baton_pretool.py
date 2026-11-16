@@ -202,8 +202,16 @@ def main() -> int:
     except Exception:
         pass                          # a lesson that cannot count must not cost the session
 
+    # Row 164 (v3.36.0): the tool by its path on this machine, not its name -- Codex, told only
+    # "tools/baton_entry.py", searched the temp tree for one and wrote what it found into the logbook.
+    try:
+        tool = ss.entry_tool()
+    except Exception:
+        tool = None
+    use = (f"python3 \"{tool}\" <logbook> <entry-file> --title \"<title>\" (the entry file holds "
+           f"the body only)" if tool else "tools/baton_entry.py --title")
     note = (f"Baton, lesson L1 -- {ss.LESSONS['L1']} This write puts a heading with a typed hour "
-            f"into {os.path.basename(path)}; add the entry with tools/baton_entry.py --title "
+            f"into {os.path.basename(path)}; add the entry with {use} "
             f"instead, so the hour comes from the clock.")
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
