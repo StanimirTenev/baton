@@ -23,11 +23,14 @@ DOCTOR = ROOT / "tools" / "baton_doctor.py"
 
 
 def _call(folder, ago: float, n: int = 0) -> str:
-    """A transcript line: one Bash call `ago` seconds ago that works in `folder`."""
+    """A transcript line: a Bash call `ago` seconds ago that works in `folder`, and an Edit of its
+    logbook -- so the entries the test writes there are this session's (row 166), whenever saved."""
     at = (datetime.now() - timedelta(seconds=ago)).astimezone().isoformat()
     return json.dumps({"type": "assistant", "timestamp": at, "cwd": str(folder), "message": {
         "content": [{"type": "tool_use", "id": f"w{n}", "name": "Bash",
-                     "input": {"command": f'cd "{folder}" && python3 work.py'}}]}}) + "\n"
+                     "input": {"command": f'cd "{folder}" && python3 work.py'}},
+                    {"type": "tool_use", "id": f"e{n}", "name": "Edit",
+                     "input": {"file_path": str(Path(folder) / "LOGBOOK.md")}}]}}) + "\n"
 
 
 def _works_in(tasks, ago: float) -> str:

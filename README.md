@@ -199,7 +199,8 @@ there and asks nothing of Claude's memory or of any service.
 
 The hooks never write a logbook; the agent does, and you can read every entry. While
 `tools/baton_entry.py` writes one it holds `.<logbook>.lock` beside it and writes through a
-`.<logbook>.<pid>.tmp`; both are gone when it returns.
+`.<logbook>.<pid>.tmp`; both are gone when it returns, unless it is killed while writing
+(a lock left so is taken over after 60 s).
 
 **Injects** into the agent's context, as hook output:
 
@@ -306,7 +307,9 @@ sessions of one -- working on the same task at the same time. ZA-OPRAVYANE rows 
   its own Write or Edit named the logbook, or when it was last saved while one of its calls was
   running; naming the folder is not enough, because two agents share the folder. Both hosts.
   Missed, still: the other agent writing while one of this session's shell calls runs. And when
-  the other agent wrote last, this session's own entry under it is not judged at all.
+  the other agent wrote last, this session's own entry under it is not judged at all. This
+  changes one agent alone too: an entry written by an MCP tool, or a logbook a sync or an editor
+  saved after the agent's last call, is no longer judged.
 - **A transcript Baton cannot read calls from now counts as a session that did nothing.** That is
   the price of the two fixes above: a transcript that opens but holds no call Baton recognises
   (a new transcript format, an unknown host) no longer hands back a file beside a new entry, and
@@ -314,7 +317,9 @@ sessions of one -- working on the same task at the same time. ZA-OPRAVYANE rows 
 - **Still not done.** Each host keeps its own ledger and its own memory of the logbooks
   (`baton.bodies.json`, written in place, not atomically); two Stops of the same host at once
   share the ledger's lock. Two waiters taking over the same stale lock at the same moment can
-  both get it -- the ledger's lock has the same gap. Nothing here was run live with two models.
+  both get it -- the ledger's lock has the same gap. The lock is for one filesystem: two
+  machines syncing one logbook are not covered. Another agent's work file in a folder this
+  session named is still handed back. Nothing here was run live with two models.
 
 **v3.36.0** — fixes from the first live handoff Claude Code → Codex → Claude Code on one logbook
 

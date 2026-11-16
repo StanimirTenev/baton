@@ -91,13 +91,15 @@ def _lock(file: Path) -> Path:
     while True:
         try:
             fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
+        except (FileExistsError, PermissionError):   # Windows: a lock being deleted refuses an open
             try:
                 if time.time() - lock.stat().st_mtime > LOCK_STALE_S:
                     lock.unlink()     # its writer died holding it
                     continue
-            except OSError:
+            except FileNotFoundError:
                 continue              # released between the two calls: try again
+            except OSError:
+                pass                  # cannot be read or removed: wait for the deadline
             if time.monotonic() > deadline:
                 raise TimeoutError(f"another writer holds {lock} (for over {LOCK_WAIT_S} s); "
                                    f"nothing was written. If no writer is running, delete it.")

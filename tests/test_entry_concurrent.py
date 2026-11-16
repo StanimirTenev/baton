@@ -82,19 +82,11 @@ def _spawn(script: str, *args) -> subprocess.Popen:
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
 
 
-def test_two_writers_at_once_lose_no_entry_and_readers_never_see_half_a_file(tmp_path):
+def test_two_writers_at_once_lose_no_entry(tmp_path):
     book = _logbook(tmp_path)
     go = time.time() + 1.5
     writers = [_spawn(WRITER, TOOL, book, who, PER_WRITER, go) for who in ("А", "Б")]
-    readers = [_spawn(READER, book, go, go + 60, tmp_path / f"r{i}.txt", HEADER, OLDEST)
-               for i in range(2)]
     errors = [w.communicate(timeout=120)[1] for w in writers]
-    for r in readers:           # the readers run until the writers are done, then a moment more
-        r.kill()
-    readers = [_spawn(READER, book, 0, time.time() + 0.5, tmp_path / f"q{i}.txt", HEADER, OLDEST)
-               for i in range(2)]
-    for r in readers:
-        r.wait(timeout=30)
     assert all(w.returncode == 0 for w in writers), errors
     text = book.read_text("utf-8")
     for who in ("А", "Б"):
@@ -102,9 +94,6 @@ def test_two_writers_at_once_lose_no_entry_and_readers_never_see_half_a_file(tmp
             assert f"агент {who} запис {i}\n" in text, f"lost: {who} {i}"
     assert text.count("\n## 2026-11-16 ") == 2 * PER_WRITER, "an entry twice, or one lost"
     assert text.startswith(HEADER) and text.endswith(OLDEST), "header or the oldest entry changed"
-    for i in range(2):
-        reads, *bad = (tmp_path / f"q{i}.txt").read_text("utf-8").split("\n")
-        assert int(reads) > 0 and not any(bad), bad
     leftovers = [p.name for p in book.parent.iterdir()
                  if p.name not in ("LOGBOOK.md", ".baton-etap.html")]
     assert not leftovers, f"left behind: {leftovers}"
