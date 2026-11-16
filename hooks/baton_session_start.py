@@ -25,7 +25,9 @@ from pathlib import Path
 
 MAX_PLAIN = 6                 # cap only on the fall-back (header-less) list
 SOON_DAYS = 3                 # a deadline within this many days counts as "near"
-US = {"us", "me", "self", ""}   # nie/ние/нас map to `us` on reading; + `us` names from baton.local.json
+US = {"us", "me", "self", "", "human", "user", "you", "agent"}   # nie/ние/нас map to `us` on reading;
+# + `us` names from baton.local.json. "human", "user", "you", "agent" since v3.36.0 (row 162): an
+# agent wrote `turn: "human"` for the human it works with, and the task was shown as waiting OUTSIDE.
 PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
 # The board reaches the human as Markdown, which has no coloured text; the dot is the colour.
 PRIORITY_DOT = {"high": "🔴", "medium": "🟡", "low": "🟢"}

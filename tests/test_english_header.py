@@ -149,3 +149,45 @@ def test_each_priority_carries_its_colour_on_the_board(tmp_path):
     assert bss.line_for("b", {"priority": "medium"}).startswith("- b 🟡 [medium]")
     assert bss.line_for("c", {"priority": "low"}).startswith("- c 🟢 [low]")
     assert bss.line_for("d", {"priority": "someday"}).startswith("- d [someday]")
+
+
+# v3.36.0, ZA-OPRAVYANE row 162 -- the phase-1 handoff test (16.11): an agent wrote `turn: "human"`
+# meaning the human it works with, and the board put the task under "Waiting on someone OUTSIDE".
+# The rules never said what `turn:` may hold; each of three sessions invented a value ("human",
+# "none", "agent"). The generic words for the two who work the task are "us"; a person's own name
+# still comes from `us` in baton.local.json, never from the code.
+def test_the_human_and_the_agent_are_us():
+    bss = _load("baton_session_start")
+    for value in ("human", "Human", "user", "you", "agent", "us", ""):
+        assert bss.is_us({"turn": value}), value
+    for value in ("supplier", "the bank", "Ivan", "disk to arrive"):
+        assert not bss.is_us({"turn": value}), value
+
+
+def test_a_task_waiting_on_the_human_is_on_the_board_as_ours(tmp_path):
+    """Through SessionStart, as the harness runs it."""
+    folder = tmp_path / "tasks" / "handoff-demo"
+    folder.mkdir(parents=True)
+    (folder / "LOGBOOK.md").write_text(
+        "---\nstate: active\nturn: \"human\"\nnext: \"Human to review criteria.md\"\n"
+        "priority: medium\n---\n\n## 2026-11-16 16:34 — Draft criteria table (v1)\n", "utf-8")
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
+    env.update(HOME=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
+               BATON_LOGBOOK="LOGBOOK.md", BATON_SESSION_STATE=str(tmp_path / "s.json"),
+               BATON_STATE_DIR=str(tmp_path / "state"))
+    (tmp_path / "home" / ".claude").mkdir(parents=True)
+    out = subprocess.run([sys.executable, str(HOOKS / "baton_session_start.py")],
+                         input=b'{"source":"startup"}', capture_output=True, env=env)
+    assert out.returncode == 0, out.stderr
+    ctx = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
+    ours = ctx.split("⏳ Waiting on YOU / can continue now:")[1].split("\n\n")[0]
+    assert "handoff-demo" in ours, ctx
+    assert "OUTSIDE" not in ctx and "waiting on: human" not in ctx
+
+
+def test_the_rules_say_what_turn_may_hold():
+    rules = (HOOKS.parent / "templates" / "CLAUDE.md").read_text("utf-8")
+    assert "`turn:`" in rules
+    for word in ("`us`", "`human`", "`agent`", "OUTSIDE"):
+        assert word in rules, word

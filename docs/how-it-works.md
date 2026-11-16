@@ -207,7 +207,7 @@ what the task *means* right now, not only when it was last touched.
 ```markdown
 ---
 state: active                # active | waiting | ongoing | frozen | finished
-turn: us                     # who holds the next move: us, or a name / a condition
+turn: us                     # who holds the next move: us (or human/user/you/agent), or who/what outside
 done_when: "migration ran, row counts match"   # one sentence a person could check
 timing: any                  # any | recurring | YYYY-MM-DD (deadline)
 next: "decide tax_region before the run"       # the next concrete action
@@ -232,8 +232,8 @@ reads either, so a folder can keep the date where it reads best.
 | `frozen` | parked on purpose; listed, never offered as work (`paused` too) |
 | `finished` | done; listed, not touched (`done` too) |
 
-For `turn`, anything other than `us` / `me` / `self` (or empty) counts as "waiting on someone
-else". A task waiting on someone never lands in "on us", even with a deadline. Your own name
+For `turn`, anything other than `us` / `me` / `self` / `human` / `user` / `you` / `agent` (or empty)
+counts as "waiting on someone else". A task waiting on someone never lands in "on us", even with a deadline. Your own name
 can mean "us" too: list it under `"us"` in `baton.local.json` next to the hooks.
 
 **The same header in Bulgarian.** Baton began as one person's tool and every field had a

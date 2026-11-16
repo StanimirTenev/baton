@@ -111,6 +111,11 @@ from memory.
 A task parked on purpose gets `state: frozen` in its header. SessionStart lists
 it but never offers it as work.
 
+`turn:` in the header says who holds the next move. `us` -- or `human`, `user`, `you`, `agent`,
+or a name listed under `us` in `baton.local.json` -- means the human or the agent can move now.
+Anything else is someone or something outside you wait for (a supplier, a reply, a disk to
+arrive), and SessionStart lists the task under "waiting on someone OUTSIDE".
+
 The rule is the fallback. The hooks are what actually holds.
 
 <!-- End of Baton section -->
