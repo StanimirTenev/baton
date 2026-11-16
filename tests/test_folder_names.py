@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+from test_handback import _call
 
 ROOT = Path(__file__).resolve().parent.parent
 GOOD = ("### What was asked\nA draft of the quarterly report in the usual layout for the board.\n\n"
@@ -58,7 +59,8 @@ def _folder(tmp_path, name):
     _age(book, 86400)
     transcript = tmp_path / "t.jsonl"
     transcript.write_text(json.dumps({"type": "user", "timestamp": (
-        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n", "utf-8")
+        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n"
+        + _call(folder, 1500), "utf-8")          # row 165: the session works in the folder
     _stop(tmp_path, "s0", str(tmp_path / "none"))        # the first look only remembers
     return folder, book, str(transcript)
 

@@ -388,7 +388,9 @@ def session_started(transcript: str) -> float | None:
 # process started in the background (`run_in_background`, `nohup`, `&`) writes after its call
 # returned, into a folder no call named. Wrongly counted: a cron that fires while a Bash call runs,
 # or writes in a folder the session named. Where they conflict, a cron file handed back is the
-# cheaper mistake. Without a readable transcript, or one with no tool call, nothing changes.
+# cheaper mistake. Without a readable transcript nothing changes; with one that holds no tool call,
+# nothing changes either -- unless the logbook gained an entry since the session began, which a
+# session that did nothing cannot have written (row 165): then its folder's files are FOREIGN.
 # Measured 08.11 on a 46 MB transcript: 0.86 s, read only when a folder has newer work.
 CALL_SLACK_S = 2
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
@@ -471,11 +473,24 @@ def session_calls(transcript: str | None) -> dict | None:
                         if at is not None and b.get("id"):
                             started[b["id"]] = at
     windows += [(t, t + 600) for t in started.values()]      # no result recorded: ten minutes
-    # A transcript with no tool call at all says nothing about whose a file is (and is how every
-    # older test builds one): as before, everything since the start counts.
+    # A transcript with no tool call at all says nothing about whose a file is: as before,
+    # everything since the start counts -- except beside an entry newer than the start (no_call).
     _CALLS[transcript] = ({"files": files, "texts": texts, "cwds": cwds, "windows": windows}
                           if files or texts or windows else None)
     return _CALLS[transcript]
+
+
+def no_call(transcript: str | None) -> bool:
+    """The transcript can be read and holds no tool call: this session has touched nothing yet.
+    (session_calls says None for this and for a transcript it cannot read; only the first says
+    whose a file is.)"""
+    if not transcript or session_calls(transcript) is not None:
+        return False
+    try:
+        with open(transcript, "rb"):
+            return True
+    except OSError:
+        return False
 
 
 def _named_folder(folder: Path, calls: dict) -> bool:
@@ -559,7 +574,12 @@ def unrecorded(root: Path, name: str, since: float | None = None,
             files = newer_files(folder, name, max(logged, since or 0.0)) or [newest_name]
             if since is not None and transcript:
                 calls = session_calls(transcript)
-                mine = [f for f in files if by_this_session(folder, f, calls)]
+                # Row 165 (D6): a session with no tool call cannot have written the entry its
+                # logbook gained since it began -- another agent did, and the files beside it are
+                # that agent's. With no newer entry, nothing says whose, and the fallback stays.
+                foreign = (calls is None and no_call(transcript) and logbook.is_file()
+                           and logbook.stat().st_mtime >= since)
+                mine = [] if foreign else [f for f in files if by_this_session(folder, f, calls)]
                 if not mine:
                     FOREIGN[folder.name] = files
                     continue

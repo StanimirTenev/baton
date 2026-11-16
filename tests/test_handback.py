@@ -22,6 +22,14 @@ STOP = ROOT / "hooks" / "baton_stop.py"
 DOCTOR = ROOT / "tools" / "baton_doctor.py"
 
 
+def _call(folder, ago: float) -> str:
+    """A transcript line: one Bash call `ago` seconds ago that works in `folder`."""
+    at = (datetime.now() - timedelta(seconds=ago)).astimezone().isoformat()
+    return json.dumps({"type": "assistant", "timestamp": at, "cwd": str(folder), "message": {
+        "content": [{"type": "tool_use", "id": "w0", "name": "Bash",
+                     "input": {"command": f'cd "{folder}" && python3 work.py'}}]}}) + "\n"
+
+
 def _setup(tmp_path):
     tasks = tmp_path / "tasks"
     folder = tasks / "a"
@@ -37,7 +45,9 @@ def _setup(tmp_path):
     os.utime(notes, (old - 600, old - 600))
     transcript = tmp_path / "t.jsonl"
     started = (datetime.now() - timedelta(hours=1)).astimezone().isoformat()
-    transcript.write_text(json.dumps({"timestamp": started}) + "\n", "utf-8")
+    # Row 165: the session works in the folder -- a transcript with no tool call is a session that
+    # has touched nothing, and an entry newer than its start is then another agent's.
+    transcript.write_text(json.dumps({"timestamp": started}) + "\n" + _call(folder, 3000), "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
     env.update(BATON_HOME=str(tasks), BATON_LOGBOOK="LOGBOOK.md", HOME=str(tmp_path / "home"),
@@ -191,6 +201,8 @@ def test_an_interrupted_hand_back_is_not_handed_back_in_a_later_turn(tmp_path):
     (other / "LOGBOOK.md").write_text(book.read_text("utf-8"), "utf-8")
     old = time.time() - 7200
     os.utime(other / "LOGBOOK.md", (old, old))
+    with open(tr, "a", encoding="utf-8") as fh:
+        fh.write(_call(other, 2900))          # the session works in b too
     _work(folder)
     assert "  - a" in _stop(env, tr).get("reason", "")      # interrupted: no active Stop
     _entry(book, "recorded in the next turn")
