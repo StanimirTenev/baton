@@ -173,7 +173,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.37.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.38.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -225,7 +225,7 @@ address, and only those two go into a fixed sentence; see the table below. A tes
 you pinned yourself is the one command the hooks run that is not their own.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.37.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.38.0.
 
 ## What Baton sends over the network
 
@@ -280,6 +280,25 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 
 ## Versions
+
+**v3.38.0** — Gemini CLI, the third host
+
+After Claude Code and Codex, the same hooks run under Gemini CLI. ZA-OPRAVYANE rows 172-176.
+
+- **Baton runs under Gemini CLI as an extension.** `gemini/` holds a Gemini extension: the four
+  events Gemini has (SessionStart, BeforeAgent, BeforeTool, AfterAgent), paths through
+  `${extensionPath}`, and timeouts in milliseconds -- Gemini reads Baton's 10 and 20 as
+  milliseconds and killed every hook before it finished. Install with
+  `gemini extensions link <clone>/gemini`; steps in `gemini/README.md`.
+- **Baton knows when it is under Gemini.** `host()` tells Gemini from Claude Code and Codex by its
+  payload; Claude and Codex are detected as before.
+- **The task pointer reaches the model under Gemini.** Gemini shows plain text to the human only,
+  so under Gemini the prompt hook sends it as `additionalContext`. Claude Code and Codex print
+  exactly what they did before.
+- **Still not done.** Proven through Gemini's own hook classes with its extension manager, not in
+  a live model session: Google no longer lets a free personal login use Gemini CLI, so a live run
+  needs an API key. The L1 note is silent under Gemini (its pre-tool hook has no channel for a
+  note), there is no Gemini transcript reader for Stop, and no subagent event exists.
 
 **v3.37.0** — two agents on one logbook: concurrent writes, and whose entry it is
 
