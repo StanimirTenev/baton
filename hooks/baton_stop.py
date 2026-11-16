@@ -1806,6 +1806,12 @@ def main() -> int:
         save_chat(payload)
     except Exception:
         pass
+    try:      # the ledger (row 153): a line for each entry not yet in it, both passes; says nothing
+        root, name = config()
+        if root.is_dir():
+            _baton.ledger_update(root, name, _ss().task_folders(root), _baton.ledger_dir(_local_file))
+    except Exception:
+        pass
 
     # Already handed back this turn: count what came of it, and hand back once more only when
     # the first produced no entry (row 115). Never a third time.

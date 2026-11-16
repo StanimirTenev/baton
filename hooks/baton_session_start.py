@@ -202,7 +202,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.34.1"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.35.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -1861,6 +1861,42 @@ CHAT_INLINE = 2500
 CHAT_DAYS = 7
 
 
+def _few(found: list, n: int = 3) -> str:
+    said = "; ".join(f"{f}: \"{h[3:]}\"" + (f" (#{k + 1})" if k else "") for f, h, k in found[:n])
+    return said + (f"; and {len(found) - n} more" if len(found) > n else "")
+
+
+def ledger_notice(root: Path, name: str) -> str | None:
+    """The ledger (row 153) against the logbooks as they are: said every session while there is
+    something to say, never fixed. Nothing when there never was a ledger, or all is as recorded."""
+    d = _baton.ledger_dir(_local_file)
+    rep = _baton.ledger_check(root, name, d)
+    if not rep or not (rep["changed"] or rep["gone"] or rep["chain"]):
+        return None
+    said = []
+    if rep["changed"]:
+        said.append(f"{len(rep['changed'])} recorded {'entry' if len(rep['changed']) == 1 else 'entries'} "
+                    f"changed after Baton recorded {'it' if len(rep['changed']) == 1 else 'them'} -- "
+                    + _few(rep["changed"]))
+    if rep["gone"]:
+        said.append(f"{len(rep['gone'])} recorded {'entry is' if len(rep['gone']) == 1 else 'entries are'} "
+                    "gone -- " + _few(rep["gone"]))
+    if rep["chain"]:
+        said.append("the ledger's chain: " + "; ".join(w for _, w in rep["chain"][:3]))
+    tool = Path(__file__).resolve().parent.parent / "tools" / "baton_ledger.py"
+    repo = _local().get("repo")
+    if not tool.is_file() and repo:
+        tool = Path(repo).expanduser() / "tools" / "baton_ledger.py"
+    run = (f"BATON_HOME=\"{root}\" BATON_LOGBOOK=\"{name}\" BATON_LEDGER=\"{d}\" python3 \"{tool}\""
+           if tool.is_file() else None)
+    return ("🧾 Baton's ledger of logbook entries: " + "; ".join(said) + ". A logbook entry is a "
+            "record and is not edited; this may be a mistake, a correction Baton itself asked for, "
+            "or something worse -- the human decides, Baton changes nothing. Tell the human."
+            + (f" To see it: `{run} verify`; an edit the human accepts: `{run} ack --reason "
+               "\"<why>\"` (adds a line to the ledger, edits none)." if run else
+               f" The ledger is in {d}."))
+
+
 def previous_chat(own: dict, root: Path) -> str | None:
     folder = root / ".baton-chat"
     if not folder.is_dir():
@@ -2152,6 +2188,12 @@ def main() -> int:
             hidden = None           # a check that cannot read must not cost the board
         if hidden:
             notices.append(hidden)
+        try:
+            ledger = ledger_notice(root, name)
+        except Exception:
+            ledger = None           # a check that cannot read must not cost the board
+        if ledger:
+            notices.append(ledger)
         if own.get("source") in ("startup", "clear"):
             try:
                 kept = previous_chat(own, root)

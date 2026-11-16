@@ -25,6 +25,10 @@ Since stage 8: what Baton reads of Codex -- `patch_files` (the files an apply_pa
 the lines it adds), `codex_calls` and `codex_context_tokens` (its rollout transcript). Claude
 Code's transcript is still read where it always was, in Stop and the prompt hook.
 
+Also here, since v3.35.0: the ledger (ZA-OPRAVYANE row 153, Musab Khiri, 16.11) -- one line per
+logbook entry in a git repository of its own, appended by Stop, read by SessionStart and by
+tools/baton_ledger.py. Local git only: nothing here pushes; the tool does, when the human runs it.
+
 Also here, since v3.29.0: everything a hook does with the session's environment or with a
 secret -- the board process's environment (BOARD_ENV), the masking of a key pasted into a
 message, and whether the review's key file exists. The plugin directory's scan flagged
@@ -37,6 +41,7 @@ makes no network request; keep it that way (tests/test_shipped_text.py holds it)
 
 from __future__ import annotations   # `str | None`: Python 3.8 and 3.9 too
 
+import hashlib
 import json
 import os
 import re
@@ -429,3 +434,353 @@ _SECRET = re.compile(
 
 def mask_secrets(text: str) -> str:
     return _SECRET.sub("[masked]", text)
+
+
+# --- The ledger (ZA-OPRAVYANE row 153, v3.35.0) ---------------------------------------------
+# A logbook is written newest entry on top, so the file itself cannot be append-only, and an
+# older entry edited left no trace but Stop's own memory of the bodies -- a file the agent can
+# delete. The ledger is a second file that only grows: one JSON line per entry Baton has seen
+# (root, folder, heading, which of the same headings counted from the bottom, the sha256 of the
+# entry's text) and the sha256 of the line before it. It lives in a git repository of its own,
+# committed as lines are added. Nothing here pushes or adds a remote; tools/baton_ledger.py
+# pushes when the human runs it. Beside the repository: `<dir>.seen.json`, how many lines Baton
+# last wrote and the hash of the last one (a ledger deleted or cut is said, not rebuilt clean),
+# and `<dir>.lock`, so two sessions ending a turn together keep one chain.
+
+# Stop's _HEADING, a dated entry; tests/test_ledger.py holds the two the same.
+ENTRY_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})(?:[ T](\d{1,2}):(\d{2}))?")
+_ENTRY_BYTES = re.compile(ENTRY_HEADING.pattern.encode("ascii"))
+LEDGER_FILE = "ledger.jsonl"
+_GENESIS = "0" * 64
+
+
+def ledger_dir(local_file) -> Path:
+    """BATON_LEDGER, else `ledger` in baton.local.json, else `baton.ledger` in Baton's state
+    folder. `local_file(name)` is the caller's, as for `config`."""
+    try:
+        cfg = json.loads(local_file("baton.local.json").read_text("utf-8-sig"))
+    except Exception:
+        cfg = {}
+    raw = os.environ.get("BATON_LEDGER") or (cfg.get("ledger") if isinstance(cfg, dict) else None)
+    return Path(str(raw)).expanduser() if raw else Path(local_file("baton.ledger"))
+
+
+def ledger_entries(raw: bytes) -> list:
+    """(heading, n, sha256) for each dated entry of a logbook's bytes, oldest first; `n` counts
+    the same heading from the bottom, so an entry added on top renumbers nothing. The text
+    hashed is the heading and the body: the front matter is not part of it, a BOM and CRLF are
+    not, trailing whitespace is not. Bytes that are not UTF-8 are hashed as they are."""
+    text = raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
+    text = text.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    if text.startswith(b"---"):              # the header, as Stop's _body cuts it
+        parts = text.split(b"---", 2)
+        if len(parts) == 3:
+            text = parts[2]
+    # Split where a line starts with "## ", in bytes: a regex split took half the time (5 MB, 57
+    # logbooks: 88 ms with it, measured 16.11).
+    chunks = (b"\n" + text).split(b"\n## ")[1:]
+    out, seen = [], {}
+    for chunk in reversed(chunks):
+        entry = (b"## " + chunk).rstrip()
+        first = entry.split(b"\n", 1)[0]
+        if not _ENTRY_BYTES.match(first):
+            continue
+        heading = first.rstrip().decode("utf-8", "replace")
+        n = seen.get(heading, 0)
+        seen[heading] = n + 1
+        out.append((heading, n, hashlib.sha256(entry).hexdigest()))
+    return out
+
+
+def _root_id(root) -> str:
+    try:
+        return os.path.normcase(str(Path(root).expanduser().resolve()))
+    except (OSError, RuntimeError):
+        return os.path.normcase(str(root))
+
+
+def _ledger_lines(d: Path) -> list:
+    """(raw line, record or None) for each line of the ledger; [] when there is none."""
+    try:
+        raw = (d / LEDGER_FILE).read_bytes()
+    except OSError:
+        return []
+    out = []
+    for line in raw.split(b"\n")[:-1] if raw.endswith(b"\n") else raw.split(b"\n"):
+        try:
+            rec = json.loads(line.decode("utf-8"))
+        except ValueError:
+            rec = None
+        out.append((line, rec if isinstance(rec, dict) else None))
+    return out
+
+
+def _expected(records: list, rid: str) -> dict:
+    """(folder, heading, n) -> the hash the ledger stands by for this root: the latest entry or
+    ack line of each; None for an entry acknowledged gone."""
+    out = {}
+    for rec in records:
+        if rec and rec.get("root") == rid and "heading" in rec:
+            out[(rec.get("folder"), rec.get("heading"), rec.get("n"))] = rec.get("sha256")
+    return out
+
+
+def _sha(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _seen_file(d: Path) -> Path:
+    return d.with_name(d.name + ".seen.json")
+
+
+def _seen(d: Path):
+    try:
+        got = json.loads(_seen_file(d).read_text("utf-8"))
+        return got if isinstance(got, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _seen_ok(d: Path, lines: list) -> bool:
+    """The ledger still holds every line Baton last wrote, the last of them unchanged."""
+    seen = _seen(d)
+    if not seen:
+        return True
+    n = seen.get("lines")
+    return (isinstance(n, int) and 0 <= n <= len(lines)
+            and (n == 0 or _sha(lines[n - 1][0]) == seen.get("last")))
+
+
+def _seen_write(d: Path, lines: list) -> None:
+    try:
+        path = _seen_file(d)
+        with os.fdopen(os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w",
+                       encoding="utf-8") as fh:
+            json.dump({"lines": len(lines), "last": _sha(lines[-1][0]) if lines else None}, fh)
+    except OSError:
+        pass
+
+
+def _lock(d: Path):
+    """`<dir>.lock`, made with O_EXCL; None when it cannot be had in about 5 s. A lock older
+    than 30 s is a run that died holding it."""
+    try:
+        d.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except OSError:
+        return None
+    path = d.with_name(d.name + ".lock")
+    for _ in range(100):
+        try:
+            os.close(os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+            return path
+        except FileExistsError:
+            try:
+                if time.time() - path.stat().st_mtime > 30:
+                    path.unlink()
+                    continue
+            except OSError:
+                continue
+            time.sleep(0.05)
+        except OSError:
+            return None
+    return None
+
+
+def _unlock(path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
+def ledger_git(d: Path, *args, timeout: float = 5):
+    """git in the ledger's repository, never asking for anything on a terminal, with an identity
+    of its own (a fresh machine has none) and no signing. None when git cannot be run."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    try:
+        return subprocess.run(["git", "-C", str(d), "-c", "user.name=Baton",
+                               "-c", "user.email=baton@localhost", "-c", "commit.gpgsign=false",
+                               *args], capture_output=True, text=True, timeout=timeout, env=env,
+                              stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def ledger_dirty(d: Path) -> bool:
+    """ledger.jsonl differs from its last commit: Baton commits every line it adds, so something
+    else changed it. False when there is no repository, no commit yet, or no git."""
+    if not (d / ".git").exists():
+        return False
+    out = ledger_git(d, "status", "--porcelain", "--", LEDGER_FILE)
+    return bool(out and out.returncode == 0 and out.stdout.strip()
+                and not out.stdout.startswith("??"))
+
+
+def _append(d: Path, lines: list, recs: list, message: str) -> list:
+    """Chain `recs` onto `lines`, append them, commit -- unless the file already held a change
+    Baton did not make, which a commit of Baton's must not bury. Returns the lines now."""
+    dirty = ledger_dirty(d)
+    prev = _sha(lines[-1][0]) if lines else _GENESIS
+    out, added = list(lines), []
+    for rec in recs:
+        rec = dict(rec, prev=prev)
+        raw = json.dumps(rec, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        prev = _sha(raw)
+        added.append(raw)
+        out.append((raw, rec))
+    path = d / LEDGER_FILE
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "ab") as fh:
+        if fh.tell() > 0:
+            with open(path, "rb") as rd:
+                rd.seek(-1, os.SEEK_END)
+                if rd.read(1) != b"\n":
+                    fh.write(b"\n")       # a line cut short stays a line of its own
+        fh.write(b"\n".join(added) + b"\n")
+    if not dirty:
+        if not (d / ".git").exists():
+            ledger_git(d, "init", "-q")
+        if (d / ".git").exists():
+            ledger_git(d, "add", "--", LEDGER_FILE)
+            ledger_git(d, "commit", "-q", "--no-verify", "-m", message)
+    return out
+
+
+def ledger_update(root: Path, logbook: str, folders: list, d: Path) -> int:
+    """Stop's part: a line for every entry of `folders` the ledger has not seen. An entry it has
+    seen is never recorded again, whatever its text is now -- that is for verify to say and the
+    human to acknowledge. Nothing new: no lock, no git, nothing written. Returns lines added."""
+    rid = _root_id(root)
+
+    def missing(lines):
+        known = _expected([r for _, r in lines], rid)
+        out = []
+        for folder in folders:
+            try:
+                raw = (Path(folder) / logbook).read_bytes()
+            except OSError:
+                continue
+            for heading, n, digest in ledger_entries(raw):
+                if known.get((folder.name, heading, n)) is None:
+                    out.append({"at": datetime.now().isoformat(timespec="seconds"),
+                                "kind": "entry", "root": rid, "folder": folder.name,
+                                "heading": heading, "n": n, "sha256": digest})
+        return out
+
+    if not missing(_ledger_lines(d)):
+        return 0
+    lock = _lock(d)
+    if lock is None:
+        return 0
+    try:
+        lines = _ledger_lines(d)
+        recs = missing(lines)            # again, inside the lock: another Stop may have written
+        if not recs:
+            return 0
+        ok = _seen_ok(d, lines)
+        names = sorted({r["folder"] for r in recs})
+        lines = _append(d, lines, recs, f"{len(recs)} entr{'y' if len(recs) == 1 else 'ies'}: "
+                        + ", ".join(names[:5]) + (", ..." if len(names) > 5 else ""))
+        if ok:
+            _seen_write(d, lines)
+        return len(recs)
+    finally:
+        _unlock(lock)
+
+
+def ledger_check(root: Path, logbook: str, d: Path) -> dict | None:
+    """The ledger against the logbooks as they are now. None when there never was one here.
+    `changed`, `gone`: (folder, heading, n) of recorded entries whose text differs or that are
+    not there; `chain`: (line or None, what) for a line that does not parse or does not follow
+    the one before, a ledger shorter than Baton last wrote it, a change not committed. Reads
+    only; fixes nothing."""
+    lines = _ledger_lines(d)
+    if not lines and not (d / LEDGER_FILE).exists() and _seen(d) is None:
+        return None
+    records = [r for _, r in lines]
+    rid = _root_id(root)
+    rep = {"dir": d, "lines": len(lines), "entries": 0, "changed": [], "gone": [], "chain": []}
+    settled = {r.get("line") for r in records if r and r.get("kind") == "ack" and "line" in r}
+    prev = _GENESIS
+    for i, (raw, rec) in enumerate(lines, 1):
+        if i not in settled:
+            if rec is None:
+                rep["chain"].append((i, f"line {i} is not a ledger line"))
+            elif rec.get("prev") != prev:
+                rep["chain"].append((i, f"line {i} does not follow line {i - 1}"))
+        prev = _sha(raw)
+    if not _seen_ok(d, lines):
+        rep["chain"].append((None, f"the ledger has fewer lines than Baton last wrote "
+                                   f"({(_seen(d) or {}).get('lines')} then, {len(lines)} now), or "
+                                   "its last line then is not the same: it was deleted, cut or "
+                                   "rewritten"))
+    if ledger_dirty(d):
+        rep["chain"].append((None, f"{LEDGER_FILE} has changes that are not committed -- Baton "
+                                   "commits every line it adds, so something else changed it "
+                                   f"(git -C \"{d}\" diff)"))
+    books = {}
+    for (folder, heading, n), digest in sorted(_expected(records, rid).items(), key=str):
+        if digest is None:
+            continue
+        rep["entries"] += 1
+        if folder not in books:
+            try:
+                raw = (Path(root) / str(folder) / logbook).read_bytes()
+                books[folder] = {(h, k): s for h, k, s in ledger_entries(raw)}
+            except OSError:
+                books[folder] = None
+        now = (books[folder] or {}).get((heading, n))
+        if now is None:
+            rep["gone"].append((folder, heading, n))
+        elif now != digest:
+            rep["changed"].append((folder, heading, n))
+    return rep
+
+
+def ledger_ack(root: Path, logbook: str, d: Path, reason: str, folder: str | None = None,
+               heading: str | None = None) -> int:
+    """The human accepts what verify found: a new line for each finding (the entry's hash now,
+    or none for one gone; a line that broke the chain; a ledger cut), with the reason. No line is
+    edited. With `folder` or `heading`, only the entries that match. Returns lines added."""
+    lock = _lock(d)
+    if lock is None:
+        return 0
+    try:
+        rep = ledger_check(root, logbook, d)
+        if not rep:
+            return 0
+        rid, recs = _root_id(root), []
+        at = datetime.now().isoformat(timespec="seconds")
+        want_h = {heading, f"## {heading}"} if heading else None
+        books = {}
+        for f, h, n in rep["changed"] + rep["gone"]:
+            if (folder and f != folder) or (want_h and h not in want_h):
+                continue
+            if f not in books:
+                try:
+                    raw = (Path(root) / str(f) / logbook).read_bytes()
+                    books[f] = {(eh, k): s for eh, k, s in ledger_entries(raw)}
+                except OSError:
+                    books[f] = {}
+            recs.append({"at": at, "kind": "ack", "root": rid, "folder": f, "heading": h, "n": n,
+                         "sha256": books[f].get((h, n)), "reason": reason})
+        cut = False
+        if not folder and not heading:
+            for line, what in rep["chain"]:
+                if line is not None:
+                    recs.append({"at": at, "kind": "ack", "line": line, "what": what,
+                                 "reason": reason})
+                elif "fewer lines" in what:
+                    cut = True
+                    recs.append({"at": at, "kind": "ack", "cut": what, "reason": reason})
+        if not recs:
+            return 0
+        lines = _ledger_lines(d)
+        ok = _seen_ok(d, lines)
+        lines = _append(d, lines, recs, f"ack, {len(recs)}: {reason}"[:200])
+        if ok or cut:
+            _seen_write(d, lines)
+        return len(recs)
+    finally:
+        _unlock(lock)

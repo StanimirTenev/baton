@@ -11,3 +11,6 @@ hooks/baton.memlint.json
 hooks/baton.tests.*
 hooks/sessions/
 hooks/baton.turns/
+hooks/baton.ledger/
+hooks/baton.ledger.seen.json
+hooks/baton.ledger.lock
