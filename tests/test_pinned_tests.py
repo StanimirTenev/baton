@@ -23,6 +23,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from test_handback import _works_in
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "baton_stop.py"
@@ -85,7 +86,7 @@ def _env(tmp_path):
 def _stop(tmp_path, session="s1", again=False):
     transcript = tmp_path / "t.jsonl"
     start = datetime.fromtimestamp(time.time() - 600, tz=timezone.utc).isoformat()
-    transcript.write_text(json.dumps({"timestamp": start}) + "\n", "utf-8")
+    transcript.write_text(json.dumps({"timestamp": start}) + "\n" + _works_in(tmp_path / "tasks", 300), "utf-8")
     t0 = time.time()
     out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True,
                          env=_env(tmp_path), timeout=30,

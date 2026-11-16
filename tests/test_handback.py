@@ -22,12 +22,20 @@ STOP = ROOT / "hooks" / "baton_stop.py"
 DOCTOR = ROOT / "tools" / "baton_doctor.py"
 
 
-def _call(folder, ago: float) -> str:
+def _call(folder, ago: float, n: int = 0) -> str:
     """A transcript line: one Bash call `ago` seconds ago that works in `folder`."""
     at = (datetime.now() - timedelta(seconds=ago)).astimezone().isoformat()
     return json.dumps({"type": "assistant", "timestamp": at, "cwd": str(folder), "message": {
-        "content": [{"type": "tool_use", "id": "w0", "name": "Bash",
+        "content": [{"type": "tool_use", "id": f"w{n}", "name": "Bash",
                      "input": {"command": f'cd "{folder}" && python3 work.py'}}]}}) + "\n"
+
+
+def _works_in(tasks, ago: float) -> str:
+    """Rows 165-166: a call in every task folder there is now -- the session wrote what it is
+    judged on. A transcript with no tool call is a session that has written nothing."""
+    tasks = Path(tasks)
+    folders = sorted(f for f in tasks.iterdir() if f.is_dir()) if tasks.is_dir() else []
+    return "".join(_call(f, ago, i) for i, f in enumerate(folders))
 
 
 def _setup(tmp_path):
