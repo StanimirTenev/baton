@@ -65,3 +65,15 @@ def test_an_unknown_host_keeps_what_it_had(tmp_path):
     """No turn_id, no rollout transcript (the probe's pt-codex.json): not known to be Codex."""
     event = {k: v for k, v in _patch(TYPED).items() if k not in ("turn_id", "transcript_path")}
     assert _run(event, tmp_path) == ""
+
+
+def test_a_patch_that_re_adds_a_heading_the_logbook_holds_is_silent(tmp_path):
+    """Row 161 (v3.36.0): a heading removed and added back to put a section under it is carried
+    through, not typed anew; one with an hour the logbook does not hold is still L1."""
+    log = tmp_path / "tasks" / "riba-proba" / "LOGBOOK.md"
+    log.parent.mkdir(parents=True)
+    log.write_text("## 2026-11-14 10:00 — kept\n\n### Done\nx\n", "utf-8")
+    body = (f"*** Update File: {log}\n@@\n-## 2026-11-14 10:00 — kept\n+## 2026-11-14 10:00 — kept\n"
+            "+\n+### Claims to verify\n+none")
+    assert _run(_patch(body), tmp_path) == ""
+    assert "L1" in _run(_patch(body.replace("+## 2026-11-14 10:00", "+## 2026-11-14 10:05")), tmp_path)

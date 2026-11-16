@@ -42,6 +42,35 @@ _TYPED_ANYWHERE = re.compile(
 _CLOCK_HEADING = re.compile(r"## [$({]")
 _WRITES = re.compile(r"<<|\btee\b|\bsed\s+(?:-\w+\s+)*-i|\.write(?:_text)?\(")
 
+# Row 161 (v3.36.0; phase-1 handoff test, 16.11): the note came three times for edits that carried
+# an existing heading through unchanged -- to add a claims section under it. A heading's typed hour
+# that the logbook on disk already holds was stamped before; only a date and hour the logbook does
+# not hold yet is new (a new heading, or an hour changed). The stamp is compared, not the whole
+# line: inside a command a heading ends in `\n'` or a quote. A logbook that cannot be found or
+# read is compared with nothing, so the note comes as before.
+_STAMP = re.compile(r"## ((?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})[ T]\d{1,2}:\d{2})\b")
+
+
+def _stamps(text: str) -> set:
+    return set(_STAMP.findall(text or ""))
+
+
+def _on_disk(paths, cwd: str) -> set:
+    """The typed-hour stamps the logbooks at `paths` already hold."""
+    out = set()
+    for raw in paths:
+        path = os.path.expanduser(str(raw))
+        if not os.path.isabs(path):
+            if not cwd:
+                continue
+            path = os.path.normpath(os.path.join(cwd, path))
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                out |= _stamps(fh.read())
+        except OSError:
+            continue
+    return out
+
 
 def _load_baton():
     try:
@@ -137,22 +166,34 @@ def main() -> int:
         _, logbook = ss.config()
     except Exception:
         return 0
+    cwd = str(event.get("cwd") or "")
     if patch is not None:
-        hits = [f for f, added in _baton.patch_files(patch, str(event.get("cwd") or ""))
-                if os.path.basename(f) == logbook and _TYPED_HOUR.search(added)]
+        hits = [f for f, added in _baton.patch_files(patch, cwd)
+                if os.path.basename(f) == logbook and _TYPED_HOUR.search(added)
+                and _stamps("\n".join(m.group(0) for m in _TYPED_HOUR.finditer(added)))
+                - _on_disk([f], cwd)]
         if not hits:
-            return 0                  # no logbook gets a typed hour from this patch
+            return 0                  # no logbook gets a new typed hour from this patch
         path = hits[0]
     elif command is not None:
         into = re.search(r">>?\s*[\"']?\S*" + re.escape(logbook), command)
         if (logbook not in command or not (into or _WRITES.search(command))
                 or not _TYPED_ANYWHERE.search(command) or _CLOCK_HEADING.search(command)):
             return 0                  # not a write of a typed hour into a logbook
+        named = re.findall(r"[^\s'\"=()<>|;&]*" + re.escape(logbook), command)
+        if not _stamps(command) - _on_disk(named, cwd):
+            return 0                  # every typed hour in it is one the logbook already holds
         path = logbook
     elif os.path.basename(path) != logbook:
         return 0                      # only a logbook heading is read from the clock
     elif not _TYPED_HOUR.search(_written_text(tool, ti)):
         return 0                      # no typed hour: nothing baton_entry.py would change
+    else:
+        old = ti.get("old_string") or "" if tool == "Edit" else "\n".join(
+            e.get("old_string") or "" for e in ti.get("edits", []) if isinstance(e, dict))
+        written = "\n".join(m.group(0) for m in _TYPED_HOUR.finditer(_written_text(tool, ti)))
+        if not _stamps(written) - _stamps(old) - _on_disk([path], cwd):
+            return 0                  # the heading is carried through, not typed anew
 
     try:
         state = ss.lessons_load()

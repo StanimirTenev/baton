@@ -162,3 +162,89 @@ def test_the_plugin_and_the_installer_send_bash_to_it():
     hooks = json.loads((HOOK.parent / "hooks.json").read_text("utf-8"))
     assert {"Bash", "Skill"} <= set(hooks["hooks"]["PreToolUse"][0]["matcher"].split("|"))
     assert '"PreToolUse": "Write|Edit|MultiEdit|Bash' in (HOOK.parent / "_install_hooks.py").read_text("utf-8")
+
+
+# v3.36.0, ZA-OPRAVYANE row 161 -- the phase-1 handoff test (16.11): the note came three times for
+# edits that carried an existing heading through unchanged, to add a claims section under it (a
+# Claude Edit twice, a Codex Python replace once). Only a heading whose typed hour is not already
+# in the logbook is one baton_entry.py would have stamped. The payloads are those of the test.
+DEMO_LOG = """---
+state: active
+---
+
+# Logbook -- handoff-demo
+
+## 2026-11-16 16:38 — Approved criteria and completed short market overview
+
+### What was asked
+Go on.
+
+## 2026-11-16 16:34 — Draft criteria table (v1)
+
+### What was asked
+Continue the task.
+"""
+
+
+def _demo(tmp_path) -> Path:
+    log = tmp_path / "tasks" / "handoff-demo" / "DNEVNIK.md"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(DEMO_LOG, "utf-8")
+    return log
+
+
+def _edit(path, old, new) -> dict:
+    return {"hook_event_name": "PreToolUse", "tool_name": "Edit",
+            "tool_input": {"file_path": str(path), "old_string": old, "new_string": new}}
+
+
+def test_an_edit_that_keeps_the_heading_and_adds_a_section_says_nothing(tmp_path):
+    log = _demo(tmp_path)
+    head = "## 2026-11-16 16:34 — Draft criteria table (v1)\n\n"
+    event = _edit(log, head, head + "### Claims to verify\nNone: \"public\" here is the kind of "
+                  "source.\n\n")
+    assert _context(_run(event, tmp_path)) == ""
+
+
+def test_a_python_replace_that_keeps_the_heading_says_nothing(tmp_path):
+    log = _demo(tmp_path)
+    cmd = ("python - <<'PY'\nfrom pathlib import Path\n"
+           "p=Path('../tasks/handoff-demo/DNEVNIK.md')\ns=p.read_text()\n"
+           "heading='## 2026-11-16 16:38 — Approved criteria and completed short market overview\\n'\n"
+           "s=s.replace(heading,heading+'\\n### Claims to verify\\nPublic means the sources.\\n',1)\n"
+           "p.write_text(s)\nPY")
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(tmp_path / "work"),
+             "tool_input": {"command": cmd}}
+    assert _context(_run(event, tmp_path)) == ""
+    assert log.is_file()
+
+
+def test_an_edit_that_changes_the_hour_is_still_flagged(tmp_path):
+    log = _demo(tmp_path)
+    event = _edit(log, "## 2026-11-16 16:34 — Draft", "## 2026-11-16 16:36 — Draft")
+    assert "baton_entry.py" in _context(_run(event, tmp_path))
+
+
+def test_a_new_heading_above_kept_ones_is_still_flagged(tmp_path):
+    log = _demo(tmp_path)
+    head = "## 2026-11-16 16:38 — Approved"
+    event = _edit(log, head, "## 2026-11-16 16:50 — New entry\n\n### Done\nx\n\n" + head)
+    assert "baton_entry.py" in _context(_run(event, tmp_path))
+
+
+def test_a_write_of_the_whole_logbook_with_its_headings_kept_says_nothing(tmp_path):
+    log = _demo(tmp_path)
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Write",
+             "tool_input": {"file_path": str(log), "content": DEMO_LOG.replace("Go on.", "Go on!")}}
+    assert _context(_run(event, tmp_path)) == ""
+    event["tool_input"]["content"] = "## 2026-11-16 17:01 — x\n\n" + DEMO_LOG
+    assert "baton_entry.py" in _context(_run(event, tmp_path))
+
+
+def test_a_bash_command_on_a_logbook_it_cannot_find_still_says_it(tmp_path):
+    """Nothing to compare with: the note, as before."""
+    cmd = ("python - <<'PY'\np='elsewhere/DNEVNIK.md'\nh='## 2026-11-16 16:38 — x\\n'\n"
+           "s=open(p).read().replace(h,h+'more',1)\nopen(p,'w').write(s)\nPY")
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": str(tmp_path),
+             "tool_input": {"command": cmd}}
+    assert "baton_entry.py" in _context(_run(event, tmp_path))
