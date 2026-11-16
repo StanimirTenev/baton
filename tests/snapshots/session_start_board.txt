@@ -7,10 +7,10 @@ Baton — the tasks in <ROOT>, ordered by whose move it is and by priority:
 - 1 · проба-диск 🔴 [high] — смени диска
 - 2 · alpha-web 🟡 [medium] — publish the page
 - 3 · zeta-work 🟡 [medium] — finish the draft
+- 4 · beta-docs 🟢 [low] — approve the text
 
 ⛔ Waiting on someone OUTSIDE / blocked (for information):
-- 4 · gamma-supplier 🟡 [medium] — the part arrives  (waiting on: supplier)
-- 5 · beta-docs 🟢 [low] — approve the text  (waiting on: human)
+- 5 · gamma-supplier 🟡 [medium] — the part arrives  (waiting on: supplier)
 
 ⛔ UNCLOSED PLANS — the task counts as not done:
 - проба-диск — PLAN.md is `open`, last touched 3 days ago
