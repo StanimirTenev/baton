@@ -104,3 +104,39 @@ def test_a_running_session_s_chat_is_not_taken_at_startup(tmp_path):
     board = _run("baton_session_start.py", env, {"session_id": "b", "source": "startup",
                                                  "transcript_path": str(tmp_path / "proj" / "b.jsonl")})
     assert "another window" not in board and other.is_file()
+
+
+def test_a_chat_older_than_another_session_s_entry_is_not_called_the_previous_one(tmp_path):
+    """v3.36.0, ZA-OPRAVYANE row 163 -- the phase-1 handoff test (16.11): Claude, then Codex, then
+    Claude on one logbook. The third session's board offered the first one's chat as "the previous
+    session's conversation after its last logbook entry", though Codex had written two entries
+    after it; its end said the task waited on a review that was by then done. A chat saved before
+    a logbook was last written is said to be older than that, with when and where."""
+    env, tasks, book = _setup(tmp_path)
+    tr = _talk(tmp_path / "proj" / "a.jsonl", TURNS)
+    _run("baton_stop.py", env, {"session_id": "a", "transcript_path": tr})
+    kept = tasks / ".baton-chat" / "a.md"
+    saved = time.time() - 600
+    os.utime(kept, (saved, saved))
+    later = datetime.fromtimestamp(saved) + timedelta(minutes=4)
+    book.write_text(book.read_text("utf-8").replace(
+        "---\n\n", f"---\n\n## {later:%Y-%m-%d %H:%M} — another agent's entry\n\n{BODY}\n", 1), "utf-8")
+    os.utime(book, (later.timestamp(), later.timestamp()))
+    board = _run("baton_session_start.py", env, {"session_id": "b", "source": "startup",
+                                                 "transcript_path": str(tmp_path / "proj" / "b.jsonl")})
+    context = json.loads(board)["hookSpecificOutput"]["additionalContext"]
+    assert "Agreed: 49 euro per seat from December." in context, "still handed over"
+    assert "The previous session's conversation" not in context, context
+    assert "NOT the latest" in context and "Claude Code" in context
+    assert f"pricing's LOGBOOK.md was written at {later:%Y-%m-%d %H:%M}" in context, context
+
+
+def test_a_chat_newer_than_every_logbook_keeps_its_words(tmp_path):
+    env, tasks, _ = _setup(tmp_path)
+    tr = _talk(tmp_path / "proj" / "a.jsonl", TURNS)
+    _run("baton_stop.py", env, {"session_id": "a", "transcript_path": tr})
+    board = _run("baton_session_start.py", env, {"session_id": "b", "source": "startup",
+                                                 "transcript_path": str(tmp_path / "proj" / "b.jsonl")})
+    context = json.loads(board)["hookSpecificOutput"]["additionalContext"]
+    assert "💬 The previous session's conversation after its last logbook entry" in context
+    assert "NOT the latest" not in context

@@ -1901,7 +1901,7 @@ def ledger_notice(root: Path, name: str) -> str | None:
                f" The ledger is in {d}."))
 
 
-def previous_chat(own: dict, root: Path) -> str | None:
+def previous_chat(own: dict, root: Path, name: str = "LOGBOOK.md") -> str | None:
     folder = root / ".baton-chat"
     if not folder.is_dir():
         return None
@@ -1942,6 +1942,29 @@ def previous_chat(own: dict, root: Path) -> str | None:
     except OSError:
         return None                 # not moved: left where it is, for the next start
     tail = body[-CHAT_INLINE:]
+    # v3.36.0, row 163 (phase-1 handoff test, 16.11): the chat is kept only from Claude Code's
+    # transcripts, so a Codex session -- or any session that ran no Stop of this kind -- that wrote
+    # a logbook after it left it the oldest word, not the latest. A logbook written after the chat
+    # was saved is named, and the chat is not called the previous session's.
+    later = []
+    for f in task_folders(root):
+        try:
+            when = (f / name).stat().st_mtime
+        except OSError:
+            continue
+        if when > saved + 1:
+            later.append((when, f.name))
+    if later:
+        when, folder = max(later)
+        return (f"💬 An earlier Claude Code conversation was kept by Baton ({len(body):,} "
+                f"characters, until {datetime.fromtimestamp(saved):%Y-%m-%d %H:%M}) -- NOT the "
+                f"latest work: after it, {folder}'s {name} was written at "
+                f"{datetime.fromtimestamp(when):%Y-%m-%d %H:%M}"
+                + (f" ({len(later)} logbooks in all)" if len(later) > 1 else "")
+                + ", by a later session, perhaps another agent. Read that logbook first; what "
+                f"this chat says may be out of date. In full: {copy} -- a decision in it that no "
+                "later entry has superseded goes into the task's logbook. Its end:\n"
+                + ("[...]\n" if len(body) > len(tail) else "") + tail)
     return (f"💬 The previous session's conversation after its last logbook entry was kept by Baton "
             f"({len(body):,} characters, until {datetime.fromtimestamp(saved):%Y-%m-%d %H:%M}): the "
             f"human's messages and your text replies, no tool output. In full: {copy} -- read it "
@@ -2200,7 +2223,7 @@ def main() -> int:
             notices.append(ledger)
         if own.get("source") in ("startup", "clear"):
             try:
-                kept = previous_chat(own, root)
+                kept = previous_chat(own, root, name)
             except Exception:
                 kept = None         # the chat that cannot be handed over stays where it is
             if kept:
