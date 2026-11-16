@@ -43,9 +43,9 @@ What has been checked against Gemini CLI 0.68.0, and how: no model was run. This
      ~/.gemini/GEMINI.md "$HOME/tasks" LOGBOOK.md 0
    ```
 
-5. Check it. `gemini extensions list` should show `baton` enabled. In the interactive CLI, `/hooks panel` lists the four hooks.
+5. Check it. `gemini extensions list` should show `baton` with its path and `Enabled (User): true`. Gemini's docs say `/hooks panel` in the interactive CLI lists the hooks; that was not tried.
 
-Why an extension rather than hooks in `~/.gemini/settings.json`: with folder trust on, Gemini drops the hooks from settings in an untrusted folder, because it labels user hooks as project hooks. It still runs extension hooks there.
+Why an extension rather than hooks in `~/.gemini/settings.json`: with folder trust on, Gemini drops the hooks from settings in an untrusted folder, because it labels user hooks as project hooks. Its hook registry still runs extension hooks there (run through the registry with the folder marked untrusted; that the extension loader ignores folder trust for hooks was read in its code, not run).
 
 Updating: `git pull` in the clone. A linked extension reads the folder in place, so the next session runs the new hooks. Read what changed (`git -C ~/.gemini/baton log -p`) before it does.
 
@@ -54,7 +54,7 @@ Updating: `git pull` in the clone. A linked extension reads the folder in place,
 - **Lesson L1 is silent.** Gemini has no advisory channel before a tool runs. `BeforeTool` can only block a tool or rewrite its input, and Baton's L1 note is advice, never a block. `baton_pretool.py` does not read Gemini's tool names yet either (`write_file`, `replace`, `run_shell_command`). The BeforeTool hook does run on those three tools (about 0.1 s each) and says nothing. The place for the note is `AfterTool`, which is not wired up yet.
 - **No subagent event.** Gemini 0.68.0 has no SubagentStop or SubagentStart. Whether its tool hooks fire for a subagent's tool calls is not known.
 - **The prompt hook also fires on Baton's own hand-back.** When Stop hands a turn back, Gemini sends the reason as a new prompt and runs BeforeAgent on it. If that text names a task the session has not been pointed to yet, the pointer for it is added to the model's context. It happens once per task per session, so it cannot loop, but the pointer repeats what the hand-back already says.
-- **Gemini's transcript is not read.** Stop counts every file saved since the session began as this session's work, other processes' files included. Codex had the same problem before it got its own reader. The board's "messages since the last entry" count, the answer check at Stop and the prompt hook's token reminder read Claude Code's transcript format, so under Gemini they find nothing and stay quiet.
+- **Gemini's transcript is not read.** Stop reads it as Claude Code's format and finds no tool call in it. In 3.36.0 that meant counting every file saved since the session began as this session's work, other processes' files included, as with Codex before its reader. Since 3.37.0 a transcript that opens but holds no recognised call reads as "did nothing", so a newer file may not be handed back at all; that has not been run under Gemini. The board's "messages since the last entry" count, the answer check at Stop and the prompt hook's token reminder read Claude Code's transcript format, so under Gemini they find nothing and stay quiet.
 - **The board arrives as data.** Gemini's system prompt tells the model to treat `<hook_context>` as read-only data and not as commands. The board asks to be shown in the first reply, and whether a Gemini model does that is not known.
 - **PostToolBatch and StopFailure.** Gemini has neither event, so lesson L2 (`baton_batch.py`) and the record of a failed turn (`baton_stop_failure.py`) do not run.
 - **Not tested with a live model.** Google's free tier refuses Gemini CLI (`IneligibleTierError`). A paid plan or an AI Studio API key is needed for a real session, and none was used.

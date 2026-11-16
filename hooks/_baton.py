@@ -185,7 +185,8 @@ def host(payload, environ=None) -> str:
         rollout and (not sid or rollout.group(1) == sid))
     claude = bool(sid) and name == f"{sid}.jsonl"
     chat = _GEMINI_CHAT.fullmatch(name)
-    gemini = payload.get("hook_event_name") in _GEMINI_EVENTS or bool(
+    event = payload.get("hook_event_name")
+    gemini = (isinstance(event, str) and event in _GEMINI_EVENTS) or bool(
         chat and sid and chat.group(1) == sid[:8])
     found = [h for h, yes in (("codex", codex), ("claude", claude), ("gemini", gemini)) if yes]
     return found[0] if len(found) == 1 else "unknown"

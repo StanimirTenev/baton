@@ -100,3 +100,9 @@ def test_the_gemini_fixtures_carry_no_account_data_or_local_paths():
     for f in FIXTURES.rglob("*"):
         if f.is_file():
             assert not bad.search(f.read_text("utf-8")), f.name
+
+
+@pytest.mark.parametrize("value", [[], {}, ["BeforeAgent"], 7, None])
+def test_an_odd_event_name_is_no_evidence_and_no_crash(value):
+    """host() never raised on a dict payload before Gemini; a list or dict here must not make it."""
+    assert _core().host({"hook_event_name": value}, {}) == "unknown"
