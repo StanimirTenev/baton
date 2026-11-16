@@ -435,7 +435,9 @@ def test_ack_records_the_new_text_with_a_reason_and_edits_no_line(w):
     last = w.records()[-1]
     assert last["kind"] == "ack" and last["reason"] == "the count was wrong"
     assert last["sha256"] == _sha(OLD.replace("3 formats", "4 formats").rstrip())
-    assert w.tool("verify").returncode == 0
+    out = w.tool("verify")
+    assert out.returncode == 0 and "accepted: 1 ack line" in out.stdout
+    assert "the count was wrong" in out.stdout, "an ack is listed with its reason"
     assert "Baton's ledger" not in w.start()
     w.stop()
     assert w.records()[-1] == last, "Stop does not record an acknowledged entry again"
@@ -449,7 +451,7 @@ def test_ack_takes_a_gone_entry_and_a_folder_filter(w):
     b.write_text(BOOK.replace(OLD, ""), "utf-8")
     assert w.tool("ack", "--folder", "alpha", "--reason", "merged").returncode == 0
     out = w.tool("verify")
-    assert out.returncode == 1 and "beta" in out.stdout and "alpha" not in out.stdout
+    assert out.returncode == 1 and "gone: 1 recorded" in out.stdout and "  beta: " in out.stdout
     assert w.tool("ack", "--reason", "merged").returncode == 0
     assert w.tool("verify").returncode == 0
 
@@ -519,6 +521,54 @@ def test_the_ledger_setting_in_baton_local_json_moves_it(w, tmp_path):
     assert (where / "ledger.jsonl").is_file()
     out = w.tool("verify", CLAUDE_PLUGIN_DATA=str(data), BATON_LEDGER="")
     assert out.returncode == 0 and str(where) in out.stdout
+
+
+@needs_git
+def test_lines_of_another_root_are_neither_checked_nor_taken_for_this_one(w, tmp_path):
+    """One ledger, two roots (a root moved, or set wrong): each is checked against its own."""
+    w.task()
+    w.stop()
+    other = tmp_path / "other"
+    (other / "beta").mkdir(parents=True)
+    (other / "beta" / "LOGBOOK.md").write_text(BOOK, "utf-8")
+    w.stop(BATON_HOME=str(other))
+    assert len(w.records()) == 4, "the same headings, another root: recorded for it"
+    assert w.tool("verify").returncode == 0, "alpha's entries are not beta's, nor gone"
+    assert w.tool("verify", BATON_HOME=str(other)).returncode == 0
+
+
+@needs_git
+def test_verify_given_a_root_with_no_lines_says_so_and_is_not_clean(w, tmp_path):
+    """The plugin's task folder option reaches the hooks, not a tool run by hand: a root given
+    wrong must not read as "as recorded"."""
+    w.task()
+    w.stop()
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    out = w.tool("verify", BATON_HOME=str(empty))
+    assert out.returncode == 1 and str(w.root.resolve()) in out.stdout
+    assert "as recorded" not in out.stdout
+
+
+@needs_git
+def test_the_tool_finds_the_ledger_of_a_script_install(w):
+    """install.sh: the hooks and baton.local.json in ~/.claude/baton/hooks, no plugin folder."""
+    hooks = w.home / ".claude" / "baton" / "hooks"
+    hooks.mkdir(parents=True)
+    for f in HOOKS.glob("*.py"):
+        shutil.copy(f, hooks)
+    shutil.copytree(HOOKS / "lang", hooks / "lang")
+    (hooks / "baton.local.json").write_text(
+        json.dumps({"home": str(w.root), "logbook": "LOGBOOK.md"}), "utf-8")
+    w.task()
+    env = dict(CLAUDE_PLUGIN_DATA="", BATON_LEDGER="", BATON_HOME="", BATON_LOGBOOK="")
+    out = subprocess.run([sys.executable, str(hooks / "baton_stop.py")], input=b'{"session_id":"s"}',
+                         capture_output=True, env=w.env(**env), timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert (hooks / "baton.ledger" / "ledger.jsonl").is_file()
+    out = w.tool("verify", **env)
+    assert out.returncode == 0 and str(hooks / "baton.ledger") in out.stdout
+    assert "2 entries" in out.stdout
 
 
 @needs_git

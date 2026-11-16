@@ -700,7 +700,12 @@ def ledger_check(root: Path, logbook: str, d: Path) -> dict | None:
         return None
     records = [r for _, r in lines]
     rid = _root_id(root)
-    rep = {"dir": d, "lines": len(lines), "entries": 0, "changed": [], "gone": [], "chain": []}
+    rep = {"dir": d, "lines": len(lines), "entries": 0, "changed": [], "gone": [], "chain": [],
+           # lines kept for another task root: a root given wrong reads as "nothing recorded"
+           "roots": sorted({r["root"] for r in records if r and r.get("root") not in (None, rid)}),
+           # what was accepted, and why: an ack is a line anyone running as the human can add
+           "acks": [r for r in records if r and r.get("kind") == "ack"
+                    and r.get("root", rid) == rid]}
     settled = {r.get("line") for r in records if r and r.get("kind") == "ack" and "line" in r}
     prev = _GENESIS
     for i, (raw, rec) in enumerate(lines, 1):

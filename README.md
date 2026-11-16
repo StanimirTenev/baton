@@ -105,7 +105,9 @@ count) and the sha256 of the line before it, a chain. It lives in a git reposito
 
 - **Stop** adds a line for every entry the ledger has not seen, at the end of each turn, and
   commits. An entry it has seen is never recorded again, whatever its text is now, and no line
-  is ever rewritten. With nothing new it reads two files and starts no process.
+  is ever rewritten. With nothing new it reads the ledger and the logbooks and starts no
+  process -- about 0.1 s more per Stop and per session start on 5 MB of logbooks (57 folders,
+  2,870 entries, measured 16.11).
 - **SessionStart** compares the ledger with the logbooks and, when something differs, says so
   in one block: entries changed after they were recorded, recorded entries that are gone, a
   broken chain (a line that does not follow the one before, a ledger shorter than Baton last
@@ -115,7 +117,7 @@ count) and the sha256 of the line before it, a chain. It lives in a git reposito
   you accept is a new line with the entry's hash now and your reason; no line is edited:
 
 ```bash
-python3 tools/baton_ledger.py verify                       # what changed, what is gone, the chain
+python3 tools/baton_ledger.py verify                       # what changed, what is gone, the chain, the acks
 python3 tools/baton_ledger.py ack --reason "the count in it was wrong"
 python3 tools/baton_ledger.py ack --folder alpha --heading "## 2026-10-20 09:00 — first" --reason "..."
 python3 tools/baton_ledger.py push                          # to the remote you added yourself
@@ -125,9 +127,12 @@ python3 tools/baton_ledger.py verify --remote               # is the remote's hi
 As a plugin, pass the state folder as the skills do (`CLAUDE_PLUGIN_DATA=...`); the block
 SessionStart shows carries the whole command, paths included.
 
-**What it does not prove.** The agent runs as you, with your files and your git access. It can
-rewrite the ledger, recompute every later line and commit, as easily as it edits the logbook;
-on this machine the chain only shows a careless edit, not a deliberate one. The ledger holds
+**What it does not prove.** The agent runs as you, with your files and your git access. The
+cheapest way past the ledger is `ack` itself: the agent can run it as you can, and the block
+SessionStart shows names the command. An ack is a line with its time and reason, listed by
+`verify` and in the repository's log -- read them; an ack you did not make is the finding. The
+agent can also rewrite the ledger, recompute every later line and commit, as easily as it edits
+the logbook; on this machine the chain only shows a careless edit, not a deliberate one. The ledger holds
 only once a copy of it is somewhere the agent cannot rewrite: a private remote you add
 (`git -C <ledger> remote add anchor <address>`), pushed with `push`, that **refuses a rewritten
 history** -- force-push disabled, or branch protection on the branch. A remote that accepts a
@@ -136,7 +141,9 @@ remote and never pushes by itself; the hooks still make no network request. Also
 anything about an entry before Stop first saw it -- an entry edited within its own turn, or
 every entry that existed when the ledger started, is recorded as it was then; a `## ` section
 without a date is not an entry and is not recorded; and the ledger keeps folder names and
-headings in plain text, so a push sends those off this machine. Uninstalling the plugin
+headings in plain text, and each line also the task root's full path, a time and, for an ack,
+its reason (the commit messages name folders and reasons); a push sends all of it off this
+machine. Uninstalling the plugin
 without `--keep-data` deletes the state folder and the ledger in it; a pushed copy stays.
 
 ## Uninstall
@@ -179,7 +186,7 @@ there and asks nothing of Claude's memory or of any service.
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear` |
 | `.baton-outside.md` in a task folder (or the task root) | one line when a command sent something off this machine (a push, a pull request or issue, a release, an upload to PyPI or npm), to be put in that task's next entry |
-| `baton.ledger/` in Baton's state folder, or where `ledger` in `baton.local.json` says | [the ledger](#the-ledger-an-older-entry-edited-is-seen): a git repository with one line per logbook entry (folder, heading, two hashes), committed by Stop; beside it `baton.ledger.seen.json` and a lock while it is written. Never pushed by Baton |
+| `baton.ledger/` in Baton's state folder, or where `ledger` in `baton.local.json` says | [the ledger](#the-ledger-an-older-entry-edited-is-seen): a git repository with one line per logbook entry (task root path, folder, heading, time, two hashes; an ack's reason), committed by Stop; beside it `baton.ledger.seen.json` and a lock while it is written. Never pushed by Baton |
 | Baton's state folder (`${CLAUDE_PLUGIN_DATA}` as a plugin, beside the hooks for a script install) | when each hook last ran, per-session notes, the lesson counts, the output of a test command you pinned, and the moved conversation files, deleted at a later session start once 7 days old |
 | `~/.claude/settings.json`, `~/.claude/CLAUDE.md` | **script install only**: the six hook entries and the Baton section, each with a copy of the file as it was. As a plugin neither file is touched |
 
@@ -217,7 +224,7 @@ Baton's state folder. Keeping the conversation has no switch to turn it off in v
 | the hooks, installed as a plugin | never | -- |
 | the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
-| `tools/baton_ledger.py push`, `verify --remote` | when you run them, and only after you added a remote to the ledger's repository | that remote, by git -- the ledger: folder names, entry headings, hashes |
+| `tools/baton_ledger.py push`, `verify --remote` | when you run them, and only after you added a remote to the ledger's repository | that remote, by git -- the ledger: the task root's path, folder names, entry headings, times, hashes, ack reasons, and commit messages naming folders |
 | `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; anything holding a word listed in `review_confidential` (in its path or its text) is held back before anything is sent |
 
 `tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
@@ -271,16 +278,18 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   in its state folder, or `ledger` in `baton.local.json`), appended and committed by Stop at the
   end of each turn (ZA-OPRAVYANE row 153, after Musab Khiri). An entry already recorded is never
   recorded again and no line is rewritten; with nothing new, Stop starts no process for it.
-- **SessionStart says when an entry changed after it was recorded, or is gone, or the chain is
-  broken.** One block, every session until it is settled; it fixes nothing. A deleted or cut
+- **SessionStart says when a recorded entry changed, is gone, or the chain is broken.** One block, every session until it is settled; it fixes nothing. A deleted or cut
   ledger is said too, not rebuilt clean.
-- **`tools/baton_ledger.py`**: `verify` names what changed, `ack --reason` accepts it with a new
-  line (never an edited one), `push` sends the ledger to a remote you added, `verify --remote`
-  asks whether that remote's history is still in this one.
-- **Not proved:** the agent runs as you and can rewrite the ledger and its history too. Only a
-  private remote that refuses a rewritten history (no force-push, branch protection) anchors
-  it. Baton never adds a remote or pushes by itself; the hooks still make no network request.
-  An entry edited before Stop first saw it is recorded as edited.
+- **A new tool, `tools/baton_ledger.py`, verifies, accepts and pushes.** `verify` names what
+  changed and lists every accepted edit with its reason, `ack --reason` accepts one with a new line
+  (never an edited one), `push` sends the ledger to a remote you added, `verify --remote` asks
+  whether that remote's history is still in this one.
+- **What it does not prove is said in the README.** The agent runs as you: it can run `ack`
+  itself, and rewrite the ledger and its history. Only a private remote that refuses a rewritten
+  history (no force-push, branch protection) anchors it, and an ack is a line you can read. Baton
+  never adds a remote or pushes by itself; the hooks still make no network request. An entry
+  edited before Stop first saw it is recorded as edited. Each hook takes about 0.1 s more on
+  5 MB of logbooks.
 
 **v3.34.1** — the README says what Baton reads, writes and injects; no change to the hooks
 

@@ -42,6 +42,10 @@ def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
     assert "Every logbook entry gets a line in a ledger that only grows." in ctx   # a lead from the notes
+    for lead in ("SessionStart says when a recorded entry changed, is gone, or the chain is broken.",
+                 "A new tool, `tools/baton_ledger.py`, verifies, accepts and pushes.",
+                 "What it does not prove is said in the README."):
+        assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx
     assert "once" in ctx
 

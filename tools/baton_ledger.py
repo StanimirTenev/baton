@@ -81,6 +81,17 @@ def verify(remote: bool) -> int:
         return 0
     bad = 0
     print(f"{rep['lines']} lines, {rep['entries']} entries recorded for {root}")
+    if rep["roots"] and not rep["entries"]:
+        bad += 1
+        print("root: no line of this ledger is for this task root; it holds lines for "
+              + ", ".join(rep["roots"]) + " -- give that one as BATON_HOME")
+    if rep["acks"]:
+        print(f"accepted: {len(rep['acks'])} ack line{'' if len(rep['acks']) == 1 else 's'} "
+              "-- each one an edit someone accepted; read the reasons:")
+        for a in rep["acks"]:
+            what = (f"{a.get('folder')}: {a.get('heading')}" if "heading" in a
+                    else f"line {a['line']}" if "line" in a else "the ledger cut")
+            print(f"  {a.get('at')}  {what} -- {a.get('reason')}")
     for kind, said in (("changed", "changed after they were recorded"),
                        ("gone", "recorded and gone")):
         if rep[kind]:
