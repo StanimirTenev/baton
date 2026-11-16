@@ -15,6 +15,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_stop.py"
 BODY = "".join(f"### {s}\n{s}: a full sentence about the work, long enough to count as said.\n"
                for s in ("What was asked", "Done", "Result", "Open"))
@@ -131,3 +133,41 @@ def test_another_session_s_task_is_not_asked_for_done_when(tmp_path):
     _age(other / "LOGBOOK.md", 600)
     tr = _transcript(tmp_path / "b" / "t.jsonl", [("Edit", {"file_path": str(other / "LOGBOOK.md")}, 600, 1)])
     assert "done_when" in _stop(tmp_path / "b", tr).get("reason", ""), "its own is still asked"
+
+
+# ZA-OPRAVYANE row 165 -- the phase-1 handoff test (16.11), replay case I: a Claude session that
+# has made no tool call yet, while another agent (Codex) writes an entry in a task's logbook and
+# then a work file after it. The transcript says nothing of whose the file is, and Stop counts
+# everything since the start: it hands back the other agent's file. NOT FIXED in v3.36.0, on
+# purpose. The narrow fix -- a logbook written after the session began, by a session with no call,
+# means another writer, so its newer files go to FOREIGN -- was written and made this test pass,
+# and it broke seven older tests (test_declined x2, test_folder_names, test_handback, test_pulled
+# x3): each builds a transcript with no tool call and writes the session's own entry after `since`,
+# exactly the shape of case I. The comment above session_calls() keeps that fallback, and handing
+# back is the cheaper mistake there. Pinned as a strict xfail, so a fix shows itself.
+def _entry_by_another(folder: Path, ago: float) -> None:
+    book = folder / "LOGBOOK.md"
+    book.write_text(book.read_text("utf-8").replace(
+        "---\n\n", f"---\n\n## {datetime.now() - timedelta(seconds=ago):%Y-%m-%d %H:%M} — "
+        f"another agent's entry\n\n{BODY}Wrote comparison.md.\n\n", 1), "utf-8")
+    _age(book, ago)
+
+
+@pytest.mark.xfail(strict=True, reason="row 165: case I is not fixed in v3.36.0 -- see the comment")
+def test_another_agent_s_file_is_not_handed_back_to_a_session_with_no_call(tmp_path):
+    folder = _task(tmp_path, "handoff-demo")
+    _entry_by_another(folder, 300)
+    _work(folder, "comparison.md", age=295)
+    out = _stop(tmp_path, _transcript(tmp_path / "t.jsonl", []))
+    # The entry names its file, so the hollow check (which still reads any entry written since
+    # the session began as this session's -- not changed here) has nothing to say.
+    assert out.get("decision") != "block", out
+    assert "handoff-demo: comparison.md" in out.get("systemMessage", ""), out
+
+
+def test_with_no_call_and_no_newer_entry_the_file_is_still_handed_back(tmp_path):
+    """The documented fallback stays: no entry since the session began, nothing says whose."""
+    folder = _task(tmp_path, "handoff-demo")
+    _work(folder, "comparison.md", age=300)
+    out = _stop(tmp_path, _transcript(tmp_path / "t.jsonl", []))
+    assert out.get("decision") == "block" and "handoff-demo" in out.get("reason", ""), out
