@@ -41,10 +41,11 @@ def _run(tmp_path, state=None):
 def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
-    assert "Every logbook entry gets a line in a ledger that only grows." in ctx   # a lead from the notes
-    for lead in ("SessionStart says when a recorded entry changed, is gone, or the chain is broken.",
-                 "A new tool, `tools/baton_ledger.py`, verifies, accepts and pushes.",
-                 "What it does not prove is said in the README."):
+    assert "L3 no longer hands back over the public sphere." in ctx   # a lead from the notes
+    for lead in ("The L1 note before a write comes only for a typed hour the logbook does not hold yet.",
+                 "A kept conversation older than a logbook is not called the previous session's.",
+                 "The agent is told where `tools/baton_entry.py` is, not only its name.",
+                 "Not fixed: Stop can hand back another agent's file to a session with no tool call yet."):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx
     assert "once" in ctx
@@ -68,6 +69,6 @@ def test_a_fresh_install_is_not_told_it_was_updated(tmp_path):
 
 def test_the_notes_come_from_the_readme_section_of_this_version():
     leads = hook.release_leads(NOW)
-    assert leads and leads[0].startswith("Every logbook entry gets a line in a ledger that only grows.")
+    assert leads and leads[0].startswith("L3 no longer hands back over the public sphere.")
     assert all(len(x) < 200 for x in leads)
     assert hook.release_leads("0.0.1") == []

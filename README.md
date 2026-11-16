@@ -173,7 +173,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.35.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.36.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -204,11 +204,11 @@ The hooks never write a logbook; the agent does, and you can read every entry.
 - at session start: the board (your task names and the header lines of their logbooks), the
   last 2,500 characters of the kept conversation with the path to the rest, notices about
   Baton itself, and, when the ledger differs from the logbooks, the folders and headings of the
-  entries that did; as a plugin also Baton's rules, the text of `templates/CLAUDE.md` shipped with it;
+  entries that did; as a plugin also Baton's rules, the text of `templates/CLAUDE.md` shipped with it (with the task root, the logbook name and the path of `tools/baton_entry.py` filled in);
 - when a message names a task: which task, the date of its last entry, its next step, and that
   the logbook is to be read first;
-- before a write: a note when a logbook heading carries a typed hour. It never allows or blocks
-  a tool call;
+- before a write: a note when a new or changed logbook heading carries a typed hour, with the
+  path of `tools/baton_entry.py`. It never allows or blocks a tool call;
 - after a batch of tool calls: a note when a read came back empty or failed, and the line
   written to `.baton-outside.md`;
 - at the end of a turn: the turn is handed back when work is newer than the logbook, or when much
@@ -222,7 +222,7 @@ address, and only those two go into a fixed sentence; see the table below. A tes
 you pinned yourself is the one command the hooks run that is not their own.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.35.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.36.0.
 
 ## What Baton sends over the network
 
@@ -277,6 +277,48 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 
 ## Versions
+
+**v3.36.0** — fixes from the first live handoff Claude Code → Codex → Claude Code on one logbook
+
+Found on 16.11 by three live sessions (Claude Code 2.1.325, Codex CLI 0.169.0) that continued one
+task from its `LOGBOOK.md` alone. The handoff itself held: each session recovered the state, the
+decision, the last result and the next step, and no entry was lost. These are the false warnings
+and wrong pointers it showed (ZA-OPRAVYANE rows 160-165).
+
+- **L3 no longer hands back over the public sphere.** "public information", "a typical public
+  source", "not a public network", "the public", "a private person" say where information comes
+  from or whom a service is open to, not that a thing is visible. L3 handed back in 3 of 3
+  sessions of a desk-research task over them. A new class beside `key`, `sphere` in `hooks/lang`
+  (en, bg): the word with the noun that gives it that sense. A repo, page, post or fork that is
+  public or private still asks for the claims section. On the logbooks of the author's machine
+  379 of 2,906 entries fired before and 369 after; each of the 10 dropped was read, all were the
+  sphere sense. The other 369 were not read one by one, and other senses remain among them.
+- **The L1 note before a write comes only for a typed hour the logbook does not hold yet.** It came
+  three times for edits that kept an existing heading and added a section under it (a Claude
+  Edit twice, a Codex Python replace once). The note compares the date-and-hour stamps of the
+  write with those of the logbook on disk: a new heading, or a changed hour, still gets it. A
+  logbook the hook cannot find is compared with nothing, so the note comes as before.
+- **`turn: human` -- or `user`, `you`, `agent` -- is the human's or the agent's move.** An agent
+  wrote `turn: "human"` for the human it works with, and the board put the task under "Waiting on
+  someone OUTSIDE". The rules never said what `turn:` may hold; they do now. A person's own name
+  still means "us" only when listed under `us` in `baton.local.json`.
+- **A kept conversation older than a logbook is not called the previous session's.** The third
+  session was offered the first one's Claude chat as "the previous session's conversation",
+  though Codex had written two entries after it. Baton keeps the chat only from Claude Code
+  transcripts; when a task logbook was written after it was saved, the board now says it is an
+  earlier Claude Code conversation, NOT the latest work, and names that logbook and its time.
+- **The agent is told where `tools/baton_entry.py` is, not only its name.** Codex, told only the
+  name, searched the temp tree for it and wrote the path it found into the shared logbook; the
+  next Claude session used Codex's copy. The L1 note (both hosts) and the rules -- as a plugin,
+  in `CLAUDE.md` from the installer, in Codex's `AGENTS.md` -- give the path of the one installed.
+- **Not fixed: Stop can hand back another agent's file to a session with no tool call yet.** Found
+  in a replay without a model, not live: the transcript then says nothing of whose a file is. The
+  narrow fix broke seven older tests that build exactly that shape, so the documented fallback --
+  hand back, the cheaper mistake -- stays, and the case is a strict expected failure in the tests.
+- **Still not done under Codex.** No PostToolBatch or StopFailure there; the one line meant for
+  the human (`systemMessage`) is shown nowhere under `codex exec`; trusting the hooks through
+  `/hooks` and Windows were not tried. Two agents writing one logbook at the same time was not
+  tested (`baton_entry.py` takes no lock), and each host keeps its own ledger.
 
 **v3.35.0** — a ledger beside the logbooks: an older entry edited is seen at the next session
 
