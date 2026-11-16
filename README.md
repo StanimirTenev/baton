@@ -173,7 +173,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.36.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.37.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -197,7 +197,9 @@ there and asks nothing of Claude's memory or of any service.
 | Baton's state folder (`${CLAUDE_PLUGIN_DATA}` as a plugin, beside the hooks for a script install) | when each hook last ran, per-session notes, the lesson counts, the output of a test command you pinned, and the moved conversation files, deleted at a later session start once 7 days old |
 | `~/.claude/settings.json`, `~/.claude/CLAUDE.md` | **script install only**: the six hook entries and the Baton section, each with a copy of the file as it was. As a plugin neither file is touched |
 
-The hooks never write a logbook; the agent does, and you can read every entry.
+The hooks never write a logbook; the agent does, and you can read every entry. While
+`tools/baton_entry.py` writes one it holds `.<logbook>.lock` beside it and writes through a
+`.<logbook>.<pid>.tmp`; both are gone when it returns.
 
 **Injects** into the agent's context, as hook output:
 
@@ -222,7 +224,7 @@ address, and only those two go into a fixed sentence; see the table below. A tes
 you pinned yourself is the one command the hooks run that is not their own.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.36.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.37.0.
 
 ## What Baton sends over the network
 
@@ -277,6 +279,42 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 
 ## Versions
+
+**v3.37.0** — two agents on one logbook: concurrent writes, and whose entry it is
+
+The next step after the first handoff (v3.36.0): two agents -- Claude Code and Codex, or two
+sessions of one -- working on the same task at the same time. ZA-OPRAVYANE rows 165-171.
+
+- **Two agents can write one logbook at the same time.** Before, `tools/baton_entry.py` read the
+  logbook, built the new text and replaced the file through one shared `LOGBOOK.md.tmp`. Two
+  writer processes at once lost entries, one crashed on the other's temporary file, and readers
+  saw an empty logbook -- one writer had moved the other's half-written file into place. Now the
+  write runs under `.<logbook>.lock` (made with O_CREAT|O_EXCL: Linux, macOS and Windows alike,
+  no dependency), each writer has its own temporary dotfile, and a reader sees the old logbook or
+  the new one, never half of one. A lock older than 60 s is a writer that died and is taken
+  over; one held longer than 15 s is an error, never a write without it. The format of the
+  logbook is unchanged. Run on Linux only; macOS and Windows hold by construction, not by a run.
+- **Stop no longer hands back another agent's file to a session with no tool call yet.** A session
+  that has done nothing cannot have written the entry its logbook gained since it began, so the
+  files beside that entry are another agent's: said to the human once, not handed back. With no
+  newer entry nothing says whose they are, and they are still handed back. In v3.36.0 this was a
+  strict expected failure: seven older tests built a session that did nothing and then wrote
+  "its own" entry; they now carry the tool call their story needs.
+- **Another agent's entry is not judged as this session's.** The hollow check, L1, L3 and L4 read
+  every entry written since the session began as this session's, so Codex's entry was handed
+  back to the Claude session beside it (and the other way). A logbook is now this session's when
+  its own Write or Edit named the logbook, or when it was last saved while one of its calls was
+  running; naming the folder is not enough, because two agents share the folder. Both hosts.
+  Missed, still: the other agent writing while one of this session's shell calls runs. And when
+  the other agent wrote last, this session's own entry under it is not judged at all.
+- **A transcript Baton cannot read calls from now counts as a session that did nothing.** That is
+  the price of the two fixes above: a transcript that opens but holds no call Baton recognises
+  (a new transcript format, an unknown host) no longer hands back a file beside a new entry, and
+  its entries are not judged. A transcript that cannot be opened changes nothing, as before.
+- **Still not done.** Each host keeps its own ledger and its own memory of the logbooks
+  (`baton.bodies.json`, written in place, not atomically); two Stops of the same host at once
+  share the ledger's lock. Two waiters taking over the same stale lock at the same moment can
+  both get it -- the ledger's lock has the same gap. Nothing here was run live with two models.
 
 **v3.36.0** — fixes from the first live handoff Claude Code → Codex → Claude Code on one logbook
 
