@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "baton-session-start",
+            "timeout": 20000,
+            "command": "sh \"${extensionPath}/../hooks/run.sh\" \"${extensionPath}/../hooks/baton_session_start.py\""
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "baton-prompt",
+            "timeout": 20000,
+            "command": "sh \"${extensionPath}/../hooks/run.sh\" \"${extensionPath}/../hooks/baton_prompt.py\""
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": "^(write_file|replace|run_shell_command)$",
+        "hooks": [
+          {
+            "type": "command",
+            "name": "baton-pretool",
+            "timeout": 10000,
+            "command": "sh \"${extensionPath}/../hooks/run.sh\" \"${extensionPath}/../hooks/baton_pretool.py\""
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "name": "baton-stop",
+            "timeout": 20000,
+            "command": "sh \"${extensionPath}/../hooks/run.sh\" \"${extensionPath}/../hooks/baton_stop.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

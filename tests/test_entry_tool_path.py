@@ -48,7 +48,8 @@ def test_the_plugin_rules_name_the_tool_s_path(tmp_path):
     _named_here(rules)
 
 
-@pytest.mark.parametrize("template", ["templates/CLAUDE.md", "codex/AGENTS.md.snippet"])
+@pytest.mark.parametrize("template", ["templates/CLAUDE.md", "codex/AGENTS.md.snippet",
+                                      "gemini/GEMINI.md.snippet"])
 def test_the_installed_rules_name_the_tool_s_path(tmp_path, template):
     """install.sh and install.ps1 pass templates/CLAUDE.md; the Codex install (codex/README.md,
     step 4) passes codex/AGENTS.md.snippet. Both write the rules with the tool's path."""
