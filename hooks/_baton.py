@@ -161,14 +161,21 @@ def turn(hookfile: str, event: str, session: object, extra: str = "") -> None:
 # SessionStart carries `turn_id`, which its docs call a Codex-specific extension. Claude Code's
 # transcript is `<session_id>.jsonl` and it sends no `turn_id`. `model` and `permission_mode`
 # are not used: Codex sends both, and so does Claude Code (`permission_mode` on most events,
-# `model` on SessionStart). Evidence for both hosts, or none, is "unknown"; every caller treats
-# "unknown" exactly as "claude", so only a Codex payload changes what a hook does.
+# `model` on SessionStart). Evidence for more than one host, or none, is "unknown"; every caller
+# treats "unknown" exactly as "claude", so only a Codex or Gemini payload changes what a hook does.
 _ROLLOUT = re.compile(r"rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.jsonl")
+# Gemini CLI (0.68.0, read in its bundle): event names no other host uses (HookEventName; its
+# Notification and SessionEnd are Claude Code's names too, so they are not evidence), and the main
+# session's transcript `chats/session-<YYYY-MM-DDTHH-MM>-[<n>-]<first 8 of session_id>.jsonl`
+# (chatRecordingService). Its SessionStart with no transcript yet ("") carries neither: unknown.
+_GEMINI_EVENTS = frozenset({"BeforeAgent", "AfterAgent", "BeforeTool", "AfterTool", "BeforeModel",
+                            "AfterModel", "BeforeToolSelection", "PreCompress"})
+_GEMINI_CHAT = re.compile(r"session-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-(?:\d+-)?(.{1,8})\.jsonl")
 
 
 def host(payload, environ=None) -> str:
-    """"claude", "codex" or "unknown" for one hook's stdin payload. `environ` is taken and not
-    read (see above): the signature says it was considered."""
+    """"claude", "codex", "gemini" or "unknown" for one hook's stdin payload. `environ` is taken
+    and not read (see above): the signature says it was considered."""
     if not isinstance(payload, dict):
         return "unknown"
     sid = str(payload.get("session_id") or "")
@@ -177,11 +184,11 @@ def host(payload, environ=None) -> str:
     codex = (isinstance(payload.get("turn_id"), str) and bool(payload["turn_id"])) or bool(
         rollout and (not sid or rollout.group(1) == sid))
     claude = bool(sid) and name == f"{sid}.jsonl"
-    if codex and not claude:
-        return "codex"
-    if claude and not codex:
-        return "claude"
-    return "unknown"
+    chat = _GEMINI_CHAT.fullmatch(name)
+    gemini = payload.get("hook_event_name") in _GEMINI_EVENTS or bool(
+        chat and sid and chat.group(1) == sid[:8])
+    found = [h for h, yes in (("codex", codex), ("claude", claude), ("gemini", gemini)) if yes]
+    return found[0] if len(found) == 1 else "unknown"
 
 
 # An apply_patch text (Codex's file edit): `*** Add File: <path>`, `*** Update File: <path>`,

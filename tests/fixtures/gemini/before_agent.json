@@ -1,0 +1,8 @@
+{
+ "session_id": "3f6c2a9e-8d41-4b7a-9c55-1e2f3a4b5c6d",
+ "transcript_path": "/work/gemini-fixture/home/.gemini/tmp/work/chats/session-2026-11-16T16-20-3f6c2a9e.jsonl",
+ "cwd": "/work/gemini-fixture/work",
+ "hook_event_name": "BeforeAgent",
+ "timestamp": "2026-11-16T16:30:12.345Z",
+ "prompt": "Continue with alpha: write the notes."
+}
