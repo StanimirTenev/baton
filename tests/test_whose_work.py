@@ -15,7 +15,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_stop.py"
 BODY = "".join(f"### {s}\n{s}: a full sentence about the work, long enough to count as said.\n"
@@ -137,14 +136,13 @@ def test_another_session_s_task_is_not_asked_for_done_when(tmp_path):
 
 # ZA-OPRAVYANE row 165 -- the phase-1 handoff test (16.11), replay case I: a Claude session that
 # has made no tool call yet, while another agent (Codex) writes an entry in a task's logbook and
-# then a work file after it. The transcript says nothing of whose the file is, and Stop counts
-# everything since the start: it hands back the other agent's file. NOT FIXED in v3.36.0, on
-# purpose. The narrow fix -- a logbook written after the session began, by a session with no call,
-# means another writer, so its newer files go to FOREIGN -- was written and made this test pass,
-# and it broke seven older tests (test_declined x2, test_folder_names, test_handback, test_pulled
-# x3): each builds a transcript with no tool call and writes the session's own entry after `since`,
-# exactly the shape of case I. The comment above session_calls() keeps that fallback, and handing
-# back is the cheaper mistake there. Pinned as a strict xfail, so a fix shows itself.
+# then a work file after it. Stop counted everything since the start and handed back the other
+# agent's file. Pinned as a strict xfail in v3.36.0: the narrow fix broke seven older tests
+# (test_declined x2, test_folder_names, test_handback, test_pulled x3), each of which built a
+# transcript with no tool call and then wrote "the session's own" entry -- a session that had done
+# nothing. In v3.37.0 those transcripts got the tool call their story needs (test_handback._call),
+# and the fix went in: a session with no call cannot have written the entry its logbook gained
+# since it began, so the files beside it go to FOREIGN.
 def _entry_by_another(folder: Path, ago: float) -> None:
     book = folder / "LOGBOOK.md"
     book.write_text(book.read_text("utf-8").replace(
@@ -153,7 +151,6 @@ def _entry_by_another(folder: Path, ago: float) -> None:
     _age(book, ago)
 
 
-@pytest.mark.xfail(strict=True, reason="row 165: case I is not fixed in v3.36.0 -- see the comment")
 def test_another_agent_s_file_is_not_handed_back_to_a_session_with_no_call(tmp_path):
     folder = _task(tmp_path, "handoff-demo")
     _entry_by_another(folder, 300)

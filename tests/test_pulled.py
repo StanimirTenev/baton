@@ -21,6 +21,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from test_handback import _call
 
 ROOT = Path(__file__).resolve().parent.parent
 GOOD = ("### What was asked\nCarry on with the migration script on this machine from now on.\n\n"
@@ -52,7 +53,8 @@ def _arrived(tmp_path, pulled_age=300):
     _age(folder / ".baton-pulled", pulled_age)
     transcript = tmp_path / "t.jsonl"
     transcript.write_text(json.dumps({"type": "user", "timestamp": (
-        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n", "utf-8")
+        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n"
+        + _call(folder, 1500), "utf-8")          # row 165: the session pulled it, in the folder
     return folder, str(transcript)
 
 

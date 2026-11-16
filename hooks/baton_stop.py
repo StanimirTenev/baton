@@ -388,7 +388,9 @@ def session_started(transcript: str) -> float | None:
 # process started in the background (`run_in_background`, `nohup`, `&`) writes after its call
 # returned, into a folder no call named. Wrongly counted: a cron that fires while a Bash call runs,
 # or writes in a folder the session named. Where they conflict, a cron file handed back is the
-# cheaper mistake. Without a readable transcript, or one with no tool call, nothing changes.
+# cheaper mistake. Without a readable transcript nothing changes; with one that holds no tool call,
+# nothing changes either -- unless the logbook gained an entry since the session began, which a
+# session that did nothing cannot have written (row 165): then its folder's files are FOREIGN.
 # Measured 08.11 on a 46 MB transcript: 0.86 s, read only when a folder has newer work.
 CALL_SLACK_S = 2
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
@@ -471,11 +473,24 @@ def session_calls(transcript: str | None) -> dict | None:
                         if at is not None and b.get("id"):
                             started[b["id"]] = at
     windows += [(t, t + 600) for t in started.values()]      # no result recorded: ten minutes
-    # A transcript with no tool call at all says nothing about whose a file is (and is how every
-    # older test builds one): as before, everything since the start counts.
+    # A transcript with no tool call at all says nothing about whose a file is: as before,
+    # everything since the start counts -- except beside an entry newer than the start (no_call).
     _CALLS[transcript] = ({"files": files, "texts": texts, "cwds": cwds, "windows": windows}
                           if files or texts or windows else None)
     return _CALLS[transcript]
+
+
+def no_call(transcript: str | None) -> bool:
+    """The transcript can be read and holds no tool call: this session has touched nothing yet.
+    (session_calls says None for this and for a transcript it cannot read; only the first says
+    whose a file is.)"""
+    if not transcript or session_calls(transcript) is not None:
+        return False
+    try:
+        with open(transcript, "rb"):
+            return True
+    except OSError:
+        return False
 
 
 def _named_folder(folder: Path, calls: dict) -> bool:
@@ -559,7 +574,12 @@ def unrecorded(root: Path, name: str, since: float | None = None,
             files = newer_files(folder, name, max(logged, since or 0.0)) or [newest_name]
             if since is not None and transcript:
                 calls = session_calls(transcript)
-                mine = [f for f in files if by_this_session(folder, f, calls)]
+                # Row 165 (D6): a session with no tool call cannot have written the entry its
+                # logbook gained since it began -- another agent did, and the files beside it are
+                # that agent's. With no newer entry, nothing says whose, and the fallback stays.
+                foreign = (calls is None and no_call(transcript) and logbook.is_file()
+                           and logbook.stat().st_mtime >= since)
+                mine = [] if foreign else [f for f in files if by_this_session(folder, f, calls)]
                 if not mine:
                     FOREIGN[folder.name] = files
                     continue
@@ -711,7 +731,7 @@ def _ss():
 
 
 def hand_typed_hours(root: Path, name: str, now: datetime | None = None,
-                     since: float | None = None) -> list[str]:
+                     since: float | None = None, transcript: str | None = None) -> list[str]:
     """Folders whose newest entry is NEW since the last look and headed off the clock.
     The first look at a folder only remembers its top entry: an old heading is history.
 
@@ -738,6 +758,8 @@ def hand_typed_hours(root: Path, name: str, now: datetime | None = None,
             continue
         if since is not None and saved.timestamp() < since:
             continue                          # saved before this session: not its entry
+        if since is not None and written_by_another(folder, name, transcript):
+            continue                          # row 166: another agent's entry, not this one's
         ss.lesson_event(state, "L1", "fired", now)
         m = _HEADING.match(line)
         if not m.group(2):
@@ -888,10 +910,33 @@ def hollow(body: str, files: list[str], session_text: str | None = None,
     return reasons
 
 
-def _changed_tops(root: Path, name: str, since: float | None):
+def written_by_another(folder: Path, name: str, transcript: str | None) -> bool:
+    """Row 166: the logbook was last written by another agent or host, not this session. Stricter
+    than by_this_session, because two agents share one folder: naming the folder is not enough.
+    The logbook is this session's when a write of its own named the logbook itself, or when it was
+    last saved while one of its calls ran (baton_entry.py from a shell; Codex's exec). A session
+    with no tool call wrote nothing. False without a transcript, or with one that cannot be read:
+    as before, the entry is this session's."""
+    if not transcript:
+        return False
+    calls = session_calls(transcript)
+    if calls is None:
+        return no_call(transcript)
+    book = os.path.join(str(folder), name)
+    if os.path.normcase(os.path.abspath(book)) in calls["files"]:
+        return False
+    try:
+        saved = os.stat(book).st_mtime
+    except OSError:
+        return False
+    return not any(a - CALL_SLACK_S <= saved <= b + CALL_SLACK_S for a, b in calls["windows"])
+
+
+def _changed_tops(root: Path, name: str, since: float | None, transcript: str | None = None):
     """(folder, text, top entry) for each logbook whose body this session changed. Without a
     session start nothing: an old entry is history, and one this session did not write is not
-    its debt."""
+    its debt. With `transcript`, a logbook another agent wrote in the meantime is not this
+    session's either (row 166: two agents on one logbook; see written_by_another)."""
     if since is None:
         return
     try:
@@ -911,16 +956,19 @@ def _changed_tops(root: Path, name: str, since: float | None):
         if seen and seen[1] < since and seen[0] == hashlib.sha1(
                 _body(text).encode("utf-8")).hexdigest():
             continue                          # only the header changed this session
+        if written_by_another(folder, name, transcript):
+            continue
         top = top_entry(text)
         if top is not None:
             yield folder, text, top
 
 
-def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
+def hollow_entries(root: Path, name: str, since: float | None,
+                   transcript: str | None = None) -> list[tuple]:
     """(folder, heading, reasons) for each logbook whose body this session changed and whose
     newest entry looks hollow."""
     out = []
-    for folder, text, top in _changed_tops(root, name, since):
+    for folder, text, top in _changed_tops(root, name, since, transcript):
         files = touched_since(folder, name, since)
         reasons = hollow(top[1], files, session_entries(text, since),
                          [] if files else claimed_untouched(folder, name, top[1], since))
@@ -941,11 +989,12 @@ def hollow_entries(root: Path, name: str, since: float | None) -> list[tuple]:
 CODE_GIT_TIMEOUT_S = 3
 
 
-def code_changes(root: Path, name: str, since: float | None) -> list[tuple]:
+def code_changes(root: Path, name: str, since: float | None,
+                 transcript: str | None = None) -> list[tuple]:
     """(folder, repository, what is newer than the logbook) for the folders this session wrote in
     whose header names a `code:` repository; `what` is None when git could not say."""
     out = []
-    for folder, text, _top in _changed_tops(root, name, since):
+    for folder, text, _top in _changed_tops(root, name, since, transcript):
         try:
             raw = str(_parser()(text).get("code", "")).strip()
         except Exception:
@@ -1090,11 +1139,12 @@ def _session_tops(text: str, top: tuple, since: float) -> list[tuple]:
     return entries if entries and entries[0][0] == top[0] else [top] + entries
 
 
-def visibility_entries(root: Path, name: str, since: float | None) -> list[tuple]:
+def visibility_entries(root: Path, name: str, since: float | None,
+                       transcript: str | None = None) -> list[tuple]:
     """(folder, heading, words) for the newest entry this session wrote, in each folder, that says
     something is public or private and does not open with a claims section."""
     out = []
-    for folder, text, top in _changed_tops(root, name, since):
+    for folder, text, top in _changed_tops(root, name, since, transcript):
         for heading, body in _session_tops(text, top, since):
             words = visibility_words(heading + "\n" + body)
             if words and not claims_first(body):
@@ -1108,11 +1158,12 @@ def tests_listed(body: str) -> bool:
     return claims_first(body) and any(_TESTS.search(_CODE.sub(" ", ln)) for ln in _claims(body)[0])
 
 
-def tests_entries(root: Path, name: str, since: float | None) -> list[tuple]:
+def tests_entries(root: Path, name: str, since: float | None,
+                  transcript: str | None = None) -> list[tuple]:
     """(folder, heading, phrases) for the newest entry this session wrote, in each folder, that
     says tests pass and does not list that claim in a claims section at its top (L4)."""
     out = []
-    for folder, text, top in _changed_tops(root, name, since):
+    for folder, text, top in _changed_tops(root, name, since, transcript):
         for heading, body in _session_tops(text, top, since):
             words = tests_words(heading + "\n" + body)
             if words and not tests_listed(body):
@@ -1161,13 +1212,14 @@ def pinned_tests(folder: Path) -> tuple[dict | None, str | None]:
     return {"command": pin["command"], "cwd": str(cwd), "timeout_s": budget, "env": names}, None
 
 
-def pinned_runs(root: Path, name: str, since: float | None, session: str) -> tuple[list, set]:
+def pinned_runs(root: Path, name: str, since: float | None, session: str,
+                transcript: str | None = None) -> tuple[list, set]:
     """Start the pinned command, in the background, for each newest entry this session wrote that
     says tests pass -- once per entry, never while a run for the folder is going. Returns what to
     tell the human, and the folders whose run has started."""
     said, started = [], set()
     asked = _already_asked(session)
-    for folder, _text, (heading, body) in _changed_tops(root, name, since):
+    for folder, _text, (heading, body) in _changed_tops(root, name, since, transcript):
         if not tests_words(heading + "\n" + body):
             continue
         pin, problem = pinned_tests(folder)
@@ -1373,7 +1425,8 @@ def _all_entries(text: str) -> list[tuple[str, str]]:
     return out
 
 
-def refuted_claims(root: Path, name: str, since: float | None, now: datetime | None = None) -> int:
+def refuted_claims(root: Path, name: str, since: float | None, now: datetime | None = None,
+                   transcript: str | None = None) -> int:
     """Count L3 `caught`: a line `refuted: ...` (`оборено: ...`) in a claims section of the
     newest entry this session wrote, in a logbook where an older entry listed claims. Each line
     once. Returns how many were new."""
@@ -1381,7 +1434,7 @@ def refuted_claims(root: Path, name: str, since: float | None, now: datetime | N
     state = ss.lessons_load()
     seen = state.setdefault("L3_refuted", [])
     new = 0
-    for folder, text, (heading, body) in _changed_tops(root, name, since):
+    for folder, text, (heading, body) in _changed_tops(root, name, since, transcript):
         older = _all_entries(text)[1:]
         if not any(_claims(b) for _h, b in older):
             continue
@@ -1616,16 +1669,18 @@ def answer_check(payload: dict) -> str | None:
     root, name = config()
     if not root.is_dir():
         return None
-    since = session_started(str(payload.get("transcript_path") or ""))
+    transcript = str(payload.get("transcript_path") or "")
+    since = session_started(transcript)
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     said = []
     try:
-        said += [f"{t} (L1)" for t in hand_typed_hours(root, name, since=since)]
+        said += [f"{t} (L1)" for t in hand_typed_hours(root, name, since=since, transcript=transcript)]
     except Exception:
         pass
     try:
-        thin = [h for h in hollow_entries(root, name, since) if f"hollow:{h[0]}:{h[1]}" not in asked]
+        thin = [h for h in hollow_entries(root, name, since, transcript)
+                if f"hollow:{h[0]}:{h[1]}" not in asked]
         said += [f"{f}: \"{h[3:60].strip()}\" looks hollow -- " + "; ".join(r) for f, h, r in thin]
         _remember(session, _already_asked(session) | {f"hollow:{f}:{h}" for f, h, _ in thin})
     except Exception:
@@ -1635,7 +1690,7 @@ def answer_check(payload: dict) -> str | None:
         try:
             said += [f"{f}: \"{h[3:60].strip()}\" {what} ({', '.join(w[:3])}) and does not list it "
                      f"under `### Claims to verify` ({lesson})"
-                     for f, h, w in first_asks(find(root, name, since), root, lesson=lesson)]
+                     for f, h, w in first_asks(find(root, name, since, transcript), root, lesson=lesson)]
         except Exception:
             pass
     if not said:
@@ -1844,7 +1899,8 @@ def main() -> int:
             root, name = config()
             tested = _ss().tests_results() + (pinned_runs(
                 root, name, session_started(str(payload.get("transcript_path") or "")),
-                str(payload.get("session_id") or ""))[0] if root.is_dir() else [])
+                str(payload.get("session_id") or ""),
+                str(payload.get("transcript_path") or ""))[0] if root.is_dir() else [])
         except Exception:
             tested = []
         lost = " ".join(filter(None, (lost, checked, *tested)))
@@ -1869,8 +1925,9 @@ def main() -> int:
         return 0
     fix_check(name)               # before this Stop's own asks: they are judged from the next one
 
-    since = session_started(str(payload.get("transcript_path") or ""))
-    stale = unrecorded(root, name, since, str(payload.get("transcript_path") or ""))
+    transcript = str(payload.get("transcript_path") or "")
+    since = session_started(transcript)
+    stale = unrecorded(root, name, since, transcript)
     session = str(payload.get("session_id") or "")
     asked = _already_asked(session)
     ended = {a for a in asked if any(a.startswith(f"passed:{f}:") for f in TOPPED)}
@@ -1886,35 +1943,36 @@ def main() -> int:
     open_ended = [f for f in undefined(root, name, str(payload.get("transcript_path") or "")) if f not in asked]
     ahead = [f for f in future_dated(root, name) if f"future:{f}" not in asked]
     try:
-        typed = hand_typed_hours(root, name, since=since)
+        typed = hand_typed_hours(root, name, since=since, transcript=transcript)
     except Exception:
         typed = []            # a lesson that cannot count must not cost the session
     typed = [t for t in typed if not any(t.startswith(_folder_of(f) + ":") for f in ahead)]
     flagged = {_folder_of(f) for f in stale}
     try:
-        thin = [h for h in hollow_entries(root, name, since)
+        thin = [h for h in hollow_entries(root, name, since, transcript)
                 if h[0] not in flagged and f"hollow:{h[0]}:{h[1]}" not in asked]
     except Exception:
         thin = []             # a quality check that cannot read must not cost the session
     try:
-        refuted_claims(root, name, since)
-        claims = first_asks([v for v in visibility_entries(root, name, since)
+        refuted_claims(root, name, since, transcript=transcript)
+        claims = first_asks([v for v in visibility_entries(root, name, since, transcript)
                              if v[0] not in flagged], root)
     except Exception:
         claims = []           # a lesson that cannot count must not cost the session
     try:
-        passes = first_asks([v for v in tests_entries(root, name, since) if v[0] not in flagged],
+        passes = first_asks([v for v in tests_entries(root, name, since, transcript)
+                             if v[0] not in flagged],
                             root, lesson="L4")
     except Exception:
         passes = []           # the same
     try:      # L4 against a pinned command (row 43): results that came in, runs to start
         tested = _ss().tests_results()
-        more, running = pinned_runs(root, name, since, session)
+        more, running = pinned_runs(root, name, since, session, transcript)
         tested += more
     except Exception:
         tested, running = [], set()   # a run that cannot start must not cost the session
     try:          # row 73: the repository a `code:` field names, beside the entry
-        code = [c for c in code_changes(root, name, since) if f"code:{c[0]}" not in asked]
+        code = [c for c in code_changes(root, name, since, transcript) if f"code:{c[0]}" not in asked]
     except Exception:
         code = []
     if code:

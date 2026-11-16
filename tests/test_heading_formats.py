@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+from test_handback import _works_in
 
 ROOT = Path(__file__).resolve().parent.parent
 GOOD = ("### What was asked\nA draft of the quarterly report in the usual layout for the board.\n\n"
@@ -49,7 +50,8 @@ def _case(tmp_path, heading):
     _age(book, 120)
     transcript = tmp_path / "t.jsonl"
     transcript.write_text(json.dumps({"type": "user", "timestamp": (
-        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n", "utf-8")
+        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n"
+        + _works_in(tmp_path / "tasks", 300), "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_HOME", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
     env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",

@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+from test_handback import _works_in
 
 ROOT = Path(__file__).resolve().parent.parent
 HEADING = "Pure Cycle Power — Pashkin's offer, 4.1M"
@@ -71,7 +72,8 @@ def _task(tmp_path):
         f"## {datetime.now():%Y-%m-%d %H:%M} — {HEADING}\n\nok\n", "utf-8")
     transcript = tmp_path / "t.jsonl"
     transcript.write_text(json.dumps({"type": "user", "timestamp": (
-        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n", "utf-8")
+        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n"
+        + _works_in(tmp_path / "tasks", 300), "utf-8")
     return str(transcript)
 
 

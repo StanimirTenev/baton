@@ -47,6 +47,16 @@ task folder is made anew: the header (state, next, done_when), the entry just wr
 work files saved since the logbook was last written. One file, overwritten every time; the dot
 keeps Stop from counting it as work. The agent offers to open it only at the end of a big
 stage, and `--open` opens it on this machine -- or, with no display, says the path instead.
+
+**Two writers at once** (phase 2 of the multi-agent path, 16.11). Two agents sharing one logbook
+are two processes. Each read the logbook, built its text and replaced the file through the same
+`LOGBOOK.md.tmp`: the second replace dropped the first one's entry, and one writer could move the
+other's half-written temporary file into place -- readers saw an empty logbook. Now the read, the
+checks and the replace run under `.<logbook>.lock` beside it, made with O_CREAT|O_EXCL (the same
+on Linux, macOS and Windows, no dependency); the temporary file is a dotfile of this process's
+own. A lock older than LOCK_STALE_S is a writer that died holding it and is taken over; one that
+cannot be had in LOCK_WAIT_S is a loud failure, never a write without it. Readers take no lock:
+os.replace swaps the whole file, so they see the old text or the new one.
 """
 
 from __future__ import annotations
@@ -57,6 +67,7 @@ import importlib.util
 import os
 import re
 import sys
+import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -68,6 +79,47 @@ AHEAD_MINUTES = 15       # below this, say nothing: clocks and timezones drift
 PAGE = ".baton-etap.html"  # a dotfile: Stop never counts it as work (row 117)
 PAGE_FILES = 40          # the page names at most this many files
 SKIP_DIRS = {"node_modules", "__pycache__", "venv", "dist", "build"}
+LOCK_WAIT_S = 15         # how long a writer waits for another one before it refuses
+LOCK_STALE_S = 60        # a lock older than this: its writer died (a write takes well under 1 s)
+REPLACE_TRIES = 50       # Windows: a reader holding the file open makes os.replace fail for a moment
+
+
+def _lock(file: Path) -> Path:
+    """Take `.<logbook>.lock` beside the logbook; raise TimeoutError when another writer keeps it."""
+    lock = file.with_name("." + file.name + ".lock")
+    deadline = time.monotonic() + LOCK_WAIT_S
+    while True:
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except (FileExistsError, PermissionError):   # Windows: a lock being deleted refuses an open
+            try:
+                if time.time() - lock.stat().st_mtime > LOCK_STALE_S:
+                    lock.unlink()     # its writer died holding it
+                    continue
+            except FileNotFoundError:
+                continue              # released between the two calls: try again
+            except OSError:
+                pass                  # cannot be read or removed: wait for the deadline
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"another writer holds {lock} (for over {LOCK_WAIT_S} s); "
+                                   f"nothing was written. If no writer is running, delete it.")
+            time.sleep(0.02)
+            continue
+        with os.fdopen(fd, "w") as fh:
+            fh.write(str(os.getpid()))
+        return lock
+
+
+def _replace(tmp: Path, file: Path) -> None:
+    """os.replace, retried: on Windows it fails while a reader has the logbook open."""
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(tmp, file)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.05)
 
 
 def _without_code(text: str) -> str:
@@ -114,6 +166,32 @@ def write_entry(path, entry: str, next_line: str | None = None,
             raise ValueError("with a title the entry is the body only -- it already has a heading")
         entry = f"## {datetime.now():%Y-%m-%d %H:%M} — {title.strip()}\n\n{entry.strip()}\n"
     file = Path(path)
+    lock = _lock(file)
+    try:
+        before, text = _write_locked(file, entry, next_line, old_line)
+    finally:
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+
+    print(f"written: {path}")
+    if (note := _hours_ahead(entry)):
+        print(note)
+    try:
+        page = stage_page(file, text, entry.strip(), before)
+    except Exception as exc:        # the page is a view; never a reason to fail the write
+        print(f"HTML: not made ({exc})")
+    else:
+        print(f"HTML: {page}")
+        if (why := no_display()):
+            print(f"no display here ({why}): do not offer to open it; give the path, and a "
+                  f"machine with a screen can copy it (scp) and open it there")
+
+
+def _write_locked(file: Path, entry: str, next_line, old_line) -> tuple[float, str]:
+    """Read, build, check and replace -- the part that runs under the lock. Returns the logbook's
+    time before the write and the text written."""
     # Read as the hooks read (ZA-OPRAVYANE row 65): a BOM (PowerShell 5.1, Notepad) was "the front
     # matter broke". It is kept on the way back, never added.
     raw = file.read_bytes()
@@ -175,22 +253,16 @@ def write_entry(path, entry: str, next_line: str | None = None,
             f"heading glued mid-file, invisible to a heading read: {glued[:3]}")
 
     before = file.stat().st_mtime   # the work since this is what the new entry records
-    tmp = file.with_suffix(file.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8-sig" if bom else "utf-8")
-    tmp.replace(file)               # atomic: never a half-written logbook
-
-    print(f"written: {path}")
-    if (note := _hours_ahead(entry)):
-        print(note)
+    # A dotfile of this process's own: Stop never counts it as work, and two writers never share
+    # one (a shared `LOGBOOK.md.tmp` let one writer move the other's half-written text into place).
+    tmp = file.with_name(f".{file.name}.{os.getpid()}.tmp")
     try:
-        page = stage_page(file, text, entry.strip(), before)
-    except Exception as exc:        # the page is a view; never a reason to fail the write
-        print(f"HTML: not made ({exc})")
-    else:
-        print(f"HTML: {page}")
-        if (why := no_display()):
-            print(f"no display here ({why}): do not offer to open it; give the path, and a "
-                  f"machine with a screen can copy it (scp) and open it there")
+        tmp.write_text(text, encoding="utf-8-sig" if bom else "utf-8")
+        _replace(tmp, file)         # atomic: never a half-written logbook
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    return before, text
 
 
 def _board():

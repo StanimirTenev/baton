@@ -15,6 +15,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from test_handback import _works_in
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "hooks" / "baton_stop.py"
@@ -65,7 +66,7 @@ def _setup(tmp_path, commit_first: bool):
 def _stop(tmp_path, session="s1"):
     transcript = tmp_path / "t.jsonl"
     start = datetime.fromtimestamp(time.time() - 600, tz=timezone.utc).isoformat()
-    transcript.write_text(json.dumps({"timestamp": start}) + "\n", "utf-8")
+    transcript.write_text(json.dumps({"timestamp": start}) + "\n" + _works_in(tmp_path / "tasks", 300), "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
     env.update(HOME=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),

@@ -18,6 +18,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from test_handback import _works_in
 
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_stop.py"
 spec = importlib.util.spec_from_file_location("bs_hollow", HOOK)
@@ -133,7 +134,7 @@ def test_a_header_edit_does_not_put_an_old_entry_on_trial(tmp_path, monkeypatch)
 def _run(tmp_path, session):
     transcript = tmp_path / "t.jsonl"
     start = datetime.fromtimestamp(time.time() - 600, tz=timezone.utc).isoformat()
-    transcript.write_text(json.dumps({"timestamp": start}) + "\n", "utf-8")
+    transcript.write_text(json.dumps({"timestamp": start}) + "\n" + _works_in(tmp_path / "tasks", 300), "utf-8")
     env = dict(os.environ, BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
                BATON_STATE_DIR=str(tmp_path / ".state"))
     out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env,
@@ -210,7 +211,7 @@ def _outside_entry(tmp_path, path: str, verb: str = "Wrote"):
     os.utime(folder / "report-draft.md", (time.time() - 2 * 86400,) * 2)
     tr = tmp_path / "t.jsonl"
     started = datetime.fromtimestamp(time.time() - 3600, timezone.utc).isoformat()
-    tr.write_text(json.dumps({"timestamp": started}) + "\n", "utf-8")
+    tr.write_text(json.dumps({"timestamp": started}) + "\n" + _works_in(tmp_path / "tasks", 300), "utf-8")
     env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "SYSTEMROOT", "LANG")}
     env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
                BATON_STATE_DIR=str(tmp_path / "state"), BATON_BODY_STATE=str(tmp_path / "b.json"),

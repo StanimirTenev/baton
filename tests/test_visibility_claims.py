@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from conftest import child_env
+from test_handback import _works_in
 
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "baton_stop.py"
 spec = importlib.util.spec_from_file_location("bs_visibility", HOOK)
@@ -209,7 +210,7 @@ def test_refuted_outside_a_claims_section_is_not_counted(tmp_path):
 def _run(tmp_path, session):
     transcript = tmp_path / "t.jsonl"
     start = datetime.fromtimestamp(time.time() - 600, tz=timezone.utc).isoformat()
-    transcript.write_text(json.dumps({"timestamp": start}) + "\n", "utf-8")
+    transcript.write_text(json.dumps({"timestamp": start}) + "\n" + _works_in(tmp_path / "tasks", 300), "utf-8")
     env = child_env(BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
                     BATON_STATE_DIR=str(tmp_path / ".state"))
     out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env,

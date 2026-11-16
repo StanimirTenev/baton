@@ -16,6 +16,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from test_handback import _works_in
 
 ROOT = Path(__file__).resolve().parent.parent
 GOOD = ("### What was asked\nA draft of the quarterly report in the usual layout for the board.\n\n"
@@ -41,7 +42,8 @@ def _session(tmp_path):
     _age(folder / "report.md", 300)
     transcript = tmp_path / "t.jsonl"
     transcript.write_text(json.dumps({"type": "user", "timestamp": (
-        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n", "utf-8")
+        datetime.now() - timedelta(minutes=30)).astimezone().isoformat()}) + "\n"
+        + _works_in(tmp_path / "tasks", 300), "utf-8")
     return book, str(transcript)
 
 
