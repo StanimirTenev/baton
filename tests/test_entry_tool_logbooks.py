@@ -63,3 +63,32 @@ def test_a_broken_header_is_still_refused(tmp_path):
     book.write_text("---\nstate: active\n\n" + OLD, "utf-8")      # never closed
     with pytest.raises(ValueError):
         be.write_entry(book, ENTRY, title="x")
+
+
+TITLE = ("# Logbook — demo\n\nOne line on what this task is.\n\n"
+         "Newest entry first. Written for the next session, which has none of this conversation.\n\n---\n")
+HEADER = "---\nstate: active\nnext: \"write conv.py\"\n---\n\n"
+
+
+@pytest.mark.parametrize("case", ["header-title-no-entry", "title-no-entry", "header-title-one-entry"])
+def test_the_first_entry_goes_below_the_title(tmp_path, case):
+    """Row 180 (Д3, phase B of the three-host handoff, 17.11; raw/b/repro-D3-baton_entry.txt): with
+    a header and a title but no entry yet, the tool put the first entry between the front matter
+    and the title -- `# Logbook`, its description and `---` ended up under the entry. Claude saw
+    it and moved it by hand. With no dated entry the entry goes after whatever is there, with a
+    header or without one."""
+    text = {"header-title-no-entry": HEADER + TITLE,
+            "title-no-entry": TITLE,
+            "header-title-one-entry": HEADER + TITLE + "\n" + OLD}[case]
+    book = tmp_path / "LOGBOOK.md"
+    book.write_text(text, "utf-8")
+    be.write_entry(book, ENTRY, title="probe")
+    out = book.read_text("utf-8")
+    assert out.index("# Logbook — demo") < out.index("— probe"), out
+    assert out.index("written for the next session".capitalize()) < out.index("— probe")
+    if "header" in case:
+        assert out.startswith(HEADER), out
+        assert ss.parse_frontmatter(out).get("state") == "active"
+    if "one-entry" in case:
+        assert out.index("— probe") < out.index("2026-10-01 10:00")
+    assert "probe" in ss.first_entry_title(out)

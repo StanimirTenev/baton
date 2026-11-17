@@ -230,12 +230,13 @@ def _write_locked(file: Path, entry: str, next_line, old_line) -> tuple[float, s
     first = re.search(r'^## (?:\d{4}-|\d{1,2}\.\d{1,2}\.\d{4})', text, re.M)
     if first:
         at = first.start()
-    elif header:          # a new logbook, no entry yet: right under its header (row 65)
-        end = text.find("\n---", 3)
+    elif header:          # a new logbook, no entry yet: under its header (row 65) and under
+        end = text.find("\n---", 3)       # whatever follows it -- a title, its `---` (row 180)
         close = text.find("\n", end + 1) if end >= 0 else -1
         cut = len(text) if close < 0 else close + 1
-        head = text[:cut].rstrip("\n") + "\n\n"
-        text, at = head + text[cut:].lstrip("\n"), len(head)
+        rest = text[cut:].strip("\n")
+        text = text[:cut].rstrip("\n") + "\n\n" + (rest + "\n\n" if rest else "")
+        at = len(text)
     else:                 # no header, no entry: after whatever is there
         text = text.rstrip("\n") + "\n\n" if text.strip() else ""
         at = len(text)
