@@ -61,12 +61,12 @@ answers the hand-back with no entry is handed back once more, and then let throu
 
 **A host, not a model.** Baton works in a *host*: an agent runtime that runs hooks when a session
 starts and when a turn ends -- Claude Code, Codex CLI, Gemini CLI. The hooks read what the host
-sends, not which model answers: on 17.11 the same hooks ran under Claude Opus 5.5, Gemini 3.1 Pro
-preview, Gemini 3 Flash preview and the model behind a ChatGPT login in Codex, and each received
-the board and the logbook. Whether a model then follows them is the model's; that it receives them
-is the host's. **A chat in a browser runs no hooks**, so Baton enforces nothing there -- claude.ai,
-ChatGPT or Gemini on the web get no board, no hand-back, and no logbook unless the model happens
-to open one.
+sends, not which model answers: on 17.11 the same hooks ran in Claude Code with Claude Opus 5.5,
+in Codex CLI with a ChatGPT login, and in Gemini CLI with Gemini 3 Flash preview and 3.1 Pro
+preview, and under each host the board reached the model; each model then read the logbook
+itself. Whether a model follows the board and the hand-back is the model's; that it receives
+them is the host's. **A chat in a browser runs no hooks**, so Baton enforces nothing there --
+claude.ai, ChatGPT or Gemini on the web get no board, no hand-back and no logbook check.
 
 **In a claude.ai chat nothing warns you:** the plugin looks installed and the skills load,
 but no hook runs ([platform support](https://claude.com/docs/plugins/platform-support)).
@@ -308,14 +308,15 @@ tests through the hooks' entry points, not by a new live session.
 
 - **The kept conversation is never added to git.** `.baton-chat/` gets a `.gitignore` of `*`,
   written by Stop when it is missing (a folder from an older version gets one at its next Stop)
-  and never rewritten. Before, `git add .` in a task root that is a repository took the
+  and never rewritten. It does not untrack a chat already committed. Before, `git add .` in a task root that is a repository took the
   conversation, masked only for keys, and the project's full path.
 - **An entry headed later than its own save is handed back, under every host.** Gemini headed an
   entry 09:20 and saved it at 09:13:55. Six minutes was under both of Stop's windows (10 minutes
   ahead of now, 20 off the save), and L1 judges no entry it cannot call this session's -- under
-  Gemini, none. A heading read from the clock cannot be later than its save, so for a logbook
+  Gemini, none (checked with two Stops: a new entry 40 minutes behind its save is caught under
+  Claude Code and Codex, not under Gemini). A heading read from the clock cannot be later than its save, so for a logbook
   saved since the session began Stop now hands back a top entry headed more than two minutes
-  after the file was saved, whoever wrote it. Measured first: 0 of the 56 top entries with an
+  after the file was saved, whoever wrote it -- another agent's entry too. Measured first: 0 of the 56 top entries with an
   hour in the author's own logbooks are that far ahead. An hour typed *behind* the clock is still
   only L1's, and L1 is still silent under Gemini.
 - **The first entry goes below the logbook's title.** On a logbook with a header and a title but
