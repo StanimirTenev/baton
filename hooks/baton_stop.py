@@ -686,6 +686,12 @@ def _day(date: str) -> datetime:
     return datetime.strptime(date, "%Y-%m-%d" if "-" in date else "%d.%m.%Y")
 
 
+def _future_key(item: str) -> str:
+    """What "asked once per session" is kept by: the folder and its top entry, not the save time
+    row 181 adds to the item -- a logbook saved again while still ahead is not asked again."""
+    return "future:" + item.split(", headed ", 1)[0]
+
+
 def future_dated(root: Path, name: str, since: float | None = None) -> list[str]:
     """Folders whose NEWEST entry is headed later than now -- or, for a logbook saved since
     `since` (this session's start), later than that save (row 181). Only the top entry: an old
@@ -1792,9 +1798,19 @@ def _replies(transcript: str, after) -> list:
     return out
 
 
+def _ignore_chat(folder: Path) -> None:
+    """Row 177 (17.11): a task root that is a git repository took CHAT_DIR with `git add .`. A
+    `.gitignore` of `*` in it, written when missing -- in a folder an older version made too --
+    and never rewritten. It does not untrack a chat already committed."""
+    ignore = folder / ".gitignore"
+    if folder.is_dir() and not ignore.exists():
+        ignore.write_text("*\n", "utf-8")
+
+
 def save_chat(payload: dict) -> None:
     """Write this session's chat since its last entry to CHAT_DIR, or remove it when none is left."""
     root, name = config()
+    _ignore_chat(root / CHAT_DIR)           # whatever this Stop keeps (row 177)
     session = re.sub(r"[^\w-]", "", str(payload.get("session_id") or ""))[:80]
     transcript = str(payload.get("transcript_path") or "")
     if not root.is_dir() or not session or not transcript or _baton is None:
@@ -1817,11 +1833,7 @@ def save_chat(payload: dict) -> None:
     head = json.dumps({"session": session, "pid": pid, "project": str(Path(transcript).parent)},
                       ensure_ascii=False)
     _write_private(path, f"<!-- baton-chat {head} -->\n" + body)
-    # Row 177 (17.11): a task root that is a git repository took this folder with `git add .`.
-    # Written when missing -- a folder an older version made gets one now -- and never rewritten.
-    ignore = path.parent / ".gitignore"
-    if not ignore.exists():
-        ignore.write_text("*\n", "utf-8")
+    _ignore_chat(path.parent)
 
 
 def chat_ask(root: Path, name: str, transcript: str, session: str) -> str | None:
@@ -1962,7 +1974,7 @@ def main() -> int:
         _count(unasked=sum(1 for f in GREW if f not in stale_names
                            and (root / f / name).stat().st_mtime >= since))
     open_ended = [f for f in undefined(root, name, str(payload.get("transcript_path") or "")) if f not in asked]
-    ahead = [f for f in future_dated(root, name, since) if f"future:{f}" not in asked]
+    ahead = [f for f in future_dated(root, name, since) if _future_key(f) not in asked]
     try:
         typed = hand_typed_hours(root, name, since=since, transcript=transcript)
     except Exception:
@@ -2116,7 +2128,7 @@ def main() -> int:
             f"now ({datetime.now():%Y-%m-%d %H:%M}), or when the file was saved:\n{listed}\n\n"
             "Read the time from the clock (`date`) and correct the heading -- a record whose "
             "date is wrong is wrong about the one thing a record is for. (Asked once per session.)")
-        _remember(session, _already_asked(session) | {f"future:{f}" for f in ahead})
+        _remember(session, _already_asked(session) | {_future_key(f) for f in ahead})
     if typed:
         rec = _ss().lessons_load().get("L1", {})
         listed = "\n".join(f"  - {t}" for t in typed)

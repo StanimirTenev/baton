@@ -188,3 +188,13 @@ def test_the_kept_chat_is_never_added_to_git(tmp_path):
     _run("baton_stop.py", env, {"session_id": "a", "transcript_path": tr})
     assert (tasks / ".baton-chat" / ".gitignore").read_text("utf-8") == "*\n!keep.md\n", \
         "one that is there is the human's: never rewritten"
+
+
+def test_a_chat_folder_an_older_version_made_gets_its_gitignore_at_any_stop(tmp_path):
+    """Row 177: the owner's own `.baton-chat/` was made before 3.39.0. A Stop that keeps no chat
+    -- here, one whose transcript cannot be read -- still writes the `.gitignore`."""
+    env, tasks, _ = _setup(tmp_path)
+    (tasks / ".baton-chat").mkdir()
+    (tasks / ".baton-chat" / "old.md").write_text("<!-- baton-chat {} -->\nkept\n", "utf-8")
+    _run("baton_stop.py", env, {"session_id": "a", "transcript_path": str(tmp_path / "proj" / "none.jsonl")})
+    assert (tasks / ".baton-chat" / ".gitignore").read_text("utf-8") == "*\n"

@@ -2,13 +2,15 @@
 09:20 and saved it at 09:13:55. Nothing said a word. Six minutes ahead is under both of Stop's
 windows -- FUTURE_SLACK_SECONDS (600 s ahead of *now*) and L1's 20 minutes off the save time --
 and L1 does not judge an entry it cannot attribute, which under Gemini is every entry: Stop reads
-no Gemini tool call (row 174), so the logbook reads as another agent's.
+no Gemini tool call (row 174), so the logbook reads as another agent's. (Checked 17.11 with two
+Stops: a new entry headed 40 minutes behind its save is L1's under Claude Code and Codex, and
+passes in silence under Gemini.)
 
 A heading read from the clock cannot be later than the moment the file was saved: the hour is
 read first, then written, and the minute is cut, not rounded. Since 3.39.0 Stop also hands back a
 top entry headed more than AHEAD_OF_SAVE_SECONDS after its logbook's own save time, for a logbook
 saved since this session began -- whoever wrote it, under every host. Measured before choosing the
-window, 17.11: 0 of the 56 top entries with an hour in ~/zadachi/*/DNEVNIK.md are more than two
+window, 17.11: 0 of the 56 top entries with an hour in the owner's logbooks are more than two
 minutes ahead of their file's save time.
 
 Through the hook's entry point, with each host's payload and transcript shape.
@@ -137,6 +139,18 @@ def test_a_heading_behind_its_save_is_not_this_check(tmp_path, host):
     """A header edited after the entry moves the save time later, never the heading ahead."""
     got, _ = _case(tmp_path, host, ahead_min=-12)
     assert "after the logbook was saved" not in got.get("reason", ""), (host, got)
+
+
+def test_asked_once_a_session_even_when_the_logbook_is_saved_again(tmp_path):
+    tasks = tmp_path / "tasks"
+    saved = time.time() - 120
+    top = datetime.fromtimestamp(saved).replace(second=0, microsecond=0) + timedelta(minutes=6)
+    book = _book(tasks, top, saved)
+    payload = _transcript("gemini", tmp_path, book, time.time() - 1800)
+    assert _stop(tmp_path, tasks, payload).get("decision") == "block"
+    again = time.time() - 30                               # the header edited, the heading not
+    os.utime(book, (again, again))
+    assert "after the logbook was saved" not in _stop(tmp_path, tasks, payload).get("reason", "")
 
 
 def test_a_logbook_saved_before_the_session_began_is_history(tmp_path):
