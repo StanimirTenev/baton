@@ -668,6 +668,14 @@ def undefined(root: Path, name: str, transcript: str | None = None) -> list[str]
 # "2026-09-29 00:50" -- typed by the agent, not read from a clock. A few minutes of slack
 # for a heading written just before it was saved.
 FUTURE_SLACK_SECONDS = 600
+# Row 181 (17.11, the three-host handoff): Gemini headed an entry 09:20 and saved it at 09:13:55 --
+# under FUTURE_SLACK_SECONDS and L1's window both, and L1 judges only an entry it can call this
+# session's, which under Gemini is none (row 174). A heading read from the clock cannot be later
+# than the save that wrote it: the hour is read first and its minute cut, not rounded. So a logbook
+# saved since this session began whose top entry is headed more than this after that save was
+# typed, whoever wrote it, under every host. Two minutes for two clocks a little apart. Measured
+# 17.11: 0 of 56 top entries with an hour in the owner's logbooks are more than that ahead.
+AHEAD_OF_SAVE_SECONDS = 120
 # ISO or day first: `## 22.10.2026 15:30` is how the human writes a date everywhere else, and a top
 # entry headed so was no entry here -- every check read the older ISO one below it (row 58, 22.10).
 _HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})(?:[ T](\d{1,2}):(\d{2}))?")
@@ -678,8 +686,9 @@ def _day(date: str) -> datetime:
     return datetime.strptime(date, "%Y-%m-%d" if "-" in date else "%d.%m.%Y")
 
 
-def future_dated(root: Path, name: str) -> list[str]:
-    """Folders whose NEWEST entry is headed later than now. Only the top entry: an old
+def future_dated(root: Path, name: str, since: float | None = None) -> list[str]:
+    """Folders whose NEWEST entry is headed later than now -- or, for a logbook saved since
+    `since` (this session's start), later than that save (row 181). Only the top entry: an old
     mistake below it is history; the top one is what the next session trusts."""
     out = []
     now = datetime.now()
@@ -687,6 +696,7 @@ def future_dated(root: Path, name: str) -> list[str]:
         book = folder / name
         try:
             text = book.read_text("utf-8-sig")
+            saved = book.stat().st_mtime
         except OSError:
             continue
         for line in text.splitlines():
@@ -697,13 +707,19 @@ def future_dated(root: Path, name: str) -> list[str]:
                 day = _day(m.group(1))
             except ValueError:
                 break
+            after = None
             if m.group(2):
                 when = day.replace(hour=int(m.group(2)), minute=int(m.group(3)))
                 late = (when - now).total_seconds() > FUTURE_SLACK_SECONDS
+                if since is not None and saved >= since:
+                    ahead = when.timestamp() - saved
+                    after = ahead if ahead > AHEAD_OF_SAVE_SECONDS else None
             else:
                 late = day.date() > now.date()
-            if late:
-                out.append(f"{folder.name} (top entry: \"{line[3:40].strip()}\")")
+            if late or after:
+                out.append(f"{folder.name} (top entry: \"{line[3:40].strip()}\"" + (
+                    f", headed {after / 60:.0f} min after the logbook was saved at "
+                    f"{datetime.fromtimestamp(saved):%H:%M:%S})" if after else ")"))
             break
     return out
 
@@ -1946,7 +1962,7 @@ def main() -> int:
         _count(unasked=sum(1 for f in GREW if f not in stale_names
                            and (root / f / name).stat().st_mtime >= since))
     open_ended = [f for f in undefined(root, name, str(payload.get("transcript_path") or "")) if f not in asked]
-    ahead = [f for f in future_dated(root, name) if f"future:{f}" not in asked]
+    ahead = [f for f in future_dated(root, name, since) if f"future:{f}" not in asked]
     try:
         typed = hand_typed_hours(root, name, since=since, transcript=transcript)
     except Exception:
@@ -2096,8 +2112,8 @@ def main() -> int:
     if ahead:
         listed = "\n".join(f"  - {folder}" for folder in ahead)
         parts.append(
-            f"Baton: these {name} files have a newest entry headed LATER than the clock "
-            f"({datetime.now():%Y-%m-%d %H:%M}):\n{listed}\n\n"
+            f"Baton: these {name} files have a newest entry headed LATER than the clock -- "
+            f"now ({datetime.now():%Y-%m-%d %H:%M}), or when the file was saved:\n{listed}\n\n"
             "Read the time from the clock (`date`) and correct the heading -- a record whose "
             "date is wrong is wrong about the one thing a record is for. (Asked once per session.)")
         _remember(session, _already_asked(session) | {f"future:{f}" for f in ahead})
