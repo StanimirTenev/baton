@@ -1493,6 +1493,174 @@ def first_asks(asks: list[tuple], root: Path, now: datetime | None = None,
     return out
 
 
+# Lesson L5, the devil's advocate, moment 1: text going out is attacked before it leaves
+# (baton-uroci/PLAN-advokat.md, decided by the human 17.11). That day three errors were in
+# sentences, none in code: "I have not read it yet" in a reply that was posted, when the letter had
+# been read that morning and written into our own register; "on my fix list" in a draft, for what
+# our own docs put out of scope by design. The refutation was on the disk; nobody looked. Like L3,
+# classes, not phrases: the turn's final message holds a block of prose set apart to paste (a
+# ``` fence with no language or a text one, or a `>` quote) of ADVOCATE_MIN characters or more, or
+# the turn called a sending tool -- a push or a `gh` issue/PR comment or create, as
+# baton_batch.outward reads them (its releases and uploads are not text to a reader, and are left
+# out); an MCP tool whose name says send, draft, reply or forward; an artifact published. Handed
+# back once per draft. The answer is a `### Devil's advocate` (`### Адвокат`) section in the entry;
+# each `refuted:` line there is `caught`, a section without one is `nothing` -- the cost, counted.
+# ADVOCATE_MIN: the real drafts of 17.11 were 980-1,243 characters (E1 1,010, E2 1,159); a
+# LinkedIn comment's limit is 1,250. Replayed 18.11 over 1,581 recorded turns (baton-uroci,
+# replay/l5_prose.py): blocks cluster at 700-1,300; a block of 200 or more ends 12% of turns, of
+# 400 or more 11%. In a sample of ten blocks of 150-600 characters seven were real short replies
+# ("Thanks, Daniel...", "it is fixed in 0.46.0") -- claims about us too. Below 200: a quoted line
+# of someone else's, a one-line answer. A block with shell syntax (`&&`, a trailing `\`) is a
+# command to paste, not text to a reader.
+ADVOCATE_MIN = 200
+_ADVOCATE = re.compile(r"(?i)^###\s+(?:" + _words("advocate_heading") + r")\s*:?\s*$")
+_FENCE = re.compile(r"(?ms)^[ \t]*```[ \t]*(\w*)[^\n]*\n(.*?)^[ \t]*```")
+_PROSE_FENCE = {"", "text", "txt", "plain", "md", "markdown"}
+_SENTENCE = re.compile(r"[.!?…](?=\s|$)")
+_SEND_WORDS = {"send", "draft", "reply", "forward"}
+
+
+def _prose(text: str) -> bool:
+    """A block a reader would paste: long enough, mostly letters, in sentences."""
+    t = text.strip()
+    marks = [c for c in t if not c.isspace()]
+    if "&&" in t or re.search(r"\\\s*$", t, re.M):
+        return False
+    return (len(t) >= ADVOCATE_MIN and bool(marks)
+            and sum(c.isalpha() for c in marks) / len(marks) >= 0.75
+            and len(_SENTENCE.findall(t)) >= 2)
+
+
+def prose_blocks(text: str) -> list[str]:
+    """The blocks of prose set apart in a message: fenced (no language, or a text one) or quoted."""
+    out = [m.group(2) for m in _FENCE.finditer(text) if m.group(1).lower() in _PROSE_FENCE]
+    quoted = []
+    for line in _FENCE.sub("", text).splitlines() + [""]:
+        if line.lstrip().startswith(">"):
+            quoted.append(line.lstrip()[1:].lstrip())
+        elif quoted:
+            out.append("\n".join(quoted))
+            quoted = []
+    return [b for b in out if _prose(b)]
+
+
+def _sends(tool: str, args: dict, batch) -> bool:
+    """A sending action of Р2 that baton_batch.outward does not read: MCP draft/reply/forward and
+    send, an artifact published (not an asset uploaded, not a read)."""
+    if tool.startswith("mcp__"):          # get_draft, list_drafts, delete_draft send nothing
+        words = set(re.split(r"[_\-]+", tool.rsplit("__", 1)[-1].lower()))
+        return bool(_SEND_WORDS & words) and not (words & (batch.MCP_READ | {"delete", "trash"}))
+    if tool == "Artifact":
+        return args.get("action", "publish") == "publish" and not args.get("asset")
+    return False
+
+
+def _this_turn(transcript: str) -> tuple[list, str]:
+    """The tool calls of the turn the human's last message began -- (id, tool, input) -- and the
+    text of its final message: what the agent said after its last call."""
+    ss, calls, final = _ss(), [], []
+    path = Path(transcript)
+    with open(path, "rb") as fh:
+        size = path.stat().st_size
+        if size > ss.QUIET_MAX_BYTES:
+            fh.seek(size - ss.QUIET_MAX_BYTES)
+            fh.readline()
+        for raw in fh:
+            try:
+                obj = json.loads(raw.decode("utf-8", "replace"))
+            except ValueError:
+                continue
+            if not isinstance(obj, dict) or obj.get("isSidechain"):
+                continue
+            if ss._human(obj) is not None:
+                calls, final = [], []
+                continue
+            content = (obj.get("message") or {}).get("content")
+            if obj.get("type") != "assistant" or not isinstance(content, list):
+                continue
+            for b in content:
+                if not isinstance(b, dict):
+                    continue
+                if b.get("type") == "tool_use":
+                    args = b.get("input") if isinstance(b.get("input"), dict) else {}
+                    calls.append((str(b.get("id") or ""), str(b.get("name") or ""), args))
+                    final = []
+                elif b.get("type") == "text":
+                    final.append(str(b.get("text") or ""))
+    return calls, "\n".join(final)
+
+
+def outgoing(transcript: str) -> list[tuple[str, str, str]]:
+    """(key, what, the text going out) for each draft of this turn: a prose block in its final
+    message, or a sending tool call. The key is the call's id or the block's hash."""
+    if not transcript or HOST in ("codex", "gemini"):
+        return []                 # their transcripts are read elsewhere; L5 reads Claude Code's
+    calls, final = _this_turn(transcript)
+    out = []
+    batch = _batch()
+    for cid, tool, args in calls:
+        if tool in SHELL_TOOLS:
+            found = batch.outward([{"tool_name": tool, "tool_input": args}])
+            found = [f for f in found if re.match(r"(?:git|gh)\b", f[0])]
+            if found:
+                out.append((cid, found[0][0], str(args.get("command", ""))))
+        elif _sends(tool, args, batch):
+            out.append((cid, tool, json.dumps(args, ensure_ascii=False)))
+    for block in prose_blocks(final):
+        key = hashlib.sha256(" ".join(block.split()).encode("utf-8")).hexdigest()[:16]
+        out.append((key, f"a draft of {len(block.strip())} characters", block))
+    return out
+
+
+def advocate_asks(transcript: str, now: datetime | None = None) -> list[tuple[str, str, str]]:
+    """The drafts of this turn never asked about before, in any session; each counts L5 `fired`."""
+    found = outgoing(transcript)
+    if not found:
+        return []
+    ss = _ss()
+    state = ss.lessons_load()
+    seen = state.setdefault("L5_asked", [])
+    out = [d for d in found if d[0] not in seen]
+    for d in out:
+        seen.append(d[0])
+        ss.lesson_event(state, "L5", "fired", now)
+    if out:
+        state["L5_asked"] = seen[-_SEEN_CAP:]
+        ss.lessons_save(state)
+    return out
+
+
+def advocate_verdicts(body: str) -> list[list[str]]:
+    """The lines of each devil's advocate section in an entry body."""
+    return [lines for head, lines in _sections(body) if _ADVOCATE.match(head)]
+
+
+def advocate_tally(root: Path, name: str, since: float | None, now: datetime | None = None,
+                   transcript: str | None = None) -> None:
+    """Count L5 `caught` (each `refuted:` line of a devil's advocate section, once) and `nothing`
+    (a section with none, once) in the entries this session wrote."""
+    ss = _ss()
+    state = ss.lessons_load()
+    seen = state.setdefault("L5_answered", [])
+    new = False
+    for folder, text, top in _changed_tops(root, name, since, transcript):
+        for heading, body in _session_tops(text, top, since):
+            sections = advocate_verdicts(body)
+            key = f"{folder}|{heading}"
+            if not sections or key in seen:
+                continue
+            seen.append(key)
+            new = True
+            refuted = [ln for lines in sections for ln in lines if _REFUTED.match(ln)]
+            for _ in refuted:
+                ss.lesson_event(state, "L5", "caught", now)
+            if not refuted:
+                ss.lesson_event(state, "L5", "nothing", now)
+    if new:
+        state["L5_answered"] = seen[-_SEEN_CAP:]
+        ss.lessons_save(state)
+
+
 # Was the lesson followed? (ZA-OPRAVYANE row 44, after Sentry's "recovery verification", 22.10.)
 # Row 40 measured it for L2 only. After Stop asks about an entry -- L1 an hour off the clock, L3 a
 # public/private claim, L4 a tests claim -- the next FIX_STOPS Stops look at that folder's newest
@@ -1924,6 +2092,13 @@ def main() -> int:
         except Exception:
             lost, again = None, []
         fix_check(config()[1])        # the hand-back's answer lands here (row 44)
+        try:      # and L5's: the devil's advocate section of the entry it asked for
+            root, name = config()
+            if root.is_dir():
+                transcript = str(payload.get("transcript_path") or "")
+                advocate_tally(root, name, session_started(transcript), transcript=transcript)
+        except Exception:
+            pass                      # a lesson that cannot count must not cost the session
         try:
             checked = answer_check(payload)
         except Exception:
@@ -1998,6 +2173,11 @@ def main() -> int:
                             root, lesson="L4")
     except Exception:
         passes = []           # the same
+    try:      # L5, moment 1: text going out this turn, and the answers to earlier asks
+        advocate_tally(root, name, since, transcript=transcript)
+        drafts = advocate_asks(transcript)
+    except Exception:
+        drafts = []           # the same
     try:      # L4 against a pinned command (row 43): results that came in, runs to start
         tested = _ss().tests_results()
         more, running = pinned_runs(root, name, since, session, transcript)
@@ -2079,7 +2259,7 @@ def main() -> int:
     if tested:
         note = {"systemMessage": " ".join(filter(None, (note.get("systemMessage"), *tested)))}
     if (not stale and not open_ended and not ahead and not typed and not thin and not claims
-            and not passes and not rewritten):
+            and not passes and not drafts and not rewritten):
         chat = chat_ask(root, name, str(payload.get("transcript_path") or ""), session)
         if not chat:
             _ledger()             # the turn is let through: its entries as they end it
@@ -2186,6 +2366,19 @@ def main() -> int:
                "this turn, and its result is set beside the claim. " if running else "")
             + f"(Asked once per entry. Counted: caught {rec.get('caught', 0)} of "
             f"{rec.get('fired', 0)} asked.)")
+    if drafts:
+        rec = _ss().lessons_load().get("L5", {})
+        listed = "\n".join(f"  - {what}: \"{' '.join(text.split())[:70]}...\"" for _k, what, text in drafts)
+        parts.append(
+            f"Baton, lesson L5 (devil's advocate) -- text is going out from this turn:\n{listed}\n\n"
+            "Which sentence in it states a fact about us or our state? For each: what would refute "
+            "it, and where did you look for that in our own records (logbooks, registers, "
+            f"ZA-OPRAVYANE, docs)? Look now, then answer in the task's {name} entry, in a section "
+            "`### Devil's advocate` (or `### Адвокат`): one line per claim, and `refuted: <the "
+            "claim>` (`оборено:`) where one falls -- then correct the text before it goes out. "
+            "If nothing in it is a claim about us, say so in one line. "
+            f"(Asked once per draft. Counted: caught {rec.get('caught', 0)}, nothing "
+            f"{rec.get('nothing', 0)}, of {rec.get('fired', 0)} asked.)")
     if rewritten:
         parts.append(
             f"Baton: an older entry changed in the {name} of " + ", ".join(rewritten) + " -- "

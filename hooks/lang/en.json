@@ -46,6 +46,10 @@
     "refuted": [
       "refuted"
     ],
+    "advocate_heading": [
+      "devil'?s advocate",
+      "advocate"
+    ],
     "tests_pass": [
       "(?:all\\s+)?tests?\\s+(?:all\\s+)?(?:are\\s+|is\\s+)?pass(?:es|ed|ing)?",
       "(?:test\\s+)?suite\\s+pass(?:es|ed|ing)?",

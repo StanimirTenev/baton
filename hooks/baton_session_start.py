@@ -396,6 +396,9 @@ LESSONS = {
     "L4": "A claim that tests pass is listed with the command that showed it: under `### Claims "
           "to verify` at the top of the entry, with its result line, and marked `refuted:` there "
           "in a later entry if it proves wrong.",
+    "L5": "Text going out (a draft to paste, a mail, a comment, a push, a page) is attacked before "
+          "it leaves: each sentence that states a fact about us is checked against our own records, "
+          "under `### Devil's advocate` in the entry, and marked `refuted:` there where it falls.",
 }
 # Retired lessons, with the date and the reason (ZA-OPRAVYANE row 135, Gleb Rosev, 09.11: the
 # removed rule is written down with why, so it does not come back). Retiring was deleting the line
@@ -407,7 +410,7 @@ RECUR_DAYS, RECUR_MIN, RETIRE_DAYS = 14, 2, 60
 # For L1 and L2 `caught` is the mistake made again. For L3 and L4 it is a listed claim later shown
 # wrong: the section did its work, and two of those in a fortnight are not a lesson failing
 # (ZA-OPRAVYANE row 33, 2026-10-21).
-CAUGHT_IS_USE = {"L3", "L4"}
+CAUGHT_IS_USE = {"L3", "L4", "L5"}   # L5: a refuted line of the advocate section
 
 
 def _lessons_file() -> Path:

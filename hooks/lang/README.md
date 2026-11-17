@@ -39,6 +39,7 @@ longer form before a shorter one that starts it.
 | `sphere` | Stop | the public sphere, not visibility: "public information", "a public network", "the public", "a private person" |
 | `claims_heading` | Stop | the heading of the claims section, after `### ` |
 | `refuted` | Stop | the word that marks a claim as refuted, before `:` |
+| `advocate_heading` | Stop | the heading of the devil's advocate section (L5), after `### ` |
 | `tests_pass` | Stop | a sentence claiming tests pass |
 | `task_word` | prompt | the word for "task" before a task number (`task 12`) |
 
