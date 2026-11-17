@@ -139,3 +139,37 @@ def test_the_doctor_run_by_these_tests_reads_the_tests_managed_folder(tmp_path):
     (managed / "managed-settings.json").write_text('{"disableAllHooks": true}', "utf-8")
     out = _doctor(tmp_path, tmp_path / "data")
     assert "ALL HOOKS ARE SWITCHED OFF" in out.stdout, out.stdout[-600:]
+
+
+def test_doctor_finds_the_heartbeats_beside_its_own_copy(tmp_path):
+    """Row 179 (Д2, a live Gemini CLI session, 17.11): under Gemini -- and Codex -- the hooks run
+    from a clone, and without ${CLAUDE_PLUGIN_DATA} they keep their state beside themselves, in
+    `<clone>/hooks`. The doctor looked only under ~/.claude and said NEVER RAN of hooks that had
+    run all along. When nothing under ~/.claude has a heartbeat, the hooks beside the doctor's own
+    copy are read."""
+    import shutil
+    clone = tmp_path / "gemini-home" / ".gemini" / "baton"
+    shutil.copytree(ROOT / "tools", clone / "tools")
+    shutil.copytree(ROOT / "skills", clone / "skills")
+    (clone / "hooks").mkdir()
+    for hook in HOOKS:
+        shutil.copy(ROOT / "hooks" / f"{hook}.py", clone / "hooks")
+    for name in ("_baton.py", "run.sh"):
+        shutil.copy(ROOT / "hooks" / name, clone / "hooks")
+    env = _env(tmp_path, "")
+    env.pop("CLAUDE_PLUGIN_DATA")
+    env.pop("CLAUDE_PLUGIN_ROOT")
+    subprocess.run([sys.executable, str(clone / "hooks" / "baton_session_start.py")],
+                   input=b"{}", capture_output=True, env=env)
+    assert (clone / "hooks" / "baton.beat.baton_session_start").is_file()
+    out = subprocess.run([sys.executable, str(clone / "tools" / "baton_doctor.py")],
+                         capture_output=True, text=True, env=env)
+    assert out.returncode == 0, out.stdout
+    assert f"heartbeats in {clone / 'hooks'}" in out.stdout and "Running" in out.stdout, out.stdout
+
+    claude = tmp_path / "home" / ".claude" / "baton" / "hooks"      # a Claude Code script install
+    claude.mkdir(parents=True)
+    (claude / "baton.beat.baton_session_start").write_text("2026-11-17T09:00:00", "utf-8")
+    out = subprocess.run([sys.executable, str(clone / "tools" / "baton_doctor.py")],
+                         capture_output=True, text=True, env=env)
+    assert f"heartbeats in {claude}" in out.stdout, "as before: Claude Code's own comes first"

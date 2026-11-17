@@ -31,7 +31,8 @@ HOOKS = (
 def folder() -> Path:
     """The plugin's data folder when it is passed in; else the script install's hooks; else
     any plugin data folder of Baton's that holds heartbeats -- so a skill whose
-    ${CLAUDE_PLUGIN_DATA} arrived empty does not tell a working plugin it is not running."""
+    ${CLAUDE_PLUGIN_DATA} arrived empty does not tell a working plugin it is not running; else
+    the hooks beside this copy, where a clone Gemini CLI or Codex runs keeps them."""
     data = os.environ.get("CLAUDE_PLUGIN_DATA")
     if data:
         return Path(data)
@@ -42,6 +43,10 @@ def folder() -> Path:
     beating = [d for d in (claude / "plugins" / "data").glob("baton-*") if any(d.glob("baton.beat.*"))]
     if beating:
         return max(beating, key=lambda d: max(f.stat().st_mtime for f in d.glob("baton.beat.*")))
+    # Row 179: a clone Gemini CLI or Codex runs the hooks from keeps their state beside them.
+    own = Path(__file__).resolve().parent.parent / "hooks"
+    if any(own.glob("baton.beat.*")):
+        return own
     return script
 
 

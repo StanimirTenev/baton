@@ -45,6 +45,14 @@ What has been checked against Gemini CLI 0.68.0, and how: no model was run. This
 
 5. Check it. `gemini extensions list` should show `baton` with its path and `Enabled (User): true`. Gemini's docs say `/hooks panel` in the interactive CLI lists the hooks; that was not tried.
 
+6. After a session, ask whether the hooks actually ran:
+
+   ```sh
+   python3 ~/.gemini/baton/tools/baton_doctor.py
+   ```
+
+   Under Gemini the hooks keep their state beside themselves, in `~/.gemini/baton/hooks`, and the doctor reads that folder when nothing under `~/.claude` has a heartbeat (since 3.39.0; before, it said NEVER RAN). On a machine that also runs Baton in Claude Code, the doctor reads Claude Code's folder first; point it at Gemini's with `CLAUDE_PLUGIN_DATA=~/.gemini/baton/hooks python3 ~/.gemini/baton/tools/baton_doctor.py`. The first line names the folder it read. The doctor uses Claude Code's event names: UserPromptSubmit is Gemini's BeforeAgent, Stop is AfterAgent. PostToolBatch and StopFailure stay "not yet", because Gemini has neither event.
+
 Why an extension rather than hooks in `~/.gemini/settings.json`: with folder trust on, Gemini drops the hooks from settings in an untrusted folder, because it labels user hooks as project hooks. Its hook registry still runs extension hooks there (run through the registry with the folder marked untrusted; that the extension loader ignores folder trust for hooks was read in its code, not run).
 
 Updating: `git pull` in the clone. A linked extension reads the folder in place, so the next session runs the new hooks. Read what changed (`git -C ~/.gemini/baton log -p`) before it does.
