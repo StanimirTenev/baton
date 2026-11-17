@@ -230,3 +230,35 @@ def test_each_hook_writes_its_turn_through_the_shared_copy(tmp_path):
         mod._turn("Event", "sid", "x")
         assert seen == [(mod.__file__, "Event", "sid", "x")], name
         assert '"baton.turns"' not in Path(mod.__file__).read_text("utf-8"), "no copy of its own"
+
+
+def test_a_stop_under_another_session_id_ends_the_turn_before_it(tmp_path):
+    """Row 178 (Д1, a live Gemini CLI 0.68.0 headless session, 17.11): in three of eight calls
+    AfterAgent came with another session_id than BeforeAgent, a few seconds after it, so
+    `baton.turns` held a file with only the prompt and another with only the Stop -- and the doctor
+    said "A turn with no end seen" of turns that had ended. The shape below is the one the run
+    left (ids made up, the times as they were relative to each other). A session seen only at Stop
+    is the end of the newest open turn before it; a turn interrupted after the last of them is
+    still a question."""
+    data = tmp_path / "data"
+    _beats(data)
+    _turns(data, "aaaa1111-open", (21.0, "UserPromptSubmit", ""))
+    _turns(data, "bbbb2222-stop", (20.94, "Stop", ""))
+    _turns(data, "cccc3333-open", (20.27, "UserPromptSubmit", ""))
+    _turns(data, "dddd4444-stop", (20.19, "Stop", ""))
+    _turns(data, "eeee5555-done", (19.8, "UserPromptSubmit", ""), (19.7, "Stop", ""))
+    _turns(data, "ffff6666-hung", (13.0, "UserPromptSubmit", ""))      # stopped by hand: no end
+    out = _doctor(tmp_path, data)
+    assert "aaaa1111" not in out.stdout and "cccc3333" not in out.stdout, out.stdout
+    assert "A turn with no end seen, in 1 of the last 4 sessions" in out.stdout, out.stdout
+    assert "ffff6666  UserPromptSubmit" in out.stdout
+    assert "2 sessions seen only at Stop" in out.stdout, out.stdout
+
+
+def test_a_stop_only_session_does_not_end_a_turn_that_began_after_it(tmp_path):
+    data = tmp_path / "data"
+    _beats(data)
+    _turns(data, "bbbb2222-stop", (30, "Stop", ""))
+    _turns(data, "aaaa1111-open", (20, "UserPromptSubmit", ""))
+    out = _doctor(tmp_path, data)
+    assert "aaaa1111  UserPromptSubmit" in out.stdout, out.stdout

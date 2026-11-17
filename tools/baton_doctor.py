@@ -110,10 +110,16 @@ TURN_GRACE = 120          # seconds: a turn this young may still be going
 TURN_SESSIONS, TURN_DAYS = 20, 7
 
 
-def turns(where: Path, now: datetime, own: str = "") -> tuple[list, list, int] | None:
-    """(open, failed, judged) over the newest TURN_SESSIONS sessions of the last TURN_DAYS days:
-    `open` -- (session, event, time) of a last activity with no end after it; `failed` --
-    (session, error) of a last activity ended by StopFailure; `judged` -- sessions looked at.
+# Row 178 (17.11, a live Gemini CLI 0.68.0 headless session): in three of eight calls AfterAgent
+# came with another session_id than BeforeAgent, seconds later -- one file with only the prompt,
+# another with only the Stop, and a false "turn with no end". A session seen only at Stop is taken
+# as the end of the newest open turn before it, one turn for each; a turn interrupted after the
+# last of them is still a question. Why Gemini sends another id is not known.
+def turns(where: Path, now: datetime, own: str = "") -> tuple[list, list, int, int] | None:
+    """(open, failed, judged, paired) over the newest TURN_SESSIONS sessions of the last TURN_DAYS
+    days: `open` -- (session, event, time) of a last activity with no end after it; `failed` --
+    (session, error) of a last activity ended by StopFailure; `judged` -- sessions looked at;
+    `paired` -- sessions seen only at Stop, taken as the end of an open turn before them.
     `own` is the session the doctor runs in, whose turn is not over (BATON_SESSION). None when
     there are no records: heartbeats from before v3.24.0 hold no session."""
     import time
@@ -125,7 +131,7 @@ def turns(where: Path, now: datetime, own: str = "") -> tuple[list, list, int] |
     files = sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)[:TURN_SESSIONS]
     if not files:
         return None
-    open_, failed, judged = [], [], 0
+    open_, failed, judged, only_ends = [], [], 0, []
     for f in files:
         if own and f.name == own:
             continue
@@ -142,6 +148,7 @@ def turns(where: Path, now: datetime, own: str = "") -> tuple[list, list, int] |
             continue
         last = max((i for i, r in enumerate(rows) if r[1] in TURN_OPEN), default=None)
         if last is None:
+            only_ends += [r[0] for r in rows[:1] if r[1] in TURN_END]
             continue
         ends = [r for r in rows[last + 1:] if r[1] in TURN_END]
         if not ends and (now - rows[last][0]).total_seconds() < TURN_GRACE:
@@ -151,7 +158,13 @@ def turns(where: Path, now: datetime, own: str = "") -> tuple[list, list, int] |
             open_.append((f.name, rows[last][1], rows[last][0]))
         elif ends[-1][1] == "StopFailure":
             failed.append((f.name, ends[-1][2] or "unknown"))
-    return open_, failed, judged
+    paired = 0
+    for end in sorted(only_ends):
+        before = [o for o in open_ if o[2] < end]
+        if before:
+            open_.remove(max(before, key=lambda o: o[2]))
+            paired += 1
+    return open_, failed, judged, paired
 
 
 def ago(when: datetime, now: datetime) -> str:
@@ -340,8 +353,12 @@ def main() -> int:
     print()
     seen_turns = turns(where, now, os.environ.get("BATON_SESSION", ""))
     if seen_turns and seen_turns[2]:
-        open_, failed, judged = seen_turns
+        open_, failed, judged, paired = seen_turns
         errors = ", ".join(f"{e} ({s[:8]})" for s, e in failed)
+        if paired:
+            print(f"ℹ️  {paired} session{'s' if paired != 1 else ''} seen only at Stop, each taken as "
+                  "the end of the open turn before it\n   (Gemini CLI has sent its end-of-turn "
+                  "event under another session id).\n")
         if open_:
             print(f"⚠️  A turn with no end seen, in {len(open_)} of the last {judged} sessions: its "
                   "last activity\n   has no Stop or StopFailure after it.")
