@@ -745,3 +745,29 @@ def test_push_sends_to_the_remote_the_human_added_and_verify_remote_catches_a_re
     log = subprocess.run([GIT, "--git-dir", str(bare), "log", "--format=%s"],
                          capture_output=True, text=True).stdout
     assert "rewritten" not in log
+
+
+
+@pytest.mark.parametrize("host", ["claude", "codex", "gemini"])
+def test_each_line_says_which_host_recorded_it_and_old_lines_still_verify(w, host):
+    """Row 182 (Д5, the three-host handoff, 17.11): neither the logbook nor the ledger kept the
+    host. Each line Stop adds now says which host's Stop recorded it -- `recorded_by`. That is the
+    author only when the ledger is shared and the author's own Stop saw the entry first: every
+    Stop records every entry it has not seen, another agent's too. The logbook's format does not
+    change. A line from before this, without the field, verifies as before."""
+    log = w.task(text="---\nstate: active\ndone_when: x\n---\n\n" + OLD)
+    assert core.ledger_update(w.root, "LOGBOOK.md", [log.parent], w.ledger) == 1   # the old shape
+    assert "recorded_by" not in w.records()[0]
+    fixtures = ROOT / "tests" / "fixtures"
+    payload = {"claude": {"session_id": "s1"},
+               "codex": json.loads((fixtures / "codex" / "stop.json").read_text("utf-8")),
+               "gemini": json.loads((fixtures / "gemini" / "after_agent.json").read_text("utf-8"))}[host]
+    payload["transcript_path"] = str(w.tmp / "none" / Path(payload.get("transcript_path", "s1.jsonl")).name)
+    w.task(text=BOOK)
+    w.stop(payload)
+    recs = w.records()
+    assert len(recs) == 2 and "recorded_by" not in recs[0], "a line once written is never rewritten"
+    assert recs[1]["heading"] == NEW.splitlines()[0] and recs[1]["recorded_by"] == host, recs
+    if GIT:
+        out = w.tool("verify")
+        assert out.returncode == 0 and "as recorded" in out.stdout, out.stdout + out.stderr

@@ -1861,7 +1861,7 @@ def _ledger() -> None:
         root, name = config()
         d = _baton.ledger_dir(_local_file)
         if d is not None and root.is_dir():
-            _baton.ledger_update(root, name, _ss().task_folders(root), d)
+            _baton.ledger_update(root, name, _ss().task_folders(root), d, HOST)
     except Exception:
         pass
 

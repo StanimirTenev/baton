@@ -112,7 +112,11 @@ and SessionStart says nothing of it (the repository already written stays where 
   intended, and the human decides. An entry it has seen is never recorded again, whatever its text is now, and no line
   is ever rewritten. With nothing new it reads the ledger and the logbooks and starts no
   process -- about 0.1 s more per Stop and per session start on 5 MB of logbooks (57 folders,
-  2,870 entries, measured 16.11).
+  2,870 entries, measured 16.11). Since 3.39.0 a line also says which host's Stop recorded it
+  (`recorded_by`: claude, codex, gemini or unknown). That is the host that **recorded** the
+  entry, not necessarily the one that wrote it: every Stop records every entry it has not seen,
+  another agent's too, and each host keeps its own ledger unless `ledger` points them at one.
+  Neither the logbook nor its format names the author.
 - **SessionStart** compares the ledger with the logbooks and, when something differs, says so
   in one block: entries changed after they were recorded, recorded entries that are gone, a
   broken chain (a line that does not follow the one before, a ledger shorter than Baton last
@@ -193,7 +197,7 @@ there and asks nothing of Claude's memory or of any service.
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear` |
 | `.baton-outside.md` in a task folder (or the task root) | one line when a command sent something off this machine (a push, a pull request or issue, a release, an upload to PyPI or npm), to be put in that task's next entry |
-| `baton.ledger/` in Baton's state folder, or where `ledger` in `baton.local.json` says | [the ledger](#the-ledger-an-older-entry-edited-is-seen): a git repository with one line per logbook entry (task root as `~/...`, folder, heading, time, two hashes; an ack's reason), committed by Stop on a turn it lets through; off with `"ledger": false`; beside it `baton.ledger.seen.json` and a lock while it is written. Never pushed by Baton |
+| `baton.ledger/` in Baton's state folder, or where `ledger` in `baton.local.json` says | [the ledger](#the-ledger-an-older-entry-edited-is-seen): a git repository with one line per logbook entry (task root as `~/...`, folder, heading, time, two hashes, the host whose Stop recorded it; an ack's reason), committed by Stop on a turn it lets through; off with `"ledger": false`; beside it `baton.ledger.seen.json` and a lock while it is written. Never pushed by Baton |
 | Baton's state folder (`${CLAUDE_PLUGIN_DATA}` as a plugin, beside the hooks for a script install) | when each hook last ran, per-session notes, the lesson counts, the output of a test command you pinned, and the moved conversation files, deleted at a later session start once 7 days old |
 | `~/.claude/settings.json`, `~/.claude/CLAUDE.md` | **script install only**: the six hook entries and the Baton section, each with a copy of the file as it was. As a plugin neither file is touched |
 

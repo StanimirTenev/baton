@@ -677,10 +677,12 @@ def _append(d: Path, lines: list, recs: list, message: str) -> list:
     return out
 
 
-def ledger_update(root: Path, logbook: str, folders: list, d: Path) -> int:
+def ledger_update(root: Path, logbook: str, folders: list, d: Path, host: str | None = None) -> int:
     """Stop's part: a line for every entry of `folders` the ledger has not seen. An entry it has
     seen is never recorded again, whatever its text is now -- that is for verify to say and the
-    human to acknowledge. Nothing new: no lock, no git, nothing written. Returns lines added."""
+    human to acknowledge. Nothing new: no lock, no git, nothing written. Returns lines added.
+    `host` (row 182): `recorded_by` on each line -- the host whose Stop recorded the entry, which
+    is its author only when the ledger is shared and the author's Stop saw it first."""
     rid, rids = _root_id(root), _root_ids(root)
 
     def missing(lines):
@@ -695,7 +697,8 @@ def ledger_update(root: Path, logbook: str, folders: list, d: Path) -> int:
                 if known.get((folder.name, heading, n)) is None:
                     out.append({"at": datetime.now().isoformat(timespec="seconds"),
                                 "kind": "entry", "root": rid, "folder": folder.name,
-                                "heading": heading, "n": n, "sha256": digest})
+                                "heading": heading, "n": n, "sha256": digest,
+                                **({"recorded_by": host} if host else {})})
         return out
 
     if not missing(_ledger_lines(d)):
