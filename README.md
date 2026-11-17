@@ -1,11 +1,14 @@
 # Baton
 
-**Your coding agent forgets everything when the session ends. Baton makes it write things down -- and read them back.**
+**Your AI sessions end. Your work shouldn't.**
+
+Baton makes an AI agent that runs in a host with hooks -- Claude Code, OpenAI Codex CLI, Google
+Gemini CLI -- write its work down before a turn ends, and read it back when the next session starts.
 
 Tired of explaining yesterday's work to Claude Code every morning? Of a `/clear` that wipes a
 decision, or a session that ends without saying what is left?
 
-Baton is a Claude Code plugin. Every task gets a folder with a `LOGBOOK.md`, and hooks that
+Baton is a Claude Code plugin; the same hooks run under Codex CLI and Gemini CLI, set up by hand. Every task gets a folder with a `LOGBOOK.md`, and hooks that
 Claude Code runs -- not the agent's judgement -- make sure the logbook is read when a session
 starts and written before a turn ends. A rule in `CLAUDE.md` is advice the agent may skip; a hook
 is not. Everything stays plain Markdown on your disk; installed as a plugin, the hooks make no network
@@ -54,6 +57,16 @@ answers the hand-back with no entry is handed back once more, and then let throu
 | claude.ai chat (web, desktop, mobile) | **no** -- hooks are ignored, only the skills load, nothing is enforced |
 | Cowork | loads hooks, but Baton is untested there |
 | OpenAI Codex CLI | yes, since v3.34.0 -- four of the six hooks, set up by hand: [codex/README.md](codex/README.md) |
+| Google Gemini CLI | extension; live headless session proven 17.11 (v3.38.0), interactive not yet: [gemini/README.md](gemini/README.md) |
+
+**A host, not a model.** Baton works in a *host*: an agent runtime that runs hooks when a session
+starts and when a turn ends -- Claude Code, Codex CLI, Gemini CLI. The hooks read what the host
+sends, not which model answers: on 17.11 the same hooks ran under Claude Opus 5.5, Gemini 3.1 Pro
+preview, Gemini 3 Flash preview and the model behind a ChatGPT login in Codex, and each received
+the board and the logbook. Whether a model then follows them is the model's; that it receives them
+is the host's. **A chat in a browser runs no hooks**, so Baton enforces nothing there -- claude.ai,
+ChatGPT or Gemini on the web get no board, no hand-back, and no logbook unless the model happens
+to open one.
 
 **In a claude.ai chat nothing warns you:** the plugin looks installed and the skills load,
 but no hook runs ([platform support](https://claude.com/docs/plugins/platform-support)).
@@ -89,6 +102,7 @@ or that it crashed.
 - [Memory layout](docs/memory-layout.md) -- where an agent keeps what is true, beside the logbook of what was done
 - [Why this exists, and what it does not solve](docs/why.md)
 - [Codex CLI](codex/README.md) -- the same hooks under OpenAI Codex: setup, trust, what does not run there
+- [Gemini CLI](gemini/README.md) -- the same hooks as a Gemini CLI extension: setup, the doctor, what does not run there
 - [Languages](hooks/lang/README.md) -- the words the hooks recognise, one file per language
 
 Below: [The ledger](#the-ledger-an-older-entry-edited-is-seen), [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](#versions).
@@ -177,7 +191,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.38.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.39.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -195,7 +209,7 @@ there and asks nothing of Claude's memory or of any service.
 |---|---|
 | your task root | the root itself, if it is missing, at the first session |
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
-| `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear` |
+| `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear`. Beside it a `.gitignore` of `*` (since v3.39.0), so a task root that is a git repository never takes it |
 | `.baton-outside.md` in a task folder (or the task root) | one line when a command sent something off this machine (a push, a pull request or issue, a release, an upload to PyPI or npm), to be put in that task's next entry |
 | `baton.ledger/` in Baton's state folder, or where `ledger` in `baton.local.json` says | [the ledger](#the-ledger-an-older-entry-edited-is-seen): a git repository with one line per logbook entry (task root as `~/...`, folder, heading, time, two hashes, the host whose Stop recorded it; an ack's reason), committed by Stop on a turn it lets through; off with `"ledger": false`; beside it `baton.ledger.seen.json` and a lock while it is written. Never pushed by Baton |
 | Baton's state folder (`${CLAUDE_PLUGIN_DATA}` as a plugin, beside the hooks for a script install) | when each hook last ran, per-session notes, the lesson counts, the output of a test command you pinned, and the moved conversation files, deleted at a later session start once 7 days old |
@@ -229,7 +243,7 @@ address, and only those two go into a fixed sentence; see the table below. A tes
 you pinned yourself is the one command the hooks run that is not their own.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.38.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.39.0.
 
 ## What Baton sends over the network
 
@@ -284,6 +298,46 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 
 ## Versions
+
+**v3.39.0** — what the three-host test of 17.11 found
+
+The first live Gemini CLI session (headless) and the first handoff across three hosts -- Claude
+Code, then Codex CLI, then Gemini CLI, then Claude Code on one logbook, with v3.38.0 -- found five
+defects; a reply on LinkedIn found a sixth. ZA-OPRAVYANE rows 176-182. The fixes are proven by
+tests through the hooks' entry points, not by a new live session.
+
+- **The kept conversation is never added to git.** `.baton-chat/` gets a `.gitignore` of `*`,
+  written by Stop when it is missing (a folder from an older version gets one at its next Stop)
+  and never rewritten. Before, `git add .` in a task root that is a repository took the
+  conversation, masked only for keys, and the project's full path.
+- **An entry headed later than its own save is handed back, under every host.** Gemini headed an
+  entry 09:20 and saved it at 09:13:55. Six minutes was under both of Stop's windows (10 minutes
+  ahead of now, 20 off the save), and L1 judges no entry it cannot call this session's -- under
+  Gemini, none. A heading read from the clock cannot be later than its save, so for a logbook
+  saved since the session began Stop now hands back a top entry headed more than two minutes
+  after the file was saved, whoever wrote it. Measured first: 0 of the 56 top entries with an
+  hour in the author's own logbooks are that far ahead. An hour typed *behind* the clock is still
+  only L1's, and L1 is still silent under Gemini.
+- **The first entry goes below the logbook's title.** On a logbook with a header and a title but
+  no entry yet, `tools/baton_entry.py` put the entry between the front matter and `# Logbook`;
+  Claude noticed and moved it by hand. Now it goes after whatever is there, header or not.
+- **The doctor sees Gemini's hooks.** It read heartbeats only under `~/.claude` and said NEVER RAN
+  of hooks that ran from a Gemini clone; now, when nothing under `~/.claude` has one, it reads
+  the hooks beside its own copy. Gemini also sent its AfterAgent under another session id than
+  BeforeAgent in three of eight calls, so the doctor said "a turn with no end" of turns that had
+  ended; a session seen only at Stop is now taken as the end of the open turn before it. On that
+  run's own records: three such warnings before, one after -- the turn that really was stopped.
+  `gemini/README.md` says how to run the doctor.
+- **Each ledger line says which host's Stop recorded it.** `recorded_by` is the host that
+  recorded the entry, not necessarily its author: every Stop records every entry it has not
+  seen. The logbook's format does not change; older lines verify as before.
+- **The README says what runs where.** A new opening, Gemini CLI in "Where it works" and in the
+  documentation list, and a host told apart from a model: a browser chat runs no hooks and gets
+  nothing enforced.
+- **Still not done.** Gemini's interactive mode and Windows were not tried. Why Gemini sends
+  another session id is not known, and whether it can confuse Stop's limit of two hand-backs a
+  turn is untested. Stop still reads no Gemini transcript, so L1, the chat count and the answer
+  check stay quiet there. No file records who wrote an entry.
 
 **v3.38.0** — Gemini CLI, the third host
 
