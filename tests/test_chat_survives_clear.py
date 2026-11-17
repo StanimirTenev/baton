@@ -162,3 +162,29 @@ def test_a_newer_logbook_of_a_task_the_chat_never_names_changes_nothing(tmp_path
     context = json.loads(board)["hookSpecificOutput"]["additionalContext"]
     assert "💬 The previous session's conversation after its last logbook entry" in context
     assert "NOT the latest" not in context and "nightly-mail's" not in context
+
+
+def test_the_kept_chat_is_never_added_to_git(tmp_path):
+    """Row 177 (Atharva Shah, LinkedIn, 17.11; probe probe_chat_git.py): a task root that is a git
+    repository took `.baton-chat/` with `git add .` -- the kept conversation (only keys masked) and
+    the project's full path in its first line. Since 3.39.0 the folder holds a `.gitignore` of `*`,
+    written when it is missing (folders made by an older version get one at the next Stop) and
+    never rewritten. Run with real git."""
+    import shutil
+    import pytest
+    if not shutil.which("git"):
+        pytest.skip("no git here")
+    env, tasks, _ = _setup(tmp_path)
+    subprocess.run(["git", "init", "-q", str(tasks)], check=True)
+    tr = _talk(tmp_path / "proj" / "a.jsonl", TURNS)
+    _run("baton_stop.py", env, {"session_id": "a", "transcript_path": tr})
+    assert (tasks / ".baton-chat" / "a.md").is_file()
+    assert (tasks / ".baton-chat" / ".gitignore").read_text("utf-8") == "*\n"
+    seen = subprocess.run(["git", "-C", str(tasks), "status", "--porcelain", "-uall"],
+                          capture_output=True, text=True, check=True).stdout
+    assert ".baton-chat" not in seen and "pricing/LOGBOOK.md" in seen, seen
+
+    (tasks / ".baton-chat" / ".gitignore").write_text("*\n!keep.md\n", "utf-8")
+    _run("baton_stop.py", env, {"session_id": "a", "transcript_path": tr})
+    assert (tasks / ".baton-chat" / ".gitignore").read_text("utf-8") == "*\n!keep.md\n", \
+        "one that is there is the human's: never rewritten"

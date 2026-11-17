@@ -1801,6 +1801,11 @@ def save_chat(payload: dict) -> None:
     head = json.dumps({"session": session, "pid": pid, "project": str(Path(transcript).parent)},
                       ensure_ascii=False)
     _write_private(path, f"<!-- baton-chat {head} -->\n" + body)
+    # Row 177 (17.11): a task root that is a git repository took this folder with `git add .`.
+    # Written when missing -- a folder an older version made gets one now -- and never rewritten.
+    ignore = path.parent / ".gitignore"
+    if not ignore.exists():
+        ignore.write_text("*\n", "utf-8")
 
 
 def chat_ask(root: Path, name: str, transcript: str, session: str) -> str | None:
