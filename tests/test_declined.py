@@ -105,11 +105,11 @@ def test_a_foreground_file_touched_after_this_session_s_entry_is_not_asked_every
         env, folder, book, tr = _setup(here)
         _file(folder, rel, ago=1200)
         head, rest = book.read_text("utf-8").split("\n\n", 1)
-        book.write_text(f"{head}\n\n## {datetime.now():%Y-%m-%d %H:%M} — kwant\n\n" + "".join(
+        old = time.time() - 900        # headed when it was saved: since 3.39.0 a heading later
+        book.write_text(f"{head}\n\n## {datetime.fromtimestamp(old):%Y-%m-%d %H:%M} — kwant\n\n" + "".join(
             f"### {s}\n{s}: {rel}, a full sentence about the work, long enough to count as said.\n"
             for s in ("What was asked", "Done", "Result", "Open")) + "\n" + rest, "utf-8")
-        old = time.time() - 900
-        os.utime(book, (old, old))
+        os.utime(book, (old, old))     # than its save is handed back (row 181)
         assert _stop(env, tr).get("decision") != "block"            # sees the new entry
         _file(folder, rel, ago=500)                                   # the hour in it corrected
         _decline(env, tr)
