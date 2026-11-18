@@ -1609,6 +1609,43 @@ def _this_turn(transcript: str) -> tuple[list, str]:
     return calls, "\n".join(final)
 
 
+def turn_task(root: Path, transcript: str | None) -> tuple[Path, list[str]] | None:
+    """(task folder, the files of it written) for the last turn of a Claude Code transcript, when
+    that turn touched exactly one task folder: a Write/Edit/MultiEdit/NotebookEdit inside it, or a
+    call that is not a look naming its full path (or `~/...`). None for none or several, and for a
+    transcript that cannot be read: a turn is never put in a task it cannot be tied to. Rows 185
+    and 186 (the turn cut off, the turn ended on an API error)."""
+    try:
+        calls, _ = _this_turn(transcript) if transcript else ([], "")
+    except OSError:
+        return None
+    home = os.path.normcase(str(Path.home()))
+    folders = {os.path.normcase(os.path.abspath(str(f))): f for f in _ss().task_folders(root)}
+    hit, written = set(), {}
+    for _, tool, args in calls:
+        if tool in WRITE_TOOLS:
+            named = args.get("file_path") or args.get("notebook_path")
+            if not isinstance(named, str) or not named:
+                continue
+            full = os.path.normcase(os.path.abspath(os.path.expanduser(named)))
+            for key, folder in folders.items():
+                if full.startswith(key + os.sep):
+                    hit.add(key)
+                    written.setdefault(key, set()).add(
+                        os.path.relpath(full, key).replace(os.sep, "/"))
+        elif tool not in LOOK_TOOLS:
+            text = json.dumps(args, ensure_ascii=False).replace("\\\\", "\\")
+            for key, folder in folders.items():
+                forms = [str(folder)] + (["~" + str(folder)[len(home):]]
+                                         if key.startswith(home + os.sep) else [])
+                if any(re.search(re.escape(f) + r"(?![\w.-])", text) for f in forms):
+                    hit.add(key)
+    if len(hit) != 1:
+        return None
+    key = hit.pop()
+    return folders[key], sorted(written.get(key, ()))
+
+
 def outgoing(transcript: str) -> list[tuple[str, str, str]]:
     """(key, what, the text going out) for each draft of this turn: a prose block in its final
     message, or a sending tool call. The key is the call's id or the block's hash."""
