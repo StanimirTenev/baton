@@ -160,5 +160,5 @@ def test_after_compaction_the_messages_after_the_summary_count_too(tmp_path):
     ctx = json.loads(_run(tmp_path, root, {"source": "compact", "session_id": "s1",
                                            "transcript_path": str(transcript)})
                      )["hookSpecificOutput"]["additionalContext"]
-    assert "exists only in the summary" not in ctx
+    assert "What happened before this point now exists only" not in ctx
     assert "after the summary" in ctx and "newer than" in ctx, ctx
