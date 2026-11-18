@@ -204,7 +204,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.39.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.40.0"   # bumped with every release; a test holds it to the README's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 

@@ -301,6 +301,42 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
 
 ## Versions
 
+**v3.40.0** — the devil's advocate (L5), and four fixes before the launch
+
+Lesson L5's first moment, two defects first users would hit at once (rows 183, 184) and two ideas
+taken from Timon, without its code (rows 185, 186). Proven by tests through the hooks' entry points
+and three replay fixtures, not by a new live session.
+
+- **Text going out is handed back once, to be argued against (L5).** On 17.11 three sentences went
+  out or nearly did, each refuted by a file already on the disk ("I have not read it yet" of a
+  report read that morning). Stop now hands the turn back when its final message carries a block
+  of prose to paste (200 characters or more, in sentences) or the turn called a sending tool
+  (`git push`, a `gh` issue or PR comment, an MCP send/draft/reply/forward, an artifact published).
+  Once per draft. The answer is a `### Devil's advocate` section: each claim about us, what would
+  refute it and where our records were searched; a `refuted:` line counts L5 caught. Two of the
+  three cases of 17.11 are caught; the third, a condition in a brief, is the next moment and is not.
+  Claude Code only; silent under Codex and Gemini.
+- **A file the entry names is the path it names.** The hollow check matched files by base name
+  anywhere in the line: an entry naming `obratna-proba/BRIEF.md` was told it "changed" every other
+  BRIEF.md in the folder, and "README.md" was every README of a vendored tree. Now a path relative
+  to the task folder is that file, and a bare name counts only when one file in the folder has it.
+  In a folder too large to read to the end, the path the entry names is looked up directly.
+- **After compaction, the messages after the summary count too.** Claude Code can apply a
+  compaction prepared earlier, so the newest messages may follow the summary verbatim, unseen by
+  it. The reminder said everything before "now exists only in the summary"; it now says to write
+  the entry from the summary and from the messages after it.
+- **A turn that was cut off is named at the next start.** One line: the task, the time, its newest
+  entry, and an offer to continue. Only the most recent such turn, only when nothing happened in
+  another session after it, never one still running in another window (Linux) and never one Baton
+  cannot tie to a single task folder.
+- **A turn that ends on an API error leaves a stub.** `turn ended on <error>` and the files written
+  in that turn go into the logbook of the task worked on, when there is exactly one. The stub does
+  not count as the entry: Stop and the board still ask for it.
+- **Still not done.** L5's other two moments ("done" and a condition in a plan). Neither new idea
+  was seen in a live session: StopFailure's `transcript_path` is taken from Claude Code's hooks
+  reference, not from a captured payload, and a turn cut off less than two minutes before the next
+  start is not named.
+
 **v3.39.0** — what the three-host test of 17.11 found
 
 The first live Gemini CLI session (headless) and the first handoff across three hosts -- Claude

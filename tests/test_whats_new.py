@@ -41,9 +41,10 @@ def _run(tmp_path, state=None):
 def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
-    assert "The kept conversation is never added to git." in ctx   # a lead from the notes
-    for lead in ("An entry headed later than its own save is handed back, under every host.",
-                 "The first entry goes below the logbook's title.",
+    assert "Text going out is handed back once, to be argued against (L5)." in ctx   # a lead
+    for lead in ("A file the entry names is the path it names.",
+                 "After compaction, the messages after the summary count too.",
+                 "A turn that ends on an API error leaves a stub.",
                  "Still not done."):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx
@@ -68,6 +69,6 @@ def test_a_fresh_install_is_not_told_it_was_updated(tmp_path):
 
 def test_the_notes_come_from_the_readme_section_of_this_version():
     leads = hook.release_leads(NOW)
-    assert leads and leads[0].startswith("The kept conversation is never added to git.")
+    assert leads and leads[0].startswith("Text going out is handed back once")
     assert all(len(x) < 200 for x in leads)
     assert hook.release_leads("0.0.1") == []
