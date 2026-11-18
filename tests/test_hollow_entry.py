@@ -244,3 +244,91 @@ def test_an_entry_saying_it_deleted_an_outside_file_is_not_asked(tmp_path):
     missing = str(tmp_path / "elsewhere" / "old.py")
     reason = _outside_entry(tmp_path, missing, verb="Deleted")
     assert "old.py" not in reason, reason
+
+
+# ZA-OPRAVYANE row 183 (17.11, three times in qrp-kachestvo, once in linkedin-postove): the entry
+# named `obratna-proba/BRIEF.md`, and Stop said it "changed nov-podhod-2026-11-04/BRIEF.md,
+# .../W1/BRIEF.md, .../W2/BRIEF.md". The file was matched by its base name, anywhere in the line, so
+# "README.md" was every README of a vendored tree. qrp-kachestvo holds 162,108 files, over WALK_CAP:
+# the walk stopped before the file the entry named, so "no file saved here" was not even true.
+VENDORED = ("izvestni/src/openssl/README.md", "izvestni/src/bitcoin/README.md",
+            "izvestni/src/openssh-portable/README", "zcash-proba/orchard/README.md",
+            "zcash-proba/librustzcash/README.md")
+BRIEFS = ("obratna-proba/BRIEF.md", "nov-podhod-2026-11-04/BRIEF.md",
+          "nov-podhod-2026-11-04/W1/BRIEF.md", "nov-podhod-2026-11-04/W2/BRIEF.md")
+
+
+def _old_folder(tmp_path, files, said: str):
+    """A task folder whose files are two days old, its entry headed now and saying `said`."""
+    now = datetime.now()
+    entry = GOOD.replace("2026-10-01 10:00", f"{now:%Y-%m-%d %H:%M}") \
+                .replace("Wrote report-draft.md", said)
+    folder = _folder(tmp_path / "tasks", "posts", entry, files=files)
+    for rel in files:
+        os.utime(folder / rel, (time.time() - 2 * 86400,) * 2)
+    return folder
+
+
+def _stop(tmp_path) -> str:
+    """Stop run as the harness runs it, over `tmp_path / "tasks"`; its hand-back reason."""
+    tr = tmp_path / "t.jsonl"
+    started = datetime.fromtimestamp(time.time() - 3600, timezone.utc).isoformat()
+    tr.write_text(json.dumps({"timestamp": started}) + "\n" + _works_in(tmp_path / "tasks", 300), "utf-8")
+    env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "SYSTEMROOT", "LANG")}
+    env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
+               BATON_STATE_DIR=str(tmp_path / "state"), BATON_BODY_STATE=str(tmp_path / "b.json"),
+               BATON_LESSONS_STATE=str(tmp_path / "l.json"),
+               BATON_SESSION_STATE=str(tmp_path / "s.json"))
+    out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env,
+                         input=json.dumps({"session_id": "s", "transcript_path": str(tr)}))
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout).get("reason", "") if out.stdout.strip() else ""
+
+
+def test_a_readme_of_another_repository_is_not_every_readme_of_a_vendored_tree(tmp_path):
+    """The linkedin-postove case: the README changed was Baton's, in its own repository."""
+    folder = _old_folder(tmp_path, VENDORED + ("notes.md",),
+                         "Changed the README.md of the Baton repository, its opening paragraph")
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) == []
+    reason = _stop(tmp_path)
+    assert "says it changed" not in reason and "README" not in reason, reason
+
+
+def test_the_path_the_entry_names_is_the_one_asked_not_its_namesakes(tmp_path):
+    """The qrp-kachestvo case, with the file the entry named really two days old."""
+    folder = _old_folder(tmp_path, BRIEFS, "Changed obratna-proba/BRIEF.md: the reverse probe")
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) \
+        == ["obratna-proba/BRIEF.md"]
+
+
+def test_a_base_name_many_files_share_is_not_asked(tmp_path):
+    folder = _old_folder(tmp_path, BRIEFS, "Changed BRIEF.md: the reverse probe")
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) == []
+
+
+def test_a_base_name_only_one_file_has_is_still_asked(tmp_path):
+    folder = _old_folder(tmp_path, VENDORED + ("notes.md",), "Rewrote notes.md, the outline")
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) == ["notes.md"]
+
+
+def test_past_the_walk_cap_the_named_path_is_looked_at_itself(tmp_path, monkeypatch):
+    """The walk stopped before the file: it is stat'ed where the entry says it is."""
+    folder = _old_folder(tmp_path, BRIEFS, "Changed obratna-proba/BRIEF.md: the reverse probe")
+    monkeypatch.setattr(bs, "WALK_CAP", 0)
+    monkeypatch.setattr(bs, "TRUNCATED", [])
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) \
+        == ["obratna-proba/BRIEF.md"]
+    os.utime(folder / "obratna-proba/BRIEF.md", None)            # saved now, the real case
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) == []
+
+
+def test_past_the_walk_cap_a_bare_base_name_is_not_asked(tmp_path, monkeypatch):
+    """Unique among the files walked is not unique in the folder."""
+    folder = _old_folder(tmp_path, ("notes.md",), "Rewrote notes.md, the outline")
+    monkeypatch.setattr(bs, "WALK_CAP", 0)
+    monkeypatch.setattr(bs, "TRUNCATED", [])
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) == []
+
+
+def top_entry_of(folder) -> str:
+    return bs.top_entry((folder / "LOGBOOK.md").read_text("utf-8"))[1]

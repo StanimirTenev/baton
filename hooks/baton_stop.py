@@ -878,6 +878,11 @@ _CHANGED = re.compile(r"(?i)" + _words("changed"))
 # On a line that deletes, moves or renames, a path is meant to be gone: not judged.
 _GONE = re.compile(r"(?i)" + _words("gone"))
 _ABS_PATH = re.compile(r"(?<![\w~.:/\\])(?:~?/|[A-Za-z]:\\)(?:[\w.\-]+[/\\])*[\w\-][\w.\-]*\.\w+")
+# Row 183 (17.11): a work file was matched by its base name anywhere in the line, so `BRIEF.md`
+# beside `obratna-proba/` was every BRIEF.md in the folder, and "README.md" every README of a
+# vendored tree. A path relative to the folder, as the entry writes it, is that file; a bare name
+# is a file only when one file of the folder has it, and the walk read the folder to the end.
+_REL_PATH = re.compile(r"(?<![\w~.:/\\-])[\w\-][\w.\-]*(?:[/\\][\w.\-]+)*")
 
 
 def claimed_untouched(folder: Path, logbook: str, body: str,
@@ -888,10 +893,24 @@ def claimed_untouched(folder: Path, logbook: str, body: str,
     where" when the change is somewhere else, and then nothing looked at where)."""
     lines = [ln for ln in body.splitlines() if _CHANGED.search(ln)]
     out = []
-    for rel, path in (work_files(folder, logbook) if lines else ()):
-        name = Path(rel).name
-        if len(name) >= MIN_NAME_CHARS and any(name in ln for ln in lines):
-            out.append(rel.replace(os.sep, "/"))
+    if lines:
+        walked = {rel.replace(os.sep, "/") for rel, _ in work_files(folder, logbook)}
+        whole = folder.name not in TRUNCATED
+        for said in sorted({m.replace("\\", "/").rstrip(".") for ln in lines
+                            for m in _REL_PATH.findall(ln)}):
+            if "/" in said:
+                if said in walked:
+                    out.append(said)
+                elif not whole:       # past WALK_CAP: the file the entry names, looked at itself
+                    try:
+                        if since is not None and (folder / said).stat().st_mtime < since:
+                            out.append(said)
+                    except OSError:
+                        pass
+                continue
+            same = [rel for rel in walked if rel.rsplit("/", 1)[-1] == said]
+            if whole and len(said) >= MIN_NAME_CHARS and len(same) == 1:
+                out.append(same[0])
     for named in sorted({m for ln in lines if not _GONE.search(ln) for m in _ABS_PATH.findall(ln)}):
         if (named[1:2] == ":") != (os.name == "nt") and not named.startswith("~"):
             continue          # another system's path (work on a Windows machine, said from here)
