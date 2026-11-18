@@ -2152,13 +2152,17 @@ def compacted(own: dict) -> str:
             lost = mod.lost_note(mod.LOST, mod.FORGOT) if mod.LOST or mod.FORGOT else ""
     except Exception:
         folders = []
-    text = ("Baton: the conversation was just compacted. What happened before this point now "
-            "exists only in the summary above, and the next compaction will thin it further. "
+    # Row 184 (18.11): Claude Code can prepare a compaction early and apply it later, so the
+    # newest messages may follow the summary word for word, unseen by it. The text said what came
+    # before "now exists only in the summary", and the entry was written from the older part.
+    text = ("Baton: the conversation was just compacted. The older part of it now exists only "
+            "in the summary above, and the next compaction will thin it further. Any messages "
+            "after the summary are newer than it, and the summary has not seen them. "
             f"Before going on, write the {name} entry for every task worked on in this session "
             "that its logbook does not yet record -- what was asked, what was done, the result, "
-            "what is still open -- while the summary still holds it. Decisions and conversations "
-            "count, not only files. Then continue with the human's work; do not show the board "
-            "again.")
+            "what is still open -- from the summary and from the messages after it, while both "
+            "are still here. Decisions and conversations count, not only files. Then continue "
+            "with the human's work; do not show the board again.")
     if folders:
         text += ("\n\nTask folders holding this session's work, newer than their "
                  f"{name}:\n" + "\n".join(f"- {f}" for f in folders))

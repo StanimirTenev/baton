@@ -149,3 +149,16 @@ def test_output_is_utf8_not_escaped(tmp_path):
                                 "transcript_path": str(transcript)})
     assert "изпрати фактурата".encode("utf-8") in raw
     assert b"\\u04" not in raw
+
+
+def test_after_compaction_the_messages_after_the_summary_count_too(tmp_path):
+    """ZA-OPRAVYANE row 184 (18.11): Claude Code can prepare the compaction early and apply it
+    later, so the newest messages come after the summary verbatim, unseen by it. The text said
+    what came before "now exists only in the summary", and the entry was written from the older
+    part; the freshest decision could be left out."""
+    root, transcript = _setup(tmp_path)
+    ctx = json.loads(_run(tmp_path, root, {"source": "compact", "session_id": "s1",
+                                           "transcript_path": str(transcript)})
+                     )["hookSpecificOutput"]["additionalContext"]
+    assert "exists only in the summary" not in ctx
+    assert "after the summary" in ctx and "newer than" in ctx, ctx
