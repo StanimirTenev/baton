@@ -191,7 +191,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.39.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.40.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -199,7 +199,8 @@ the size of the context, and the messages you typed and the agent's text replies
 last logbook entry; at session start, the previous session's transcript in the same project
 folder (the messages you typed and their times, set beside the entries written then) and, while
 you have no task folders, how many earlier transcripts there are, to offer `/baton-inventory`;
-the text of tool results, for an empty or failed read (lesson L2); and the text about to go into a
+the text of tool results, for an empty or failed read (lesson L2); at session start, the
+transcript of the most recent session whose last turn was cut off, for the task that turn worked in; and the text about to go into a
 logbook, for a typed hour in a heading (lesson L1). These are Claude Code's own files on your disk; Baton reads them
 there and asks nothing of Claude's memory or of any service.
 
@@ -210,6 +211,7 @@ there and asks nothing of Claude's memory or of any service.
 | your task root | the root itself, if it is missing, at the first session |
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear`. Beside it a `.gitignore` of `*` (since v3.39.0), so a task root that is a git repository never takes it |
+| `<task folder>/<logbook>` | only when a turn ends on an API error (StopFailure, since v3.40.0): one entry, `turn ended on <error>`, with the files written in that turn, in the logbook of the one task folder the turn worked in. Never in a folder it cannot tie the turn to |
 | `.baton-outside.md` in a task folder (or the task root) | one line when a command sent something off this machine (a push, a pull request or issue, a release, an upload to PyPI or npm), to be put in that task's next entry |
 | `baton.ledger/` in Baton's state folder, or where `ledger` in `baton.local.json` says | [the ledger](#the-ledger-an-older-entry-edited-is-seen): a git repository with one line per logbook entry (task root as `~/...`, folder, heading, time, two hashes, the host whose Stop recorded it; an ack's reason), committed by Stop on a turn it lets through; off with `"ledger": false`; beside it `baton.ledger.seen.json` and a lock while it is written. Never pushed by Baton |
 | Baton's state folder (`${CLAUDE_PLUGIN_DATA}` as a plugin, beside the hooks for a script install) | when each hook last ran, per-session notes, the lesson counts, the output of a test command you pinned, and the moved conversation files, deleted at a later session start once 7 days old |
@@ -243,7 +245,7 @@ address, and only those two go into a fixed sentence; see the table below. A tes
 you pinned yourself is the one command the hooks run that is not their own.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.39.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.40.0.
 
 ## What Baton sends over the network
 

@@ -1904,6 +1904,64 @@ def ledger_notice(root: Path, name: str) -> str | None:
                f" The ledger is in {d}."))
 
 
+# Row 185 (18.11, the idea from Timon, no code): the doctor sees a turn with no Stop and no
+# StopFailure after it -- interrupted by the human, the terminal closed, the machine gone. The next
+# SessionStart names it in one line, with its task and newest entry, so the work is picked up
+# where it stopped. The doctor's own reading of `baton.turns` decides what is open (its 120 s
+# grace, its seven days, row 178's pairing); then only the most recent such turn, only when no
+# other session did anything after it, only when its Claude Code process is gone (a long tool call
+# in another window is an open turn too), and only when its transcript ties it to one task.
+def _doctor():
+    """tools/baton_doctor.py as a module, found where entry_tool finds baton_entry.py; or None."""
+    repo = _local().get("repo")
+    for base in (Path(__file__).resolve().parent.parent, Path(repo).expanduser() if repo else None):
+        path = base / "tools" / "baton_doctor.py" if base is not None else None
+        if path is not None and path.is_file():
+            spec = importlib.util.spec_from_file_location("baton_doctor", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+    return None
+
+
+def interrupted_notice(own: dict, root: Path, name: str) -> str | None:
+    transcript = str(own.get("transcript_path") or "")
+    if not transcript or _baton is None or _baton.host(own) not in ("claude", "unknown"):
+        return None
+    doctor = _doctor()
+    if doctor is None:
+        return None
+    data = Path(os.environ.get("CLAUDE_PLUGIN_DATA") or Path(__file__).resolve().parent)
+    mine = re.sub(r"[^\w-]", "", str(own.get("session_id") or ""))
+    found = doctor.turns(data, datetime.now(), own=mine)
+    if not found or not found[0]:
+        return None
+    session, _, when = max(found[0], key=lambda o: o[2])
+    others = [f for f in (data / "baton.turns").iterdir() if f.is_file() and f.name != mine]
+    if max(others, key=lambda f: f.stat().st_mtime).name != session:
+        return None                 # another session worked after it: not the last turn
+    pids = re.findall(r" UserPromptSubmit pid=(\d+)", (data / "baton.turns" / session).read_text(
+        "utf-8", "replace"))
+    if pids and int(pids[-1]) != _baton.claude_pid() and _baton.alive(int(pids[-1])):
+        return None                 # still running, in another window
+    paths = sorted(Path(transcript).parent.parent.glob(f"*/{session}.jsonl"))
+    if not paths:
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "baton_stop", Path(__file__).with_name("baton_stop.py"))
+    stop = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(stop)
+    task = stop.turn_task(root, str(paths[0]))
+    if task is None:
+        return None
+    book = task[0] / name
+    top = stop.top_entry(book.read_text("utf-8-sig")) if book.is_file() else None
+    entry = f"its newest entry is \"{top[0][3:].strip()[:100]}\"" if top else f"its {name} has no entry yet"
+    day = "" if when.date() == date.today() else f" on {when:%Y-%m-%d}"
+    return (f"⏸ Baton: the last turn in {task[0].name} was cut off at {when:%H:%M}{day}, with no "
+            f"Stop after it; {entry}. Tell the human in one line and offer to continue from there.")
+
+
 def previous_chat(own: dict, root: Path, name: str = "LOGBOOK.md") -> str | None:
     folder = root / ".baton-chat"
     if not folder.is_dir():
@@ -2233,6 +2291,13 @@ def main() -> int:
             ledger = None           # a check that cannot read must not cost the board
         if ledger:
             notices.append(ledger)
+        if own.get("source") in ("startup", "clear", "resume"):
+            try:
+                cut = interrupted_notice(own, root, name)
+            except Exception:
+                cut = None          # a turn that cannot be read is not named
+            if cut:
+                notices.append(cut)
         if own.get("source") in ("startup", "clear"):
             try:
                 kept = previous_chat(own, root, name)

@@ -23,7 +23,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.39.0]
+[baton:board v3.40.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -514,12 +514,31 @@ StopFailure the error type, such as `rate_limit`), and the doctor asks of the la
 (the newest 20) whether the last message or tool call was followed by a Stop or a StopFailure.
 One that was not is shown as ⚠️ **a turn with no end seen** -- a question, not a failure, and the
 exit code does not change: Stop does not run when the human interrupts a turn, and an API error runs
-StopFailure instead, which Baton did not register until this version. StopFailure only records;
-Claude Code ignores its output. Two Stops in one turn are by design (the hand-back, then the pass
+StopFailure instead, which Baton did not register until this version. Claude Code ignores
+StopFailure's output. Two Stops in one turn are by design (the hand-back, then the pass
 with `stop_hook_active`), so Stops are not counted: any one ends the turn. **What it cannot see:**
 the session the doctor runs in (`BATON_SESSION`, which the skill fills in) and a turn younger than
 two minutes are left out, since they may still be going; heartbeats from before v3.24.0 hold no
 session, and the check says nothing until new ones exist.
+
+**Such a turn is named at the next session start** (since v3.40.0, ZA-OPRAVYANE row 185). When the
+doctor's reading of `baton.turns` shows an open turn, SessionStart (`startup`, `/clear`, `resume`)
+gives the agent one line for the human: the task, the time the turn was cut off, the task's newest
+entry, and an offer to continue from there. Only the most recent such turn, and only when no other
+session did anything after it. The task comes from that session's Claude Code transcript, found
+beside this one's project folder by its id: the files the turn wrote, or a call naming the folder's
+full path. A turn tied to no task folder or to several is not named. Nor is a session still running
+in another window: since v3.40.0 UserPromptSubmit's line carries `pid=` of the Claude Code process
+(read from `/proc`, so Linux only; elsewhere the check is not made), and a live process other than this one is
+left alone. **Not seen:** a turn cut off in the last two minutes (the doctor's grace), and turns
+under Codex and Gemini.
+
+**A turn that ended on an API error leaves a stub** (since v3.40.0, ZA-OPRAVYANE row 186).
+StopFailure writes `## <now> — turn ended on <error>` into the logbook of the task the turn worked
+on, with the files written in that turn, through `tools/baton_entry.py` -- only when the turn ties
+to exactly one task folder, as above, and only when the logbook and the tool are there. The stub is
+not the entry for the work: Baton keeps the logbook's recorded time where it was, so Stop and the
+board still ask for that entry. The same stub twice in a row is written once.
 
 It also shows whether Stop's hand-back does any work -- the one number that says it (ZA-OPRAVYANE
 row 27, from a question about how often the agent writes the entry only because it was made to).
@@ -558,10 +577,11 @@ counts as fixed too, and a fix made because the agent would have made it anyway 
 
 ## After compaction: the agent writes the logbook first
 
-When Claude Code compacts a long conversation, everything before that point survives only as a
-summary -- and the next compaction thins it further. Right after a compaction, Baton tells the
-agent to write the logbook entry of every task worked on in this session while the summary
-still holds it (decisions and conversations count, not only files), names the task folders
+When Claude Code compacts a long conversation, the older part survives only as a summary -- and
+the next compaction thins it further. A compaction can be prepared early and applied later, so the
+newest messages may follow the summary word for word, unseen by it (row 184). Right after a
+compaction, Baton tells the agent to write the logbook entry of every task worked on in this session
+from the summary and from the messages after it (decisions and conversations count, not only files), names the task folders
 holding this session's unrecorded work, and does **not** show the board again.
 
 It happens at SessionStart with `source: "compact"`, not in a PreCompact hook: Claude Code

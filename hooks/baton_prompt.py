@@ -368,7 +368,10 @@ def main() -> int:
         return 0
     if not isinstance(payload, dict):     # `[]`, `null`: no payload, not a crash (row 67)
         return 0
-    _turn("UserPromptSubmit", payload.get("session_id"))
+    # Row 185: the Claude Code process, so SessionStart can tell a turn cut off from one still
+    # running in another window. The doctor reads only the time and the event of this line.
+    pid = _baton.claude_pid() if _baton is not None else None
+    _turn("UserPromptSubmit", payload.get("session_id"), f"pid={pid}" if pid else "")
     prompt = str(payload.get("prompt") or "")
     session = str(payload.get("session_id") or "")
     if not prompt.strip():

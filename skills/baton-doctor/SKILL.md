@@ -54,7 +54,9 @@ check below.
   call has no Stop or StopFailure after it. Say it as the question it is: Stop does not run when
   the human interrupts a turn or closes the session mid-turn. Only if it shows after turns that
   ended normally is Stop not running. **✅ Turns ended** says each one was followed by one, and
-  names an API error (StopFailure) where one ended the turn.
+  names an API error (StopFailure) where one ended the turn. Since v3.40.0 the next session start
+  names the most recent cut-off turn with its task, and a turn ended on an API error leaves a
+  `turn ended on <error>` stub in its task's logbook -- both only when the turn ties to one task.
 
 - **Logbook entries … written unasked / handed back / recorded after a hand-back / passed** —
   read the four numbers as they are, counted by folder, not by turn. Unasked against handed back
