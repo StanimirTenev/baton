@@ -899,8 +899,11 @@ def claimed_untouched(folder: Path, logbook: str, body: str,
         for said in sorted({m.replace("\\", "/").rstrip(".") for ln in lines
                             for m in _REL_PATH.findall(ln)}):
             if "/" in said:
+                tail = [rel for rel in walked if rel.endswith("/" + said)]
                 if said in walked:
                     out.append(said)
+                elif whole and len(tail) == 1:      # the end of a path, one file of the folder
+                    out.append(tail[0])
                 elif not whole:       # past WALK_CAP: the file the entry names, looked at itself
                     try:
                         if since is not None and (folder / said).stat().st_mtime < since:

@@ -332,3 +332,12 @@ def test_past_the_walk_cap_a_bare_base_name_is_not_asked(tmp_path, monkeypatch):
 
 def top_entry_of(folder) -> str:
     return bs.top_entry((folder / "LOGBOOK.md").read_text("utf-8"))[1]
+
+
+def test_the_end_of_a_path_one_file_has_is_that_file(tmp_path):
+    """From the author's logbooks (control of 18.11): `windows-t0/pusni.log` for the one file at
+    `pravila-test/registar/windows-t0/pusni.log`. Two files ending so: neither is asked."""
+    folder = _old_folder(tmp_path, ("pravila-test/registar/windows-t0/pusni.log", "t0/pusni.log"),
+                         "Changed windows-t0/pusni.log and registar/t0/pusni.log")
+    assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) \
+        == ["pravila-test/registar/windows-t0/pusni.log"]
