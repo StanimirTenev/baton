@@ -2,6 +2,26 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.41.0** — a README you can grasp in one screen, and the changelog in its own file
+
+The README was 1,892 lines, 84% of them version notes, and opened without a picture. Nothing the
+hooks do changes, except the file the notice after an update reads its notes from.
+
+- **The version notes are in CHANGELOG.md.** The README's Versions section moved there unchanged;
+  the notice after an update and the GitHub release notes are taken from it now.
+- **The README opens with what Baton is.** A searchable title, one plain paragraph, the cover of a
+  34 s demo linked to the video, install as slash commands first, and that the hooks run in
+  Claude Code and not in a claude.ai chat. The measured hand-back counts and the host table follow
+  Install; a short FAQ says how a logbook held by hooks differs from `CLAUDE.md` rules, a memory
+  store and plan files.
+- **The demo shows real hook output, not a live session.** The hooks were run by hand in a sandbox
+  with made-up tasks, and the entry in it was written by hand. It shows the path where the entry
+  gets written, not how often an agent writes one.
+- **The ledger's full description is in docs/how-it-works.md.** The README keeps a summary and its
+  limit: on one machine the ledger shows a careless edit, not a deliberate one.
+- **Still not done.** The media lives in `docs/media/` and ships in the plugin's clone (about
+  590 KB); `git archive` and the release tarballs leave it out. Nothing was run in a live session.
+
 **v3.40.0** — the devil's advocate (L5), and four fixes before the launch
 
 Lesson L5's first moment, two defects first users would hit at once (rows 183, 184) and two ideas

@@ -167,7 +167,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.40.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.41.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -221,7 +221,7 @@ address, and only those two go into a fixed sentence; see the table below. A tes
 you pinned yourself is the one command the hooks run that is not their own.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.40.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.41.0.
 
 ## What Baton sends over the network
 
