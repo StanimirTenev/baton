@@ -1014,3 +1014,67 @@ They all still work: `baton_pregled` → `baton_review`, `baton_kade` → `baton
 could call had Bulgarian names too; they still answer: `vpishi(..., sledvashto=, staro=)` →
 `write_entry(..., next_line=, old_line=)`, `otsey` → `sift`, `pitay` / `poveritelno` / `klyuch` →
 `ask` / `held_word` / `get_api_key`, and `config()` still carries `poveritelni` beside `confidential`.
+
+## The ledger: an older entry edited is seen
+
+A logbook entry is a record, and is not edited. Until v3.35.0 nothing outside the session
+recorded that one had been: the logbook is written newest entry on top, so it cannot be
+append-only itself, and Stop's memory of it is a file the agent can delete. The ledger is a
+second file that only grows -- one line per entry: the task folder, the entry's heading, the
+sha256 of its text (heading and body; line endings, a BOM and trailing blank lines do not
+count) and the sha256 of the line before it, a chain. It lives in a git repository of its own,
+`baton.ledger` in Baton's state folder unless `ledger` in `baton.local.json` names another.
+It is on by default; `"ledger": false` in `baton.local.json` turns it off -- nothing is recorded
+and SessionStart says nothing of it (the repository already written stays where it is).
+
+- **Stop** adds a line for every entry the ledger has not seen and commits -- only on a Stop
+  that lets the turn through, never on one that hands it back. So a correction a hand-back asks
+  for in the same turn (lesson L1's hour, a hollow entry, a claims section moved to the top) is
+  recorded as corrected, not as a change. An edit in a later turn is still a change: that is
+  intended, and the human decides. An entry it has seen is never recorded again, whatever its text is now, and no line
+  is ever rewritten. With nothing new it reads the ledger and the logbooks and starts no
+  process -- about 0.1 s more per Stop and per session start on 5 MB of logbooks (57 folders,
+  2,870 entries, measured 16.11). Since 3.39.0 a line also says which host's Stop recorded it
+  (`recorded_by`: claude, codex, gemini or unknown). That is the host that **recorded** the
+  entry, not necessarily the one that wrote it: every Stop records every entry it has not seen,
+  another agent's too, and each host keeps its own ledger unless `ledger` points them at one.
+  Neither the logbook nor its format names the author.
+- **SessionStart** compares the ledger with the logbooks and, when something differs, says so
+  in one block: entries changed after they were recorded, recorded entries that are gone, a
+  broken chain (a line that does not follow the one before, a ledger shorter than Baton last
+  wrote it, a change to it that was not committed). It reports; it fixes nothing.
+- **You decide.** An edit can be a mistake, a correction made in a later turn, or worse. An edit
+  you accept is a new line with the entry's hash now and your reason; no line is edited:
+
+```bash
+python3 tools/baton_ledger.py verify                       # what changed, what is gone, the chain, the acks
+python3 tools/baton_ledger.py ack --reason "the count in it was wrong"
+python3 tools/baton_ledger.py ack --folder alpha --heading "## 2026-10-20 09:00 — first" --reason "..."
+python3 tools/baton_ledger.py push                          # to the remote you added yourself
+python3 tools/baton_ledger.py verify --remote               # is the remote's history still in this one
+```
+
+As a plugin, pass the state folder as the skills do (`CLAUDE_PLUGIN_DATA=...`); the block
+SessionStart shows carries the whole command, paths included.
+
+**What it does not prove.** The agent runs as you, with your files and your git access.
+**The agent can run `ack` itself**, as you can, and the block SessionStart shows names the
+command: that is the cheapest way past the ledger. What it cannot do is hide it -- every ack is
+a line with its time and reason, listed by `verify` and in the repository's log. Read them; an
+ack you did not make is the finding. The
+agent can also rewrite the ledger, recompute every later line and commit, as easily as it edits
+the logbook; on this machine the chain only shows a careless edit, not a deliberate one. The ledger holds
+only once a copy of it is somewhere the agent cannot rewrite: a private remote you add
+(`git -C <ledger> remote add anchor <address>`), pushed with `push`, that **refuses a rewritten
+history** -- force-push disabled, or branch protection on the branch. A remote that accepts a
+force-push is no anchor, because the agent can push as well as you can. Baton never adds a
+remote and never pushes by itself; the hooks still make no network request. Also not proved:
+anything about an entry before a Stop first recorded it -- an entry edited within its own turn
+(across a hand-back too), or every entry that existed when the ledger started, is recorded as
+it was then; an entry written in a turn that is cut short (no Stop lets it through) is recorded
+at the next one; a `## ` section
+without a date is not an entry and is not recorded; and the ledger keeps folder names and
+headings in plain text, and each line also the task root (as `~/...` when it is under your
+home, so the home path is not in it; the full path otherwise), a time and, for an ack, its reason
+(the commit messages name folders and reasons); a push sends all of it off this machine. Uninstalling the plugin
+without `--keep-data` deletes the state folder and the ledger in it; a pushed copy stays.

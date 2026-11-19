@@ -1,34 +1,47 @@
-# Baton
+# Baton: a logbook for every Claude Code task, enforced by hooks
 
 **Your AI sessions end. Your work shouldn't.**
 
-Baton makes an AI agent that runs in a host with hooks -- Claude Code, OpenAI Codex CLI, Google
-Gemini CLI -- write its work down before a turn ends, and read it back when the next session starts.
+Baton is a task logbook for Claude Code, kept by hooks. Every task gets a folder with a
+`LOGBOOK.md`. A Stop hook hands the turn back while work is newer than the logbook, so the agent
+writes down what it did before the turn ends; right after compaction it is told to write the
+entry first, from the summary. The next session, or the same one after `/clear`, opens on the
+board of your tasks and reads the logbook first. That is the session handoff, in plain Markdown
+on your disk; installed as a plugin, the hooks make no network request at all.
 
-Tired of explaining yesterday's work to Claude Code every morning? Of a `/clear` that wipes a
-decision, or a session that ends without saying what is left?
+<a href="https://github.com/StanimirTenev/baton/blob/main/docs/media/baton-demo.mp4"><img src="https://raw.githubusercontent.com/StanimirTenev/baton/main/docs/media/baton-cover.png" width="420" alt="Baton's session-start board: tasks ordered by whose move it is"></a>
 
-Baton is a Claude Code plugin; the same hooks run under Codex CLI and Gemini CLI, set up by hand. Every task gets a folder with a `LOGBOOK.md`, and hooks that
-Claude Code runs -- not the agent's judgement -- make sure the logbook is read when a session
-starts and written before a turn ends. A rule in `CLAUDE.md` is advice the agent may skip; a hook
-is not. Everything stays plain Markdown on your disk; installed as a plugin, the hooks make no network
-request at all.
+*34 s video: the board, a turn handed back, the entry written, the turn let through. Real hook
+output, run by hand in a sandbox with made-up tasks -- no live session, and the entry was written
+by hand, not by an agent. It shows the path where the entry gets written; see
+[what it does not do](#measured).*
+
+**It runs in Claude Code** -- the terminal, the IDE extensions, the Code tab of the desktop app.
+**In a claude.ai chat the hooks do not run**: the plugin looks installed, but nothing is enforced.
+The same hooks can be set up by hand under Codex CLI and Gemini CLI ([where it works](#where-it-works)).
+
+## Install
+
+In Claude Code:
+
+```text
+/plugin marketplace add StanimirTenev/baton
+/plugin install baton@baton
+```
+
+Or from a shell, as a plugin or with the install script:
 
 ```bash
 claude plugin marketplace add StanimirTenev/baton && claude plugin install baton@baton
+git clone https://github.com/StanimirTenev/baton ~/.baton && ~/.baton/install.sh
 ```
 
-```mermaid
-flowchart TD
-    A["A session starts"] --> B["SessionStart hook<br/>your tasks, by whose move it is"]
-    B --> C["You work; a message that names a task<br/>points the agent to its LOGBOOK.md first"]
-    C --> D{"The turn ends. Stop hook:<br/>work newer than the logbook?"}
-    D -- yes --> E["The turn is handed back:<br/>write the entry"]
-    E --> F["LOGBOOK.md on your disk,<br/>read by the next session"]
-    D -- no --> F
-```
+Needs Python 3.8 or later; on Windows the plugin also needs Git for Windows, and the script is
+`install.cmd`. Tasks go in `~/tasks` unless you choose another. With the script, keep
+the clone: the tools, the doctor too, run from it. An agent installing Baton for you reads
+[docs/install.md](docs/install.md) first. Then start a new Claude Code session.
 
-Start a new session; once you have task folders, the agent's first reply opens with your tasks, ordered by whose move
+Once you have task folders, the agent's first reply opens with your tasks, ordered by whose move
 it is (example data):
 
 ```text
@@ -41,6 +54,26 @@ it is (example data):
 ⛔ Waiting on someone OUTSIDE / blocked (for information):
 - 3 · broken-disk 🟡 [medium] — zpool replace  (waiting on: new disk (delivery))
 ```
+
+```mermaid
+flowchart TD
+    A["A session starts"] --> B["SessionStart hook<br/>your tasks, by whose move it is"]
+    B --> C["You work; a message that names a task<br/>points the agent to its LOGBOOK.md first"]
+    C --> D{"The turn ends. Stop hook:<br/>work newer than the logbook?"}
+    D -- yes --> E["The turn is handed back:<br/>write the entry"]
+    E --> F["LOGBOOK.md on your disk,<br/>read by the next session"]
+    D -- no --> F
+```
+
+## Is it working?
+
+The new session shows one line starting `🧭 Baton` -- with no task folders yet,
+`🧭 Baton is on -- no task folders yet in ~/tasks`. That line is the confirmation; once a task
+folder exists, the agent's first reply opens with the board of your tasks. No line? Run
+`/baton-doctor` (`/baton:baton-doctor` as a plugin): it shows when each hook last finished,
+or that it crashed.
+
+## Measured
 
 **What it does not do**, measured on my own machine, 22–29 October 2026: the Stop hook handed
 a turn back 43 times for a missing logbook entry; 29 got the entry, 14 ended without one. Baton
@@ -72,32 +105,28 @@ claude.ai, ChatGPT or Gemini on the web get no board, no hand-back and no logboo
 but no hook runs ([platform support](https://claude.com/docs/plugins/platform-support)).
 A plugin added from the directory on claude.ai reaches Claude Code at its next session start.
 
-## Install
+## FAQ
 
-Needs Python 3.8 or later; on Windows the plugin also needs Git for Windows. One of:
+**How is this different from rules in `CLAUDE.md`?** A rule in `CLAUDE.md` is advice the agent
+may skip; a hook is not. Claude Code runs Baton's hooks when a session starts and when a turn
+ends, whatever the agent decides. Baton installs its rules too; the hooks are what hold them.
 
-```bash
-claude plugin marketplace add StanimirTenev/baton && claude plugin install baton@baton
-git clone https://github.com/StanimirTenev/baton ~/.baton && ~/.baton/install.sh
-```
+**How is this different from a memory plugin?** A memory store keeps what is true and brings it
+back when it seems relevant. A logbook keeps what was done, task by task: dated entries, newest
+on top, and the next step in the header. Baton does not choose what to remember or summarise it
+for you; the agent writes each entry, you can read and edit every one, and the Stop hook checks
+that it was written. The two fit together: [memory layout](docs/memory-layout.md).
 
-Windows: `install.cmd`. Tasks go in `~/tasks` unless you choose another. With the script, keep
-the clone: the tools, the doctor too, run from it. An agent installing Baton for you reads
-[docs/install.md](docs/install.md) first. Then start a new Claude Code session.
-
-## Is it working?
-
-The new session shows one line starting `🧭 Baton` -- with no task folders yet,
-`🧭 Baton is on -- no task folders yet in ~/tasks`. That line is the confirmation; once a task
-folder exists, the agent's first reply opens with the board of your tasks. No line? Run
-`/baton-doctor` (`/baton:baton-doctor` as a plugin): it shows when each hook last finished,
-or that it crashed.
+**How is this different from a planning-files plugin?** Plan files keep the agent on course
+within the work in progress. A task folder outlives it: weeks later, in another session, the
+logbook says what was done, what was decided and whose move it is. A plan can live in the task
+folder; Baton checks that the record is newer than the work.
 
 ## Documentation
 
 - [Install in detail](docs/install.md) -- before installing, plugin or script, Windows and USB, updates, configuration
 - [Skills](docs/skills.md) -- `/baton-inventory`, `/baton-task`, `/baton-plan`, and when a swarm is worth it
-- [How it works](docs/how-it-works.md) -- the board, the task header, the hooks, `/baton-doctor`, lessons, the logbook entry, `.batonignore`
+- [How it works](docs/how-it-works.md) -- the board, the task header, the hooks, `/baton-doctor`, lessons, the logbook entry, `.batonignore`, the ledger
 - [Review tools](docs/review-tools.md) -- the optional review of an index against its files, duplicated state, reading order, the corpus
 - [Memory layout](docs/memory-layout.md) -- where an agent keeps what is true, beside the logbook of what was done
 - [Why this exists, and what it does not solve](docs/why.md)
@@ -105,71 +134,18 @@ or that it crashed.
 - [Gemini CLI](gemini/README.md) -- the same hooks as a Gemini CLI extension: setup, the doctor, what does not run there
 - [Languages](hooks/lang/README.md) -- the words the hooks recognise, one file per language
 
-Below: [The ledger](#the-ledger-an-older-entry-edited-is-seen), [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](#versions) (now [CHANGELOG.md](CHANGELOG.md)).
+Below: [The ledger](#the-ledger-an-older-entry-edited-is-seen), [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](CHANGELOG.md).
 
 ## The ledger: an older entry edited is seen
 
-A logbook entry is a record, and is not edited. Until v3.35.0 nothing outside the session
-recorded that one had been: the logbook is written newest entry on top, so it cannot be
-append-only itself, and Stop's memory of it is a file the agent can delete. The ledger is a
-second file that only grows -- one line per entry: the task folder, the entry's heading, the
-sha256 of its text (heading and body; line endings, a BOM and trailing blank lines do not
-count) and the sha256 of the line before it, a chain. It lives in a git repository of its own,
-`baton.ledger` in Baton's state folder unless `ledger` in `baton.local.json` names another.
-It is on by default; `"ledger": false` in `baton.local.json` turns it off -- nothing is recorded
-and SessionStart says nothing of it (the repository already written stays where it is).
-
-- **Stop** adds a line for every entry the ledger has not seen and commits -- only on a Stop
-  that lets the turn through, never on one that hands it back. So a correction a hand-back asks
-  for in the same turn (lesson L1's hour, a hollow entry, a claims section moved to the top) is
-  recorded as corrected, not as a change. An edit in a later turn is still a change: that is
-  intended, and the human decides. An entry it has seen is never recorded again, whatever its text is now, and no line
-  is ever rewritten. With nothing new it reads the ledger and the logbooks and starts no
-  process -- about 0.1 s more per Stop and per session start on 5 MB of logbooks (57 folders,
-  2,870 entries, measured 16.11). Since 3.39.0 a line also says which host's Stop recorded it
-  (`recorded_by`: claude, codex, gemini or unknown). That is the host that **recorded** the
-  entry, not necessarily the one that wrote it: every Stop records every entry it has not seen,
-  another agent's too, and each host keeps its own ledger unless `ledger` points them at one.
-  Neither the logbook nor its format names the author.
-- **SessionStart** compares the ledger with the logbooks and, when something differs, says so
-  in one block: entries changed after they were recorded, recorded entries that are gone, a
-  broken chain (a line that does not follow the one before, a ledger shorter than Baton last
-  wrote it, a change to it that was not committed). It reports; it fixes nothing.
-- **You decide.** An edit can be a mistake, a correction made in a later turn, or worse. An edit
-  you accept is a new line with the entry's hash now and your reason; no line is edited:
-
-```bash
-python3 tools/baton_ledger.py verify                       # what changed, what is gone, the chain, the acks
-python3 tools/baton_ledger.py ack --reason "the count in it was wrong"
-python3 tools/baton_ledger.py ack --folder alpha --heading "## 2026-10-20 09:00 — first" --reason "..."
-python3 tools/baton_ledger.py push                          # to the remote you added yourself
-python3 tools/baton_ledger.py verify --remote               # is the remote's history still in this one
-```
-
-As a plugin, pass the state folder as the skills do (`CLAUDE_PLUGIN_DATA=...`); the block
-SessionStart shows carries the whole command, paths included.
-
-**What it does not prove.** The agent runs as you, with your files and your git access.
-**The agent can run `ack` itself**, as you can, and the block SessionStart shows names the
-command: that is the cheapest way past the ledger. What it cannot do is hide it -- every ack is
-a line with its time and reason, listed by `verify` and in the repository's log. Read them; an
-ack you did not make is the finding. The
-agent can also rewrite the ledger, recompute every later line and commit, as easily as it edits
-the logbook; on this machine the chain only shows a careless edit, not a deliberate one. The ledger holds
-only once a copy of it is somewhere the agent cannot rewrite: a private remote you add
-(`git -C <ledger> remote add anchor <address>`), pushed with `push`, that **refuses a rewritten
-history** -- force-push disabled, or branch protection on the branch. A remote that accepts a
-force-push is no anchor, because the agent can push as well as you can. Baton never adds a
-remote and never pushes by itself; the hooks still make no network request. Also not proved:
-anything about an entry before a Stop first recorded it -- an entry edited within its own turn
-(across a hand-back too), or every entry that existed when the ledger started, is recorded as
-it was then; an entry written in a turn that is cut short (no Stop lets it through) is recorded
-at the next one; a `## ` section
-without a date is not an entry and is not recorded; and the ledger keeps folder names and
-headings in plain text, and each line also the task root (as `~/...` when it is under your
-home, so the home path is not in it; the full path otherwise), a time and, for an ack, its reason
-(the commit messages name folders and reasons); a push sends all of it off this machine. Uninstalling the plugin
-without `--keep-data` deletes the state folder and the ledger in it; a pushed copy stays.
+A logbook entry is a record, and is not edited. Beside the logbooks Baton keeps a ledger: a git
+repository of its own that only grows, one line per entry with the sha256 of its text, each line
+chained to the one before. Stop records every new entry on a turn it lets through; SessionStart
+says when a recorded entry changed or is gone; you decide, with `tools/baton_ledger.py verify`
+and `ack`. On by default; `"ledger": false` in `baton.local.json` turns it off. **On this machine
+it shows a careless edit, not a deliberate one**: the agent runs as you and can rewrite the
+ledger or run `ack` itself, unless a copy is pushed to a remote that refuses a rewritten history.
+All of it: [the ledger](docs/how-it-works.md#the-ledger-an-older-entry-edited-is-seen).
 
 ## Uninstall
 
