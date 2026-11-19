@@ -20,7 +20,7 @@ hooks do changes, except the file the notice after an update reads its notes fro
 - **The ledger's full description is in docs/how-it-works.md.** The README keeps a summary and its
   limit: on one machine the ledger shows a careless edit, not a deliberate one.
 - **Still not done.** The media lives in `docs/media/` and ships in the plugin's clone (about
-  590 KB); `git archive` and the release tarballs leave it out. Nothing was run in a live session.
+  590 KB); `.gitattributes` keeps it out of `git archive`. Nothing was run in a live session.
 
 **v3.40.0** — the devil's advocate (L5), and four fixes before the launch
 
