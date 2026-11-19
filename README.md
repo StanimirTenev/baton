@@ -9,16 +9,16 @@ entry first, from the summary. The next session, or the same one after `/clear`,
 board of your tasks and reads the logbook first. That is the session handoff, in plain Markdown
 on your disk; installed as a plugin, the hooks make no network request at all.
 
-<a href="https://github.com/StanimirTenev/baton/blob/main/docs/media/baton-demo.mp4"><img src="https://raw.githubusercontent.com/StanimirTenev/baton/main/docs/media/baton-cover.png" width="420" alt="Baton's session-start board: tasks ordered by whose move it is"></a>
+**It runs in Claude Code** -- the terminal, the IDE extensions, the Code tab of the desktop app.
+**In a claude.ai chat the hooks do not run**: the plugin looks installed, but nothing is enforced.
+The same hooks can be set up by hand under Codex CLI and Gemini CLI ([where it works](#where-it-works)).
+
+<a href="https://github.com/StanimirTenev/baton/blob/main/docs/media/baton-demo.mp4"><img src="https://raw.githubusercontent.com/StanimirTenev/baton/main/docs/media/baton-cover.png" width="360" alt="Baton's session-start board: tasks ordered by whose move it is"></a>
 
 *34 s video: the board, a turn handed back, the entry written, the turn let through. Real hook
 output, run by hand in a sandbox with made-up tasks -- no live session, and the entry was written
 by hand, not by an agent. It shows the path where the entry gets written; see
 [what it does not do](#measured).*
-
-**It runs in Claude Code** -- the terminal, the IDE extensions, the Code tab of the desktop app.
-**In a claude.ai chat the hooks do not run**: the plugin looks installed, but nothing is enforced.
-The same hooks can be set up by hand under Codex CLI and Gemini CLI ([where it works](#where-it-works)).
 
 ## Install
 
