@@ -1,8 +1,9 @@
-# Baton: a logbook for every Claude Code task, enforced by hooks
+# Baton: a task logbook for Claude Code in offices and companies, enforced by hooks
 
 **Your AI sessions end. Your work shouldn't.**
 
-Baton is a task logbook for Claude Code, kept by hooks. Every task gets a folder with a
+Baton is a task logbook for Claude Code, kept by hooks, for work in offices and companies as
+much as for one person ([why it fits](#for-offices-and-companies)). Every task gets a folder with a
 `LOGBOOK.md`. When work is newer than the logbook, a Stop hook hands the turn back and asks the
 agent to write down what it did; right after compaction the agent is told to write the entry
 first, from the summary and the messages after it. The next session, or the same one after
@@ -106,6 +107,22 @@ claude.ai, ChatGPT or Gemini on the web get no board, no hand-back and no logboo
 **In a claude.ai chat nothing warns you:** the plugin looks installed and the skills load,
 but no hook runs ([platform support](https://claude.com/docs/plugins/platform-support)).
 A plugin added from the directory on claude.ai reaches Claude Code at its next session start.
+
+## For offices and companies
+
+- **Local.** Installed as a plugin, the hooks make no network request: the logbooks stay on your
+  company's machines. Only tools you run by hand send anything (the review tools to OpenRouter,
+  a ledger push to your own remote): [what Baton sends over the network](#what-baton-sends-over-the-network).
+- **Readable without Baton.** Each task's logbook is plain Markdown in its folder: a colleague or
+  a manager reads it in any editor, and a task folder handed to someone else carries its record.
+- **A ledger.** A git record of every logbook entry; an edited or removed entry is reported at the
+  next session start. On one machine it shows a careless edit, not a deliberate one; a copy
+  pushed to a remote that refuses a rewritten history is an audit trail
+  ([the ledger](#the-ledger-an-older-entry-edited-is-seen)).
+- **MIT.** Free for commercial use.
+
+Each machine keeps its own task folders and its own board; Baton does not sync them
+([what it does not solve](docs/why.md)).
 
 ## FAQ
 
