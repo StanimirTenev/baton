@@ -149,7 +149,7 @@ All of it: [the ledger](docs/how-it-works.md#the-ledger-an-older-entry-edited-is
 
 ## Uninstall
 
-**Plugin:** `claude plugin uninstall baton` (add `--keep-data` to keep its settings).
+**Plugin:** `claude plugin uninstall baton` (add `--keep-data` to keep its settings; without it the state folder and the ledger in it are deleted, a pushed copy of the ledger stays).
 
 **Script install:** remove the six hook entries whose command runs a `baton_` script
 (`baton_session_start.py`, `baton_stop.py`, `baton_prompt.py`, `baton_batch.py`,

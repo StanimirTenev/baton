@@ -1551,7 +1551,7 @@ def release_leads(version: str) -> list[str]:
     """The bold first sentence of each note under this version in CHANGELOG.md."""
     try:
         text = (Path(__file__).resolve().parent.parent / "CHANGELOG.md").read_text("utf-8")
-    except OSError:
+    except (OSError, ValueError):
         return []
     start = text.find(f"**v{version}**")
     if start < 0:
