@@ -13,9 +13,11 @@ handoff, in plain Markdown on your disk; installed as a plugin, the hooks make n
 **In a claude.ai chat the hooks do not run**: the plugin looks installed, but nothing is enforced.
 The same hooks can be set up by hand under Codex CLI and Gemini CLI ([where it works](#where-it-works)).
 
+![Baton's demo: the session-start board, a turn handed back, the entry written, the turn let through](docs/media/baton-demo.gif)
+
 <a href="https://github.com/StanimirTenev/baton/blob/main/docs/media/baton-demo.mp4"><img src="https://raw.githubusercontent.com/StanimirTenev/baton/main/docs/media/baton-cover.png" width="360" alt="Baton's session-start board: tasks ordered by whose move it is"></a>
 
-*34 s video: the board, a turn handed back, the entry written, the turn let through. Real hook
+*34 s video (the GIF above is a 28 s cut of it): the board, a turn handed back, the entry written, the turn let through. Real hook
 output, run by hand in a sandbox with made-up tasks -- no live session, and the entry was written
 by hand, not by an agent. It shows the path where the entry gets written; see
 [what it does not do](#measured).*
