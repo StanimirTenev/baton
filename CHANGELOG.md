@@ -4,10 +4,10 @@ What changed in each version of [Baton](README.md), newest first. The notes of a
 
 **v3.41.0** — a README you can grasp in one screen, and the changelog in its own file
 
-The README was 1,892 lines, 84% of them version notes, and opened without a picture. Nothing the
+The README was 1,892 lines, 84% of them version notes, and opened with no screenshot or video. Nothing the
 hooks do changes, except the file the notice after an update reads its notes from.
 
-- **The version notes are in CHANGELOG.md.** The README's Versions section moved there unchanged;
+- **The version notes are in CHANGELOG.md.** The README's Versions section moved there unchanged but for one link;
   the notice after an update and the GitHub release notes are taken from it now.
 - **The README opens with what Baton is.** A searchable title, one plain paragraph, the cover of a
   34 s demo linked to the video, install as slash commands first, and that the hooks run in

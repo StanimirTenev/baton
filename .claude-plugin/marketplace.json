@@ -4,7 +4,7 @@
     "name": "Stanimir Tenev",
     "url": "https://github.com/StanimirTenev"
   },
-  "description": "Baton: a logbook for every Claude Code task, enforced by six local hooks -- a Stop hook hands back unrecorded work, after compaction the entry is written first, and the next session reads the logbook.",
+  "description": "Baton: a task logbook for Claude Code, enforced by six local hooks -- a Stop hook hands back unrecorded work, after compaction the agent is told to write the entry first, and the next session reads the logbook: a session handoff in plain Markdown.",
   "plugins": [
     {
       "name": "baton",

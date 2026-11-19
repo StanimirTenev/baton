@@ -3,11 +3,11 @@
 **Your AI sessions end. Your work shouldn't.**
 
 Baton is a task logbook for Claude Code, kept by hooks. Every task gets a folder with a
-`LOGBOOK.md`. A Stop hook hands the turn back while work is newer than the logbook, so the agent
-writes down what it did before the turn ends; right after compaction it is told to write the
-entry first, from the summary. The next session, or the same one after `/clear`, opens on the
-board of your tasks and reads the logbook first. That is the session handoff, in plain Markdown
-on your disk; installed as a plugin, the hooks make no network request at all.
+`LOGBOOK.md`. When work is newer than the logbook, a Stop hook hands the turn back and asks the
+agent to write down what it did; right after compaction the agent is told to write the entry
+first, from the summary and the messages after it. The next session, or the same one after
+`/clear`, opens on the board of your tasks and reads the logbook first. That is the session
+handoff, in plain Markdown on your disk; installed as a plugin, the hooks make no network request at all.
 
 **It runs in Claude Code** -- the terminal, the IDE extensions, the Code tab of the desktop app.
 **In a claude.ai chat the hooks do not run**: the plugin looks installed, but nothing is enforced.

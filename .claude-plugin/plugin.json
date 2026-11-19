@@ -2,7 +2,7 @@
   "name": "baton",
   "displayName": "Baton",
   "version": "3.41.0",
-  "description": "Baton is a Claude Code plugin: a task logbook kept by hooks, one folder per task. A session opens on the board of whose move it is, a Stop hook hands back a turn that leaves work unrecorded, after compaction the entry is written first, and the next session reads it: a session handoff in plain Markdown. Hooks run in Claude Code (terminal, IDE, desktop Code tab); in claude.ai chat only the skills load. The hooks make no network requests; review tools run by hand send text to OpenRouter.",
+  "description": "Baton is a Claude Code plugin: a task logbook kept by hooks, one folder per task. A session opens on the board of whose move it is, a Stop hook hands back a turn that leaves work unrecorded, after compaction the agent is told to record first, and the next session reads the logbook: a session handoff in Markdown. Hooks run in Claude Code (terminal, IDE, desktop Code tab); in claude.ai chat only the skills load. The hooks make no network requests; review tools run by hand send text to OpenRouter.",
   "icon": "./icon.png",
   "author": {
     "name": "Stanimir Tenev",
