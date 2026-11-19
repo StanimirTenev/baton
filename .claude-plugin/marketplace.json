@@ -4,7 +4,7 @@
     "name": "Stanimir Tenev",
     "url": "https://github.com/StanimirTenev"
   },
-  "description": "Persistent memory for Claude Code as a task logbook: every task gets a LOGBOOK.md, hooks make the agent read it at session start and write it before a turn ends, also after compaction. Local Markdown.",
+  "description": "A task logbook for Claude Code, for offices, companies and individuals: persistent memory in a LOGBOOK.md per task that hooks make the agent read at session start and write before a turn ends. Local, MIT.",
   "plugins": [
     {
       "name": "baton",
