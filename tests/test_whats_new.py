@@ -2,7 +2,7 @@
 
 Installed from the directory, Baton updates itself on the next launch and Claude Code says only
 "Plugins changed". Nothing told the human what changed (stenly, 2026-10-05). The hook remembers
-the last version it ran as and, when that changes, names what is new from the README's notes.
+the last version it ran as and, when that changes, names what is new from the notes in CHANGELOG.md.
 
 Through the hook's entry point, as the harness runs it.
 """
@@ -67,7 +67,7 @@ def test_a_fresh_install_is_not_told_it_was_updated(tmp_path):
     assert json.loads((tmp_path / "s.json").read_text("utf-8"))["seen_version"] == NOW
 
 
-def test_the_notes_come_from_the_readme_section_of_this_version():
+def test_the_notes_come_from_the_changelog_section_of_this_version():
     leads = hook.release_leads(NOW)
     assert leads and leads[0].startswith("Text going out is handed back once")
     assert all(len(x) < 200 for x in leads)

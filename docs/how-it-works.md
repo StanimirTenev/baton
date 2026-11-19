@@ -696,7 +696,7 @@ fixed.
 
 ⚠️ A quotation is not a gluing. A logbook describing this very defect contains the broken
 string verbatim, so inline code is stripped before the check. Getting that wrong is how the
-first version falsely rejected a real file while nine unit tests passed — see [Versions](../README.md#versions).
+first version falsely rejected a real file while nine unit tests passed — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## Lessons: a mistake caught once is counted
 

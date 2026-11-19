@@ -204,7 +204,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.40.0"   # bumped with every release; a test holds it to the README's top version
+BATON_VERSION = "3.40.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -1548,9 +1548,9 @@ def inventory_notice(today: date, own: dict | None = None) -> str | None:
 
 
 def release_leads(version: str) -> list[str]:
-    """The bold first sentence of each note under this version in the README's Versions."""
+    """The bold first sentence of each note under this version in CHANGELOG.md."""
     try:
-        text = (Path(__file__).resolve().parent.parent / "README.md").read_text("utf-8")
+        text = (Path(__file__).resolve().parent.parent / "CHANGELOG.md").read_text("utf-8")
     except OSError:
         return []
     start = text.find(f"**v{version}**")
@@ -1562,7 +1562,7 @@ def release_leads(version: str) -> list[str]:
 
 
 def whats_new_notice() -> str | None:
-    """Once after an update: what is new, from the README that came with it. No network.
+    """Once after an update: what is new, from the CHANGELOG.md that came with it. No network.
 
     Installed from the directory, Baton updates itself at the next launch and Claude Code says
     only "Plugins changed" -- nothing tells the human what changed (stenly, 2026-10-05). The

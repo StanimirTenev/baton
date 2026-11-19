@@ -96,7 +96,7 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   - **From this repository's marketplace** (the two commands above): auto-update is off by
     default for marketplaces other than Anthropic's. Turn it on under `/plugin` -> *Marketplaces*,
     or run `claude plugin update baton@baton`.
-  - **After an update, the agent tells you once what is new**, from the notes in the [README](../README.md#versions) that
+  - **After an update, the agent tells you once what is new**, from the notes in [CHANGELOG.md](../CHANGELOG.md) that
     came with it -- the bold first line of each note under the new version, and a link to the
     release. The hooks do not check for a newer version themselves, so **as a plugin they make
     no network request at all.**

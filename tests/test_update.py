@@ -92,7 +92,7 @@ def test_a_failed_check_says_so_and_retries_the_next_day(tmp_path, monkeypatch):
 
 def test_the_version_in_the_hook_is_the_version_released():
     """A constant nobody bumps says every release is the old one, and hides every update."""
-    top = re.search(r"^## Versions\s+\*\*v(\d+\.\d+\.\d+)\*\*", (ROOT / "README.md").read_text("utf-8"),
+    top = re.search(r"^\*\*v(\d+\.\d+\.\d+)\*\*", (ROOT / "CHANGELOG.md").read_text("utf-8"),
                     re.M)
     assert top and top.group(1) == _load().BATON_VERSION
 
