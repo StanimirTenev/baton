@@ -4,7 +4,7 @@
     "name": "Stanimir Tenev",
     "url": "https://github.com/StanimirTenev"
   },
-  "description": "Baton: persistent memory between sessions -- every task a folder with a logbook, kept that way by six local hooks.",
+  "description": "Baton: a logbook for every Claude Code task, enforced by six local hooks -- a Stop hook hands back unrecorded work, after compaction the entry is written first, and the next session reads the logbook.",
   "plugins": [
     {
       "name": "baton",
