@@ -2,6 +2,24 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.43.1** — on Windows the page's buttons can sign and check codes
+
+The Windows test of 3.43.0 found that the page started by the session hook could not make an
+invitation or check one: "Invite a friend" said ssh-keygen did not sign, and "Check" blamed a valid
+invitation as changed.
+
+- **The page on Windows can sign again.** Windows `ssh-keygen` exits with 255 and prints nothing
+  without `PROGRAMDATA`, and the hook started the page with a short list of names that left it out.
+  The list now carries `PROGRAMDATA` (and `ALLUSERSPROFILE`). The command line (`--invite`,
+  `--accept`) was not affected. A test pins the name in the list; Linux does not need it, so the
+  failure itself was seen only on Windows.
+- **The page outlives an SSH session on Windows.** The server now also leaves the caller's job
+  (`CREATE_BREAKAWAY_FROM_JOB`), and starts without it where a job forbids that.
+- **The README says what `Origin` guards:** the buttons (POST). The page itself is served on the key
+  in its link and the right `Host`.
+- **Not checked:** a real browser on the Windows desktop, and the server under a desktop Claude Code
+  session there.
+
 **v3.43.0** — a page in the browser: your ID, what is new, "Update Baton", and friend invitations
 
 New features were announced by the agent in a few lines, or not at all, and reached by typing commands.

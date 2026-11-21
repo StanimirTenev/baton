@@ -768,14 +768,21 @@ def ensure(cfg: Config, argv_tail: list, open_it: bool) -> dict:
     asked. {"url", "opened"} -- the link for the caller alone, or {} when none could start."""
     st = live()
     if not (st and st.get("running") == cfg.version):
-        detach = ({"creationflags": 0x00000008 | 0x00000200 | 0x08000000} if os.name == "nt"
-                  else {"start_new_session": True})
-        try:
-            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--serve", "--no-open",
-                              "--quiet", *argv_tail],
-                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, close_fds=True, **detach)
-        except OSError:
+        flags = 0x00000008 | 0x00000200 | 0x08000000          # DETACHED, NEW_GROUP, NO_WINDOW
+        # Windows: also leave the caller's job (BREAKAWAY), or the server dies with an SSH session
+        # (21.11); a job that forbids it refuses the start, so the second try goes without.
+        tries = ([{"creationflags": flags | 0x01000000}, {"creationflags": flags}] if os.name == "nt"
+                 else [{"start_new_session": True}])
+        for detach in tries:
+            try:
+                subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--serve",
+                                  "--no-open", "--quiet", *argv_tail],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, close_fds=True, **detach)
+                break
+            except OSError:
+                continue
+        else:
             return {}
         st = None
         end = time.time() + 6

@@ -41,10 +41,9 @@ def _run(tmp_path, state=None):
 def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
-    assert "A page opens once per version." in ctx   # a lead
-    for lead in ('"Update Baton" is a button.',
-                 "Friend invitations, with no server.",
-                 "The page is served by a small program that ships with Baton",
+    assert "The page on Windows can sign again." in ctx   # a lead
+    for lead in ("The page outlives an SSH session on Windows.",
+                 "The README says what `Origin` guards:",
                  "Not checked:"):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx
@@ -69,6 +68,6 @@ def test_a_fresh_install_is_not_told_it_was_updated(tmp_path):
 
 def test_the_notes_come_from_the_changelog_section_of_this_version():
     leads = hook.release_leads(NOW)
-    assert leads and leads[0].startswith("A page opens once per version")
+    assert leads and leads[0].startswith("The page on Windows can sign again")
     assert all(len(x) < 200 for x in leads)
     assert hook.release_leads("0.0.1") == []

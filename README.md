@@ -166,7 +166,7 @@ open it. The link is on that line only: the agent never gets it, because the pag
 
 The page is served by `tools/baton_page.py`, which ships with Baton (Python's own library only). It
 listens on 127.0.0.1 only, on a port the system picks, and answers only a request that carries the
-random 128-bit key from its link, a `Host` of `127.0.0.1:<port>` and no other site's `Origin`.
+random 128-bit key from its link, a `Host` of `127.0.0.1:<port>`, and, for a button (POST), no other site's `Origin`.
 **That key stops other web pages in your browser from pressing the buttons; it does not stop a
 program running on this machine as you**, which can read the key from the state file. One server per
 install, reused by every session; it stops by itself after 30 minutes without a request.

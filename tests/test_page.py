@@ -57,7 +57,8 @@ def _base_env(tmp_path, **extra):
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
     env = {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "USERPROFILE": str(home),
-           "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""), "BATON_IDENTITY": str(tmp_path / "identity"),
+           "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+           "PROGRAMDATA": os.environ.get("PROGRAMDATA"), "BATON_IDENTITY": str(tmp_path / "identity"),
            "BATON_PAGE_IDLE": "60", "BATON_OPENER": str(_opener(tmp_path))}
     env.update(extra)
     return {k: v for k, v in env.items() if v is not None}
@@ -578,3 +579,14 @@ def test_an_inviter_waiting_for_a_reply_is_told_how_to_reopen_the_page(page, tmp
                      BATON_IDENTITY=str(tmp_path / "a" / "identity"))
     assert "--open" in ctx and "ZEBRA" not in json.dumps(got, ensure_ascii=False)
     assert "invitation" not in got["systemMessage"]
+
+
+def test_page_env_carries_programdata(monkeypatch):
+    """Windows ssh-keygen exits 255 without PROGRAMDATA: a page started by the hook could not sign
+    or check a code (21.11, found on Windows; Linux does not need it, so it is pinned here)."""
+    sys.path.insert(0, str(HOOK.parent))
+    import _baton
+    assert "PROGRAMDATA" in _baton.PAGE_ENV
+    monkeypatch.setenv("PROGRAMDATA", "C:\\ProgramData")
+    out = _baton.run_page([sys.executable, "-c", "import os; print(os.environ.get('PROGRAMDATA'))"])
+    assert out.decode().strip() == "C:\\ProgramData"
