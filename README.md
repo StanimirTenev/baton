@@ -201,10 +201,11 @@ answers it. A code to copy by hand still works.
    against the ID it claims, and that the invitation is for this install. It shows your ID and text, as
    plain text, links not clickable. **Accept** (with a nickname for you) or **Ignore**; ignoring tells
    nobody.
-4. Accepting posts a reply, signed the same way and naming your invitation, back to your box. Your box
-   keeps it only if it answers an invitation waiting there, from the ID it was for, once. Then you are
-   friends on both sides. If your box cannot be reached, their page puts the reply on the clipboard
-   with the same WhatsApp, Email and Copy buttons, and you paste it on yours.
+4. Accepting an invitation fetched from your box posts a reply, signed the same way and naming your
+   invitation, back to that box. Your box keeps it only if it answers an invitation waiting there, from
+   the ID it was for, once. Then you are friends on both sides. An invitation that came by a messenger
+   is answered the same way back (or when your box cannot be reached): their page puts the reply on
+   the clipboard with the same WhatsApp, Email and Copy buttons, and you paste it on yours.
 
 **Nicknames** are yours: up to 40 characters of plain text, shown as "nickname (BTN-...)", changed
 with **Rename**. They are kept in `friends.json` only: never in a code, never sent, never in the
