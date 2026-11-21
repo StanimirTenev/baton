@@ -17,7 +17,7 @@ def _run(tmp_path, source="startup", path=None):
     (tasks / "DNEVNIK.md").write_text('---\nstate: active\nturn: "us"\nnext: "x"\n---\n', "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
+    env.update(HOME=str(tmp_path / "home"), USERPROFILE=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
                BATON_SESSION_STATE=str(tmp_path / "s.json"), BATON_LOGBOOK="DNEVNIK.md")
     if path is not None:
         env["PATH"] = path
@@ -38,7 +38,9 @@ def test_the_id_opens_the_board_and_the_line_and_stays(tmp_path):
     assert m.group() in again["hookSpecificOutput"]["additionalContext"], "a new ID after /clear"
     assert again["systemMessage"].startswith(m.group())
     key = tmp_path / "home" / ".claude" / "baton" / "identity" / "baton_ed25519"
-    assert key.is_file() and oct(key.stat().st_mode & 0o777) == "0o600"
+    assert key.is_file()
+    if os.name != "nt":                         # Windows keeps it by ACL, as ssh-keygen sets it
+        assert oct(key.stat().st_mode & 0o777) == "0o600"
 
 
 def test_a_private_key_without_its_public_half_is_never_replaced(tmp_path):
@@ -63,3 +65,25 @@ def test_two_installs_get_two_ids(tmp_path):
     a = FORMAT.search(_run(tmp_path / "a")["systemMessage"]).group()
     b = FORMAT.search(_run(tmp_path / "b")["systemMessage"]).group()
     assert a != b
+
+
+def test_sessions_starting_together_share_one_whole_key(tmp_path):
+    """Two sessions making the key at once: one key, both halves from the same pair."""
+    import concurrent.futures
+    import importlib.util
+    ident = tmp_path / "id"
+    os.environ["BATON_IDENTITY"] = str(ident)
+    try:
+        spec = importlib.util.spec_from_file_location("bss_id", HOOK)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with concurrent.futures.ThreadPoolExecutor(8) as pool:
+            ids = set(pool.map(lambda _: mod.own_id(), range(8)))
+    finally:
+        del os.environ["BATON_IDENTITY"]
+    ids.discard(None)
+    assert len(ids) == 1, ids
+    pub = (ident / "baton_ed25519.pub").read_text().split()[1]
+    derived = subprocess.run(["ssh-keygen", "-y", "-f", str(ident / "baton_ed25519")],
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL).stdout.split()[1]
+    assert derived == pub, "the private key is not the public key's pair"

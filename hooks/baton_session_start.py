@@ -2140,11 +2140,25 @@ def own_id() -> str | None:
         exe = shutil.which("ssh-keygen")
         if not exe or key.exists():
             return None             # never overwrite a private key that lost its public half
+        # Made aside and moved in whole: on Windows two sessions starting at once left the
+        # private half of one key beside the public half of the other (21.11.2026), and every
+        # entry it signed would fail to verify.
+        import tempfile
         try:
-            key.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run([exe, "-q", "-t", "ed25519", "-N", "", "-C", "baton", "-f", str(key)],
+            key.parent.parent.mkdir(parents=True, exist_ok=True)
+            work = Path(tempfile.mkdtemp(prefix=key.parent.name + ".new-", dir=key.parent.parent))
+        except OSError:
+            return None
+        try:
+            subprocess.run([exe, "-q", "-t", "ed25519", "-N", "", "-C", "baton", "-f",
+                            str(work / key.name)],
                            check=True, timeout=10, capture_output=True, stdin=subprocess.DEVNULL)
+            os.rename(work, key.parent)         # fails if another session got there first
         except Exception:
+            pass
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        if not pub.is_file():
             return None
     try:
         import base64

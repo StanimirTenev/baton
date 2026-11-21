@@ -33,6 +33,8 @@ def _baton_state_outside_the_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("BATON_MANAGED_DIR", str(tmp_path / ".managed"))
     # The ledger (row 153) is a git repository beside the hooks by default: not in this one.
     monkeypatch.setenv("BATON_LEDGER", str(tmp_path / ".baton.ledger"))
+    # The install's key (v3.42.0): a test run made the developer's real one on 21.11.
+    monkeypatch.setenv("BATON_IDENTITY", str(tmp_path / ".baton.identity"))
 
 
 # What a hook or script started by a test gets from the environment: what Python and a shell
@@ -42,7 +44,8 @@ def _baton_state_outside_the_repo(tmp_path, monkeypatch):
 CHILD_ENV = ("PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "SYSTEMDRIVE",
              "WINDIR", "COMSPEC", "PATHEXT", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR",
              "LANG", "LC_ALL", "LC_CTYPE", "BATON_BODY_STATE", "BATON_SESSION_STATE",
-             "BATON_LESSONS_STATE", "BATON_MEMLINT_STATE", "BATON_MANAGED_DIR", "BATON_LEDGER")
+             "BATON_LESSONS_STATE", "BATON_MEMLINT_STATE", "BATON_MANAGED_DIR", "BATON_LEDGER",
+             "BATON_IDENTITY")
 
 
 def child_env(**extra) -> dict:
