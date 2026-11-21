@@ -184,8 +184,8 @@ Codex clone, the page shows how that install is updated and runs nothing.
 2. Your friend pastes it into their page. Their Baton checks the signature against the key in the
    code and that the key gives the ID it claims, then shows your ID and text, as plain text, links not
    clickable. **Accept** or **Ignore**; ignoring tells nobody.
-3. Accepting makes a reply code for you, signed the same way and naming your invitation. Until you
-   paste it, their page shows you as "waiting for them".
+3. Accepting makes a reply code for you, signed the same way and naming your invitation. Their page
+   shows you as "send them your reply" and keeps the code to copy again; nothing comes back to it.
 4. You paste the reply. It must answer an invitation made on your install and still waiting; each is
    used once. Now you are friends on your side too.
 

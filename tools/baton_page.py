@@ -910,8 +910,8 @@ svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .icon-btn:hover{background:var(--accent-soft);color:var(--accent-text)}
 .friend{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-top:1px solid var(--line)}
 .friend:first-of-type{border-top:0;padding-top:0}
-.friend .nm{display:flex;align-items:center;gap:8px}
-.friend .nm .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.friend .nm{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.friend .nm .mono{flex:1 1 100%;font-weight:600}
 .st{font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
 .st.ok{color:var(--ok);background:var(--ok-soft)} .st.wait{color:var(--turn-text);background:var(--turn);border:1px solid var(--turn-line)}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:13px;color:var(--muted)}
@@ -1048,12 +1048,12 @@ function renderLeft(){
     const mutual = f.status === "mutual";
     const row = el("div.friend", null,
       el("div.nm", null, el("span.mono", {title: f.id}, f.id),
-        el("span.st." + (mutual ? "ok" : "wait"), null, mutual ? "friends" : "waiting for them"),
+        el("span.st." + (mutual ? "ok" : "wait"), null, mutual ? "friends" : "send them your reply"),
         el("button.btn.sm", {type: "button", title: "Stops new things only; what they already have stays with them",
           on: {click: async () => { if (!confirm("Remove " + f.id + "? It stops new things only.")) return;
             const r = await api("remove", {id: f.id}); toast(r.ok ? "Removed" : r.error); refresh(); }}}, "Remove")));
     if (!mutual) {
-      row.appendChild(el("div.small.muted", null, "You accepted. Friends once they paste your reply."));
+      row.appendChild(el("div.small.muted", null, "You accepted. Send them your reply; on their side you become friends when they paste it. Nothing more comes back here."));
       if (f.reply) row.appendChild(el("div", null, el("button.btn.sm", {type: "button", on: {click: () => copy(f.reply, "Reply")}}, icon("copy"), "Copy my reply again")));
     }
     if (f.note) row.appendChild(el("div.small.muted", null, "Their note: ", el("span", null, f.note)));
