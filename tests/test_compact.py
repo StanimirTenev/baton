@@ -46,7 +46,7 @@ def _run(tmp_path, root, payload, plugin=False):
     (home / ".claude").mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(home), BATON_HOME=str(root), BATON_LOGBOOK="LOGBOOK.md",
+    env.update(BATON_PAGE="off", HOME=str(home), BATON_HOME=str(root), BATON_LOGBOOK="LOGBOOK.md",
                BATON_SESSION_STATE=str(tmp_path / "s.json"),
                BATON_BODY_STATE=str(tmp_path / "bodies.json"),
                BATON_LESSONS_STATE=str(tmp_path / "lessons.json"))

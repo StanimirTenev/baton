@@ -2,6 +2,36 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.43.0** — a page in the browser: your ID, what is new, "Update Baton", and friend invitations
+
+New features were announced by the agent in a few lines, or not at all, and reached by typing commands.
+Now Baton shows them: on the first session start of a version it opens a page of its own.
+
+- **A page opens once per version.** On the first session start after an install or an update, where
+  a browser can appear, Baton opens a local page: this install's ID with a copy button, the notes of
+  this version, and the buttons. Over SSH, on Linux with no display, in an SDK or CI run, or with
+  `BATON_NO_BROWSER=1` nothing opens and the line at the top carries the link (`🆕 page: ...`) until
+  a session can open it. The link goes to that line only, never to the agent.
+- **"Update Baton" is a button.** As a plugin, a click runs Claude Code's own two commands
+  (`claude plugin marketplace update <catalog>`, then `claude plugin update baton@<catalog>`) and says
+  to restart the session. Nothing runs without the click. Installed by script or as a Gemini or Codex
+  clone, the page shows how that install is updated and runs nothing.
+- **Friend invitations, with no server.** "Invite a friend" makes a code, with an optional text of up to
+  140 characters, signed with the install's key; you send it yourself, by any channel. Your friend
+  pastes it, sees your ID and text, and accepts or ignores (ignoring tells nobody). Accepting makes a
+  reply code; you paste it, and only then are you friends on both sides. A changed text, a key that does
+  not give the ID claimed, a signature in another namespace or a reply to an invitation you did not make
+  is refused. The agent hears how many invitations wait, never their text. Without a browser:
+  `tools/baton_page.py --invite "text"` and `--accept CODE`.
+- **The page is served by a small program that ships with Baton** (`tools/baton_page.py`, Python's own
+  library only). It listens on 127.0.0.1 only, on a port the system picks, and answers only requests
+  carrying a random 128-bit key from its link, with the right `Host`, and no other site's `Origin`.
+  One per install; it stops after 30 minutes without use.
+- **Not checked:** a real browser opened by a real session (the tests use a stand-in opener), the
+  update button against Claude Code's real `claude plugin` commands (tested with a stand-in `claude`),
+  Windows and macOS (the detached start, the opener and `ssh-keygen` signing there were not run), and
+  that `claude -p` marks itself non-interactive with `CLAUDE_CODE_ENTRYPOINT=sdk-...`.
+
 **v3.42.0** — an ID of its own above the board, and a weekly reminder to check for a newer version
 
 Installed as a plugin, Baton never said a word about new versions: the hooks make no network request

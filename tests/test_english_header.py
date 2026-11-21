@@ -173,7 +173,7 @@ def test_a_task_waiting_on_the_human_is_on_the_board_as_ours(tmp_path):
         "priority: medium\n---\n\n## 2026-11-16 16:34 — Draft criteria table (v1)\n", "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
+    env.update(BATON_PAGE="off", HOME=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
                BATON_LOGBOOK="LOGBOOK.md", BATON_SESSION_STATE=str(tmp_path / "s.json"),
                BATON_STATE_DIR=str(tmp_path / "state"))
     (tmp_path / "home" / ".claude").mkdir(parents=True)

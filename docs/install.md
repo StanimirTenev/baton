@@ -101,6 +101,9 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
     release. The hooks do not check for a newer version themselves, so **as a plugin they make
     no network request at all.** Instead, since v3.42.0, once a week the agent reminds you to
     run the two update commands yourself (the first session after install only marks the day).
+    Since v3.43.0 the same two commands are a button: **Update Baton** on
+    [Baton's page](../README.md#the-page-and-friends), which opens by itself once per version.
+    They run only when you click it.
 - **Installed both ways** (script and plugin), every hook would run twice. The plugin's copy
   notices the script's entries in `settings.json`, stands down, and at each session start says
   which to remove, until one is.
@@ -211,6 +214,11 @@ With it on, a newer release is named at session start with what changed and the 
 update. Nothing is installed on its own: the hooks run in every session, and code that replaced
 itself unasked would put whoever controlled the repository into every one of them. A check that
 fails says so, and tries again the next day.
+
+Since v3.43.0 [Baton's page](../README.md#the-page-and-friends) opens once per version. For a script
+install its **Update Baton** card runs nothing: it shows the same command (`git pull` in the
+repository, then the installer). The page's program, `tools/baton_page.py`, stays in the repository
+the installer recorded as `repo`, like the other tools; the installer copies only the hooks.
 
 ### After a week: one question
 

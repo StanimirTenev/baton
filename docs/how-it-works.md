@@ -23,7 +23,7 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.42.0]
+[baton:board v3.43.0]
 Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
 
 ⏳ Waiting on YOU / can continue now:
@@ -826,6 +826,51 @@ display, session bus, `BROWSER`); nothing else from the session's environment is
 terminal board is translated by the agent, and nobody translates a file opened in a browser.
 English is the default. The idea came from
 [answer-me-with-html](https://github.com/QingYunA/answer-me-with-html).
+
+## The page: opened once per version
+
+Unlike the board, this one opens by itself, once for each version: new features are shown rather
+than learned as commands. At `startup` or `resume`, when the state file has no
+`page_opened_version` equal to the running version, SessionStart runs
+`tools/baton_page.py --ensure`, which reuses the install's page server or starts one detached (its
+own session on Linux and macOS; `DETACHED_PROCESS`, a new process group and no window on Windows),
+waits until it answers, and opens the link with the system's opener. The opener's output goes
+nowhere, and so does the server's: the hook's output stays one JSON object. The state key is set
+only after the opener started and did not fail; if the state file cannot be written, nothing opens,
+because an open that cannot be remembered would come every session. `whats_new_notice()` keeps its
+own key (`seen_version`) and stays silent on a fresh install; the page opens on a fresh install too.
+
+No browser where it could not be seen: not with `SSH_CONNECTION` or `SSH_TTY` set, not with `CI` set,
+not when `CLAUDE_CODE_ENTRYPOINT` starts with `sdk` (SessionStart's input says nothing about whether
+the session is interactive, so this is the environment's word; that `claude -p` sets it so was not
+checked in a real run), on Linux not without `DISPLAY` or
+`WAYLAND_DISPLAY`, and never with `BATON_NO_BROWSER=1`. Then the line at the top of the session ends
+in `· 🆕 page: <link>`, every session start, until one opens it. `BATON_PAGE=off` turns the whole page
+off: no server, no link.
+
+The link holds a random 128-bit key and goes to that line (`systemMessage`) only, never into the
+agent's context. The server, `tools/baton_page.py --serve`, binds 127.0.0.1 on a port the system
+picks, and answers only:
+
+- the page itself at `/<key>/`;
+- `/api/...` with the key in the `X-Baton-Ticket` header, a `Host` of exactly `127.0.0.1:<port>`
+  (a page on another name that resolves to this machine is refused), and for a POST, `Content-Type:
+  application/json` and no `Origin` or `Sec-Fetch-Site` of another site.
+
+The page loads nothing from anywhere (`default-src 'none'`, `connect-src 'self'` for its own
+buttons), sends no referrer, and puts every string from the server on screen as text, never as
+HTML. One server per install: `baton.page.json` beside the identity folder holds its pid, port,
+version and key; a lock taken with `O_EXCL` lets one of two sessions starting at once start it,
+and the other uses it. A server of another version gives way to the new one. It stops after 30
+minutes without a request (`BATON_PAGE_IDLE` seconds). Its environment is a fixed list
+(`PAGE_ENV` in `hooks/_baton.py`): the board's names, Claude Code's config folder for the update
+button, the identity folder, and a proxy with its certificates.
+
+Invitations and replies are signed and checked with `ssh-keygen -Y sign` / `-Y verify` in the
+`baton-invite` namespace, over the exact bytes the code carries. As the probe of 21.11.2026 found:
+an old `.sig` is removed before signing, `ssh-keygen` gets no input, the message reaches `-Y verify`
+from a file and its output goes to a file, with a time limit; lines are `\n`. How pairing works and
+what it does not protect: [the README](../README.md#the-page-and-friends).
 
 ## A free check of the memory index
 

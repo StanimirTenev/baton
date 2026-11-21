@@ -31,7 +31,7 @@ def _run(tmp_path, state=None):
         st.write_text(json.dumps(state), "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(home), BATON_HOME=str(tmp_path / "tasks"), BATON_SESSION_STATE=str(st))
+    env.update(BATON_PAGE="off", HOME=str(home), BATON_HOME=str(tmp_path / "tasks"), BATON_SESSION_STATE=str(st))
     out = subprocess.run([sys.executable, str(HOOK)], input=b'{"source":"startup"}',
                          capture_output=True, env=env)
     assert out.returncode == 0, out.stderr
@@ -41,10 +41,10 @@ def _run(tmp_path, state=None):
 def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
-    assert "Once a week the agent reminds you to check." in ctx   # a lead
-    for lead in ("Every Baton has its own ID, shown above the board.",
-                 "Installed by script, nothing changes",
-                 "Tried on two machines.",
+    assert "A page opens once per version." in ctx   # a lead
+    for lead in ('"Update Baton" is a button.',
+                 "Friend invitations, with no server.",
+                 "The page is served by a small program that ships with Baton",
                  "Not checked:"):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx
@@ -69,6 +69,6 @@ def test_a_fresh_install_is_not_told_it_was_updated(tmp_path):
 
 def test_the_notes_come_from_the_changelog_section_of_this_version():
     leads = hook.release_leads(NOW)
-    assert leads and leads[0].startswith("Once a week the agent reminds you to check")
+    assert leads and leads[0].startswith("A page opens once per version")
     assert all(len(x) < 200 for x in leads)
     assert hook.release_leads("0.0.1") == []

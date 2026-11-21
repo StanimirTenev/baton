@@ -20,7 +20,7 @@ def _run(tmp_path):
     (tmp_path / "tasks").mkdir(exist_ok=True)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(home), BATON_HOME=str(tmp_path / "tasks"),
+    env.update(BATON_PAGE="off", HOME=str(home), BATON_HOME=str(tmp_path / "tasks"),
                BATON_SESSION_STATE=str(tmp_path / "s.json"))
     out = subprocess.run([sys.executable, str(HOOK)], input=b'{"source":"startup"}',
                          capture_output=True, env=env)

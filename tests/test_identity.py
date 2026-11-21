@@ -17,7 +17,7 @@ def _run(tmp_path, source="startup", path=None):
     (tasks / "DNEVNIK.md").write_text('---\nstate: active\nturn: "us"\nnext: "x"\n---\n', "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(tmp_path / "home"), USERPROFILE=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
+    env.update(BATON_PAGE="off", HOME=str(tmp_path / "home"), USERPROFILE=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
                BATON_SESSION_STATE=str(tmp_path / "s.json"), BATON_LOGBOOK="DNEVNIK.md")
     if path is not None:
         env["PATH"] = path

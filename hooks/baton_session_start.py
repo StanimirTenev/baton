@@ -204,7 +204,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.42.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
+BATON_VERSION = "3.43.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -596,6 +596,25 @@ def _version(tag: str) -> tuple:
     return tuple(int(x) for x in re.findall(r"\d+", tag)[:3])
 
 
+def plugin_catalog() -> str:
+    """The catalog this plugin was installed from: its folder in Claude Code's plugin cache is
+    <cache>/<catalog>/baton/<version>. Outside the cache (a --plugin-dir run), "baton"."""
+    root = Path(os.environ["CLAUDE_PLUGIN_ROOT"])
+    try:
+        root.resolve().relative_to((claude_dir() / "plugins" / "cache").resolve())
+        return root.resolve().parent.parent.name
+    except ValueError:
+        return "baton"
+
+
+def script_how(repo) -> str:
+    """How a script install is updated: the repository it was installed from, pulled, and the
+    installer run again."""
+    return (f"`cd {repo} && git pull && {'install.cmd' if os.name == 'nt' else './install.sh'}`"
+            if repo and Path(repo).is_dir() else
+            "download it from the release page and run the installer again")
+
+
 def plugin_update_reminder(today: date) -> str | None:
     """Once a week as a plugin: remind the human to check for a newer Baton. No network.
 
@@ -616,12 +635,7 @@ def plugin_update_reminder(today: date) -> str | None:
         return None                 # a reminder that cannot be remembered would come every session
     if last is None:
         return None
-    root = Path(os.environ["CLAUDE_PLUGIN_ROOT"])
-    try:
-        root.resolve().relative_to((claude_dir() / "plugins" / "cache").resolve())
-        catalog = root.resolve().parent.parent.name
-    except ValueError:
-        catalog = "baton"
+    catalog = plugin_catalog()
     return (f"🔔 A week has passed: remind the human, in one line in their language, to check for a "
             f"newer Baton (this session runs v{BATON_VERSION}): `claude plugin marketplace update "
             f"{catalog}` then `claude plugin update baton@{catalog}`, and a restart of the session. "
@@ -695,9 +709,7 @@ def update_notice(today: date) -> str | None:
     latest = state.get("latest")
     if not latest or _version(latest) <= _version(BATON_VERSION):
         return None
-    how = (f"`cd {repo} && git pull && {'install.cmd' if os.name == 'nt' else './install.sh'}`"
-           if repo and Path(repo).is_dir() else
-           "download it from the release page and run the installer again")
+    how = script_how(repo)
     return (f"⬆️ Baton {latest} is out; this machine runs v{BATON_VERSION}. Tell the human what "
             f"changed ({state.get('url') or 'the release page'}) and how to update: {how}. "
             "Never update without their yes.")
@@ -2178,6 +2190,125 @@ def id_line() -> str | None:
     return f"🪪 This Baton's ID: {ident}" if ident else None
 
 
+# -- The page (v3.43.0): this install's ID, what is new, "Update Baton", friends --------------
+#
+# tools/baton_page.py serves it on 127.0.0.1 with a random key in the link. Opened once per
+# version, on the first session start where a browser can appear; until then the top line
+# carries the link. The link goes to the human's line only, never to the agent's context: its
+# buttons are the human's. Of the invitations the agent hears a count, never the text.
+PAGE_LINE: list = []
+
+
+def page_tool() -> Path | None:
+    """tools/baton_page.py beside the hooks (plugin, linked extension, clone) or in the repository
+    a script install recorded as `repo`, as entry_tool() finds its tool."""
+    repo = _local().get("repo")
+    for base in (Path(__file__).resolve().parent.parent, Path(repo).expanduser() if repo else None):
+        if base is not None and (base / "tools" / "baton_page.py").is_file():
+            return base / "tools" / "baton_page.py"
+    return None
+
+
+def install_kind(own: dict) -> str:
+    if plugin():
+        return "plugin"
+    found = _baton.host(own) if _baton else "unknown"
+    return found if found in ("gemini", "codex") else "script"
+
+
+def update_how(kind: str) -> str:
+    """What the page says for an install it cannot update with a click."""
+    clone = Path(__file__).resolve().parent.parent
+    if kind in ("gemini", "codex"):
+        return (f"`git -C {clone} pull`: the hooks run from that folder, so the next session runs "
+                f"the new version. Read what changed first: `git -C {clone} log -p`.")
+    return script_how(_local().get("repo")) + ", then start a new session."
+
+
+def browser_here(env, platform: str) -> bool:
+    """A browser can appear for a human: not switched off (BATON_NO_BROWSER), not over SSH, not
+    CI or an SDK run (Claude Code's CLAUDE_CODE_ENTRYPOINT starts with "sdk" there; SessionStart's
+    input has no field for it), and on Linux a display."""
+    if env.get("BATON_NO_BROWSER", "") not in ("", "0"):
+        return False
+    if env.get("SSH_CONNECTION") or env.get("SSH_TTY") or env.get("CI"):
+        return False
+    if str(env.get("CLAUDE_CODE_ENTRYPOINT", "")).startswith("sdk"):
+        return False
+    if platform.startswith("win") or platform == "darwin":
+        return True
+    return bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
+
+
+def invitations_waiting(part: str = "incoming") -> int:
+    """Invitations pasted on the page and not yet decided ("incoming"), or made here and waiting
+    for a reply ("invites"): a number, nothing else."""
+    try:
+        data = json.loads((identity_dir() / "friends.json").read_text("utf-8"))
+        return len(data.get(part) or {}) if isinstance(data, dict) else 0
+    except Exception:
+        return 0
+
+
+def page_step(own: dict) -> str | None:
+    """Start the page once per version and open it; fill PAGE_LINE. Returns the agent's notice
+    (a count of invitations) or None. BATON_PAGE=off: nothing at all (the tests' switch)."""
+    if os.environ.get("BATON_PAGE", "") == "off":
+        return None
+    tool = page_tool()
+    notice = None
+    n, sent = invitations_waiting(), invitations_waiting("invites")
+    how = (f" When they ask for the Baton page, `{'python' if os.name == 'nt' else 'python3'} {tool} "
+           "--open` opens it (it prints no link)." if tool else "")
+    if n:
+        PAGE_LINE.append(f"👥 {n} invitation{'s' if n > 1 else ''} waiting")
+        notice = (f"👥 Baton: {n} friend invitation{'s are' if n > 1 else ' is'} waiting for the "
+                  "human's decision on the Baton page. Its text is for the human only and is not "
+                  "here. Tell them in one line, in their language." + how)
+    elif sent:
+        notice = (f"👥 Baton: {sent} friend invitation{'s' if sent > 1 else ''} the human made "
+                  f"wait{'' if sent > 1 else 's'} for a reply code, which they paste on the Baton page. "
+                  "Say nothing about it unless they bring it up." + how)
+    if own.get("source") not in ("startup", "resume") or tool is None or _baton is None:
+        return notice
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+    state = state if isinstance(state, dict) else {}
+    if state.get("page_opened_version") == BATON_VERSION:
+        return notice
+    want = browser_here(os.environ, sys.platform)
+    if want:
+        try:
+            _state_file().write_text(json.dumps(state), "utf-8")
+        except OSError:
+            want = False        # an open that cannot be remembered would come every session
+    kind = install_kind(own)
+    cmd = [sys.executable, str(tool), "--ensure", "--identity", str(identity_dir()),
+           "--version", BATON_VERSION, "--kind", kind, "--how", update_how(kind)]
+    if kind == "plugin":
+        cmd += ["--catalog", plugin_catalog()]
+    if want:
+        cmd.append("--open")
+    try:
+        got = json.loads(_baton.run_page(cmd) or b"{}")
+    except Exception:
+        return notice           # a page that cannot start must not cost the board
+    url = got.get("url") if isinstance(got, dict) else None
+    if not isinstance(url, str) or not url.startswith("http://127.0.0.1:"):
+        return notice
+    if got.get("opened"):
+        state["page_opened_version"] = BATON_VERSION
+        try:
+            _state_file().write_text(json.dumps(state), "utf-8")
+        except OSError:
+            pass
+        return notice
+    PAGE_LINE.append(f"🆕 page: {url}")
+    return notice
+
+
 def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
                root: Path | None = None, twice: bool = False, plain: int = 0) -> str:
     """The one line the human sees in the terminal at session start. English, because the hook
@@ -2253,6 +2384,8 @@ def _emit(context: str | None, line: str | None = None, block: str = "board") ->
                            "the human's own Baton number, given only to people they trust.)\n\n"
                            + context)
             line = ident + (" · " + line if line else "")
+    if block == "board" and PAGE_LINE:
+        line = " · ".join(([line] if line else []) + PAGE_LINE)   # the human's line only
     text = "\n\n".join(t for t in (_marked(block, context), _marked("rules", plugin_rules()))
                        if t)
     out: dict = {}
@@ -2379,6 +2512,12 @@ def main() -> int:
     # install's first session stacked the two (clean-install probe, 24.10).
     notices += [n for n in (asked, lessons_notice(), None if asked else review_notice(),
                             feedback_notice(date.today())) if n]
+    try:
+        page = page_step(own)   # after every other writer of the state file
+    except Exception:
+        page = None             # the page is a courtesy; never a reason to fail the session
+    if page:
+        notices.append(page)
     folders = task_folders(root) if root.is_dir() else []
     if root.is_dir():
         try:

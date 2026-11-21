@@ -153,7 +153,65 @@ folder; Baton checks that the record is newer than the work.
 - [Gemini CLI](gemini/README.md) -- the same hooks as a Gemini CLI extension: setup, the doctor, what does not run there
 - [Languages](hooks/lang/README.md) -- the words the hooks recognise, one file per language
 
-Below: [The ledger](#the-ledger-an-older-entry-edited-is-seen), [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](CHANGELOG.md).
+Below: [The page and friends](#the-page-and-friends), [The ledger](#the-ledger-an-older-entry-edited-is-seen), [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](CHANGELOG.md).
+
+## The page and friends
+
+On the first session start of each version (after an install or an update) Baton opens a page of
+its own in your browser: this install's ID with a copy button, what is new in this version, an
+**Update Baton** button, and your friends. Where no browser can appear (over SSH, Linux without a
+display, an SDK or CI run, or `BATON_NO_BROWSER=1`) nothing opens; the line at the top of the
+session carries the link instead, `🆕 page: http://127.0.0.1:<port>/<key>/`, until a session can
+open it. The link is on that line only: the agent never gets it, because the page's buttons are yours.
+
+The page is served by `tools/baton_page.py`, which ships with Baton (Python's own library only). It
+listens on 127.0.0.1 only, on a port the system picks, and answers only a request that carries the
+random 128-bit key from its link, a `Host` of `127.0.0.1:<port>` and no other site's `Origin`.
+**That key stops other web pages in your browser from pressing the buttons; it does not stop a
+program running on this machine as you**, which can read the key from the state file. One server per
+install, reused by every session; it stops by itself after 30 minutes without a request.
+
+**Update Baton.** As a plugin, a click runs Claude Code's own two commands, `claude plugin
+marketplace update <catalog>` and `claude plugin update baton@<catalog>`, shows their output and asks
+you to restart the session. Nothing runs without the click. Installed by script, or as a Gemini or
+Codex clone, the page shows how that install is updated and runs nothing.
+
+**Friends.** There is no server and no directory: an invitation is a code you send yourself.
+
+1. **Invite a friend** makes a code with your ID, your public key, an optional text of up to 140
+   characters, the time and a random number, signed with this install's key
+   (`ssh-keygen -Y sign -n baton-invite`). Send it by any channel: a message, a mail, in person.
+2. Your friend pastes it into their page. Their Baton checks the signature against the key in the
+   code and that the key gives the ID it claims, then shows your ID and text, as plain text, links not
+   clickable. **Accept** or **Ignore**; ignoring tells nobody.
+3. Accepting makes a reply code for you, signed the same way and naming your invitation. Until you
+   paste it, their page shows you as "waiting for them".
+4. You paste the reply. It must answer an invitation made on your install and still waiting; each is
+   used once. Now you are friends on your side too.
+
+**Remove** stops new things only: what a friend already has stays with them. The agent hears how many
+invitations wait (`👥 1 invitation waiting`), never their text. Without a browser:
+
+```
+python3 tools/baton_page.py --invite "Hi, it's Ana"   # prints an invitation code
+python3 tools/baton_page.py --accept CODE             # accept an invitation (prints the reply), or take in a reply
+python3 tools/baton_page.py --open                    # open the page; the link is not printed
+python3 tools/baton_page.py --serve --no-open         # run the page here and print its link, for a demo
+```
+
+`--accept` does not print an invitation's text; the page shows it. The server stops after 30 minutes
+without use; `--open` starts it again, and while invitations wait the agent is told that command
+(never the link), so "open the Baton page" is enough. What pairing does **not** protect:
+
+- **The ID is 60 bits**, short so it can be read aloud. The code carries the whole key, and the ID is
+  checked against it, but compare IDs over a channel you trust: someone who can change the code on its
+  way can put in their own.
+- **Your friend's agent is your friend's.** Whatever of yours reaches their machine (in later versions,
+  the entries of a shared task) their agent may read and send to its own provider, under their account.
+- **On disk the text is plain.** `friends.json` is readable by any program running as you, the
+  agent's own tools included; Baton only never puts it in the agent's context.
+- The signature says who made a code, not that its text is safe. Friends exist only on this page in
+  v3.43.0: nothing else uses them yet.
 
 ## The ledger: an older entry edited is seen
 
@@ -186,7 +244,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.42.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.43.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -205,6 +263,8 @@ there and asks nothing of Claude's memory or of any service.
 |---|---|
 | your task root | the root itself, if it is missing, at the first session |
 | `~/.claude/baton/identity/baton_ed25519` (+ `.pub`) | since v3.42.0: this install's own key, made once by `ssh-keygen` (Ed25519, no passphrase, readable only by you). Its short fingerprint, `BTN-XXXX-XXXX-XXXX`, is the ID shown above the board at every start and `/clear` -- the number you give to people you trust, for tasks shared between them (still being built). Nothing is sent anywhere. Delete the folder and a new ID is made; `BATON_IDENTITY` points it elsewhere |
+| `~/.claude/baton/baton.page.json` (beside the identity folder) | since v3.43.0: the page server's pid, port, version and the random key of its link, readable only by you; written when it starts, removed when it stops. Beside it `baton.page.lock` for a moment while a server starts |
+| `~/.claude/baton/identity/friends.json` | since v3.43.0: your friends (ID, public key, whether both sides accepted, the text of their invitation), the invitations you made that wait for a reply, and those pasted on the page and not yet decided; `friends.lock` beside it while it is written |
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear`. Beside it a `.gitignore` of `*` (since v3.39.0), so a task root that is a git repository never takes it |
 | `<task folder>/<logbook>` | only when a turn ends on an API error (StopFailure, since v3.40.0): one entry, `turn ended on <error>`, with the files written in that turn, in the logbook of the one task folder the turn worked in. Never in a folder it cannot tie the turn to |
@@ -224,6 +284,8 @@ The hooks never write a logbook; the agent does, and you can read every entry. W
   last 2,500 characters of the kept conversation with the path to the rest, notices about
   Baton itself, and, when the ledger differs from the logbooks, the folders and headings of the
   entries that did; as a plugin also Baton's rules, the text of `templates/CLAUDE.md` shipped with it (with the task root, the logbook name and the path of `tools/baton_entry.py` filled in);
+- at session start, when invitations pasted on the page wait for your decision: how many, never
+  their text and never the page's link;
 - when a message names a task: which task, the date of its last entry, its next step, and that
   the logbook is to be read first;
 - before a write: a note when a new or changed logbook heading carries a typed hour, with the
@@ -238,11 +300,15 @@ and no instruction is fetched from anywhere. As a plugin the hooks make no netwo
 review tools you run by hand send the text under review, as the table below says. Installed
 by script, the opt-in weekly update check fetches the latest release number and its page
 address, and only those two go into a fixed sentence; see the table below. Besides a test command
-you pinned yourself, the one command the hooks run that is not their own is `ssh-keygen`, once,
-to make this install's key (below).
+you pinned yourself, the commands the hooks run that are not their own are `ssh-keygen`, once,
+to make this install's key (below), and, on the first session start of a version, the browser
+opener of the system (`xdg-open`, `open`, or Windows' own) to open [the page](#the-page-and-friends).
+The page's server is Baton's own `tools/baton_page.py`; it runs `ssh-keygen -Y sign` and `-Y verify`
+for invitations, and `claude plugin marketplace update` and `claude plugin update` only when you
+click **Update Baton**.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.42.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.43.0.
 
 ## What Baton sends over the network
 
@@ -250,14 +316,16 @@ Baton's state folder. Keeping the conversation has no switch to turn it off in v
 |---|---|---|
 | the hooks, installed as a plugin | never (once a week they only remind you to check for a newer version yourself) | -- |
 | the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
+| the page's server, `tools/baton_page.py` | listens while it runs (from the first session start of a version until 30 minutes without use); it sends nothing | nowhere: it listens on 127.0.0.1 only, and answers only requests that carry the random key from its link. The key stops other web pages; it does not stop programs on this machine running as you |
+| **Update Baton** on the page, as a plugin | only when you click it | Claude Code's own `claude plugin` commands fetch the catalog and the new version, as they do when you type them |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
 | `tools/baton_ledger.py push`, `verify --remote` | when you run them, and only after you added a remote to the ledger's repository | that remote, by git -- the ledger: the task root (`~/...` under home), folder names, entry headings, times, hashes, ack reasons, and commit messages naming folders |
 | `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; anything holding a word listed in `review_confidential` (in its path or its text) is held back before anything is sent |
 
 `tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
 schedule except the opt-in update check above. Besides `ssh-keygen`, run once on this machine to
-make the install's key (no network), the one command the hooks run that is not their
-own is a test command **you** pinned in `baton.local.json` (lesson L4, since v3.21.0): run on this
+make the install's key (no network), and the system's browser opener for the page, the one command
+the hooks run that is not their own is a test command **you** pinned in `baton.local.json` (lesson L4, since v3.21.0): run on this
 machine after a turn whose entry says tests pass, and never without that pin.
 
 What the hooks read, write and hand to the agent, all on this machine, is in
@@ -282,7 +350,8 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   of a key pasted into a message -- is in `hooks/_baton.py`, which makes no network request.
   The session hook's one network request is the opt-in update check (`update_notice`): a GET
   for the latest release number on GitHub that sends nothing of the user's, never made as a
-  plugin. `plugin.json` reads nothing: its description only says that the review tools send
+  plugin. Since v3.43.0 it also starts `tools/baton_page.py`, which listens on 127.0.0.1 and
+  sends nothing; its environment is built in `hooks/_baton.py` from a fixed list (`PAGE_ENV`). `plugin.json` reads nothing: its description only says that the review tools send
   text to OpenRouter, and it was flagged the same way from v3.15.0, when it did not mention
   OpenRouter at all. A `userConfig` option would not reach these tools -- Claude Code hands
   plugin options to hook processes, and these tools are run by hand.

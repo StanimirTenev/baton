@@ -68,7 +68,7 @@ def _start(tmp_path, source: str = "startup") -> str:
                    + "\n", "utf-8")
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(home), BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
+    env.update(BATON_PAGE="off", HOME=str(home), BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
                CLAUDE_PLUGIN_ROOT=str(ROOT), CLAUDE_PLUGIN_DATA=str(tmp_path / "data"),
                BATON_SESSION_STATE=str(tmp_path / "s.json"),
                BATON_BODY_STATE=str(tmp_path / "bodies.json"),
@@ -144,7 +144,7 @@ def test_the_prompt_hook_records_the_claude_process_it_runs_under(tmp_path):
     under a process named claude, and stays as it was otherwise."""
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("BATON_", "CLAUDE_PLUGIN", "CLAUDE_CONFIG_DIR"))}
-    env.update(HOME=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
+    env.update(BATON_PAGE="off", HOME=str(tmp_path / "home"), BATON_HOME=str(tmp_path / "tasks"),
                CLAUDE_PLUGIN_ROOT=str(ROOT), CLAUDE_PLUGIN_DATA=str(tmp_path / "data"),
                BATON_SESSION_STATE=str(tmp_path / "s.json"))
     out = subprocess.run([sys.executable, str(ROOT / "hooks" / "baton_prompt.py")],
