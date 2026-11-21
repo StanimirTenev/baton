@@ -10,10 +10,12 @@ networks one button hands the code to WhatsApp or mail. No server of ours, no ou
 
 - **An invitation for a Baton ID waits in your box.** "Invite a friend" takes their Baton ID, an
   optional nickname and the note. The invitation now names that ID (`to`, a v2 code) and waits on
-  this machine, in a box the page server opens on port 47800 while such an invitation waits, and
-  closes when none does. The box answers two calls only: a fetch, which gives an ID the invitations
+  this machine, in a box the page server opens on port 47800 while such an invitation waits (7 days
+  at most, shown on the page; Cancel ends it sooner), and closes when none does, or when the server
+  stops after 30 minutes without use. The box answers two calls only: a fetch, which gives an ID the invitations
   addressed to it after a proof that the caller holds that ID's key (`ssh-keygen -Y sign -n
-  baton-box` over the ID and the time, within 5 minutes, each proof once), and a reply. Never the
+  baton-box` over the ID, the box's own ID and the time, within 5 minutes, each proof once and good
+  at that box only), and a reply. Never the
   page or its buttons. At most 30 requests a minute from one address and 10 for one ID.
 - **On one network nothing is typed.** While it is open the box says on the local network, every 5
   s, "a Baton box, this ID, this port" (UDP broadcast); an open page hears it and shows
@@ -34,8 +36,7 @@ networks one button hands the code to WhatsApp or mail. No server of ours, no ou
   as "nickname (BTN-...)". Up to 40 characters of plain text, kept in `friends.json` only: never sent,
   never in a code, never in the agent's context.
 - **The hooks still make no network request.** Only the page server listens on the box and talks to
-  a friend's box, and the open page's look every 15 s does not count as use. While the box is open the
-  page server does not stop for idleness.
+  a friend's box, and the open page's look every 15 s does not count as use.
 - **Not checked:** two real machines on a real network (the tests and the probe ran on 127.0.0.x on one
   machine), a router or Wi-Fi that drops broadcasts, the firewall prompt on Windows and macOS when the
   box first listens, Windows at all, the page's JavaScript in a browser (it was only parsed, with

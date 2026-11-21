@@ -47,20 +47,20 @@ def _free(kind=socket.SOCK_STREAM):
         return s.getsockname()[1]
 
 
-def _env(tmp_path, name, box="off", udp=None):
+def _env(tmp_path, name, box="off", udp=None, idle="60"):
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
     env = {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "USERPROFILE": str(home),
            "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""), "BATON_IDENTITY": str(tmp_path / name / "identity"),
-           "BATON_PAGE_IDLE": "60", "BATON_BOX": box, "BATON_BOX_UDP": str(udp or _free(socket.SOCK_DGRAM))}
+           "BATON_PAGE_IDLE": idle, "BATON_BOX": box, "BATON_BOX_UDP": str(udp or _free(socket.SOCK_DGRAM))}
     return env
 
 
 class Page:
     """A page server of one install, reached by its key."""
 
-    def __init__(self, tmp_path, name, box="off", udp=None):
-        self.env = _env(tmp_path, name, box, udp)
+    def __init__(self, tmp_path, name, box="off", udp=None, idle="60"):
+        self.env = _env(tmp_path, name, box, udp, idle)
         out = subprocess.run([sys.executable, str(TOOL), "--ensure", "--version", "9.9.9"],
                              capture_output=True, env=self.env, timeout=60)
         assert out.returncode == 0, out.stderr
@@ -122,11 +122,11 @@ def inviter(tmp_path):
     return a
 
 
-def _proof(page, t=None, ns=None):
+def _proof(page, box_id, t=None, ns=None):
     ident, pub, _ = page.my_key()
     t = int(time.time()) if t is None else t
     return {"id": ident, "pub": pub, "time": str(t),
-            "sig": page.sign(f"baton-box\n{ident}\n{t}\n".encode(), ns or page.BOX_NS)}
+            "sig": page.sign(f"baton-box\n{ident}\n{box_id}\n{t}\n".encode(), ns or page.BOX_NS)}
 
 
 def _parts(code):
@@ -187,13 +187,13 @@ def test_a_fetch_gives_each_id_only_its_own_invitations(inviter, page):
     host, port = inviter.box
     for who, ident, want in (("b", bob, "for b"), ("c", cid, "for c")):
         page.use(who)
-        status, got = _post(host, port, "/box/v1/fetch", _proof(page))
+        status, got = _post(host, port, "/box/v1/fetch", _proof(page, inviter.id))
         assert status == 200 and len(got["codes"]) == 1, got
         payload = json.loads(_parts(got["codes"][0])["m"])
         assert payload["to"] == ident and payload["text"] == want
         assert "ZEBRA" not in json.dumps(got)                                  # nicknames stay home
     page.use("d")
-    assert _post(host, port, "/box/v1/fetch", _proof(page))[1]["codes"] == []
+    assert _post(host, port, "/box/v1/fetch", _proof(page, inviter.id))[1]["codes"] == []
     assert did
 
 
@@ -205,25 +205,29 @@ def test_a_fetch_without_a_valid_proof_is_refused(inviter, page):
     assert fetch({}) == 400
     assert fetch({"id": bob}) == 400
     page.use("c")
-    assert fetch(dict(_proof(page), id=bob)) == 403                         # c's proof, b's ID
+    assert fetch(dict(_proof(page, inviter.id), id=bob)) == 403                         # c's proof, b's ID
     t = int(time.time())
     _, cpub, _ = page.my_key()
     claim = {"id": bob, "pub": cpub, "time": str(t),                        # c's key signs for b's ID
-             "sig": page.sign(f"baton-box\n{bob}\n{t}\n".encode(), page.BOX_NS)}
+             "sig": page.sign(f"baton-box\n{bob}\n{inviter.id}\n{t}\n".encode(), page.BOX_NS)}
     status, got = _post(host, port, "/box/v1/fetch", claim)
     assert status == 403 and "ID" in got["error"], got
     page.use("b")
-    good = _proof(page)
+    good = _proof(page, inviter.id)
     page.use("c")
-    assert fetch(dict(good, sig=_proof(page, int(good["time"]))["sig"])) == 403   # b's key, c's signature
+    assert fetch(dict(good, sig=_proof(page, inviter.id, int(good["time"]))["sig"])) == 403   # b's key, c's signature
     page.use("b")
-    assert fetch(_proof(page, ns=page.NAMESPACE)) == 403                    # a real signature, another namespace
-    assert fetch(_proof(page, int(time.time()) - 400)) == 403              # old
-    assert fetch(_proof(page, int(time.time()) + 400)) == 403              # from the future
-    once = _proof(page, int(time.time()) + 30)
+    assert fetch(_proof(page, inviter.id, ns=page.NAMESPACE)) == 403                    # a real signature, another namespace
+    cid = page.use("c")
+    page.use("b")
+    status, got = _post(host, port, "/box/v1/fetch", page._proof(cid))     # b's real proof, for c's box
+    assert status == 403 and "verify" in got["error"], got
+    assert fetch(_proof(page, inviter.id, int(time.time()) - 400)) == 403              # old
+    assert fetch(_proof(page, inviter.id, int(time.time()) + 400)) == 403              # from the future
+    once = _proof(page, inviter.id, int(time.time()) + 30)
     assert fetch(once) == 200
     assert fetch(once) == 403                                               # replayed
-    assert fetch(_proof(page, int(time.time()))) == 403                     # older than the last used
+    assert fetch(_proof(page, inviter.id, int(time.time()))) == 403                     # older than the last used
 
 
 # -- reply: only a reply that answers an invitation waiting here, from its addressee --------
@@ -266,8 +270,8 @@ def test_too_many_requests_from_one_address_or_for_one_id(inviter, page):
     inviter.api("invite", {"text": "hi", "to": page.use("b")})
     host, port = inviter.box
     for _ in range(10):
-        assert _post(host, port, "/box/v1/fetch", page._proof())[0] == 200   # each a later time
-    assert _post(host, port, "/box/v1/fetch", page._proof())[0] == 429       # 10 a minute for one ID
+        assert _post(host, port, "/box/v1/fetch", page._proof(inviter.id))[0] == 200   # each a later time
+    assert _post(host, port, "/box/v1/fetch", page._proof(inviter.id))[0] == 429       # 10 a minute for one ID
     codes = [_post(host, port, "/box/v1/fetch", {})[0] for _ in range(25)]
     assert codes == [400] * 19 + [429] * 6                                   # 30 a minute from one address
 
@@ -470,3 +474,32 @@ def test_a_box_heard_nearby_is_not_asked_until_the_human_clicks(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_an_addressed_invitation_waits_7_days_then_the_box_closes(inviter, page):
+    bob = page.use("b")
+    inviter.api("invite", {"text": "hi", "to": bob})
+    st = inviter.api("state")
+    assert st["box"]["on"] and st["invites"][0]["expires"][:10] > st["invites"][0]["created"][:10]
+    f = Path(os.environ["BATON_IDENTITY"]).parent.parent / "a" / "identity" / "friends.json"
+    data = json.loads(f.read_text())
+    for v in data["invites"].values():
+        v["created"] = "2020-01-01T00:00:00+00:00"                          # made long ago
+    f.write_text(json.dumps(data))
+    host, port = inviter.box
+    assert _post(host, port, "/box/v1/fetch", _proof(page, inviter.id))[1]["codes"] == []
+    st = inviter.api("state")
+    assert st["invites"] == [] and st["box"]["on"] is False and _closed(host, port)
+
+
+def test_idleness_stops_the_server_and_its_box_even_while_an_invitation_waits(tmp_path, page):
+    port = _free()
+    a = Page(tmp_path, "a", box=f"127.0.0.2:{port}", idle="1")
+    a.api("invite", {"text": "hi", "to": page.use("b")})
+    assert not _closed("127.0.0.2", port)
+    end = time.time() + 20
+    while time.time() < end and (tmp_path / "a" / "baton.page.json").exists():
+        time.sleep(0.2)
+    assert not (tmp_path / "a" / "baton.page.json").exists() and _closed("127.0.0.2", port)
+    b = Page(tmp_path, "a", box=f"127.0.0.2:{port}")                      # opened again: the box too
+    assert b.api("state")["box"]["on"] is True and not _closed("127.0.0.2", port)

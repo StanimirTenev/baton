@@ -51,7 +51,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -499,6 +499,7 @@ BOX_PORT = 47800
 CODE_MAX = 8192
 ANSWER_MAX = 1 << 20
 SKEW = 300
+BOX_DAYS = 7             # an addressed invitation waits this long, then it is dropped
 
 
 def box_bind() -> tuple | None:
@@ -569,13 +570,18 @@ _PROOF = {"last": 0}
 _PROOF_LOCK = threading.Lock()
 
 
-def _proof() -> dict:
+def proof_text(ident: str, box_id: str, t: int) -> bytes:
+    """What a fetch proof signs: who asks, whose box it is for, and when. A box takes only proofs
+    for itself, so one box cannot reuse a proof at another."""
+    return f"{BOX_NS}\n{ident}\n{box_id}\n{t}\n".encode("ascii")
+
+
+def _proof(box_id: str) -> dict:
     ident, pub, _ = my_key()
     with _PROOF_LOCK:
         t = max(int(time.time()), _PROOF["last"] + 1)
         _PROOF["last"] = t
-    return {"id": ident, "pub": pub, "time": str(t),
-            "sig": sign(f"{BOX_NS}\n{ident}\n{t}\n".encode("ascii"), BOX_NS)}
+    return {"id": ident, "pub": pub, "time": str(t), "sig": sign(proof_text(ident, box_id, t), BOX_NS)}
 
 
 def share_links(kind: str, code: str) -> dict:
@@ -599,7 +605,7 @@ def fetch_from(their_id: str, host: str, port: int) -> dict:
     """Take the invitations `their_id`'s box holds for this install. Only invitations made by
     `their_id` are kept, each after read_code()'s checks."""
     their_id = _their_id(their_id)
-    got = _call(host, port, "fetch", _proof())
+    got = _call(host, port, "fetch", _proof(their_id))
     codes = got.get("codes") if isinstance(got.get("codes"), list) else []
     kept = refused = 0
     for code in codes[:20]:
@@ -626,10 +632,30 @@ def send_reply(ident: str) -> None:
             s["friends"][ident]["status"] = "mutual"
 
 
+def expires(created) -> str:
+    """When an addressed invitation made at `created` stops waiting ("" if unreadable)."""
+    try:
+        made = datetime.fromisoformat(str(created))
+    except ValueError:
+        return ""
+    return (made + timedelta(days=BOX_DAYS)).isoformat()
+
+
+def _expired(v: dict) -> bool:
+    end = expires(v.get("created"))
+    return bool(v.get("to")) and (not end or end <= _now())
+
+
 def waiting_for_box() -> int:
-    """Addressed invitations waiting here: the box is open while there is one."""
+    """Addressed invitations waiting here: the box is open while there is one. Those older than
+    BOX_DAYS are dropped first."""
     data = _read_json(friends_path()) or {}
     inv = data.get("invites") if isinstance(data.get("invites"), dict) else {}
+    if any(isinstance(v, dict) and _expired(v) for v in inv.values()):
+        with Store() as s:
+            for k in [k for k, v in s["invites"].items() if isinstance(v, dict) and _expired(v)]:
+                del s["invites"][k]
+            inv = dict(s["invites"])
     return sum(1 for v in inv.values() if isinstance(v, dict) and v.get("to"))
 
 
@@ -718,14 +744,14 @@ class Box(ThreadingHTTPServer):
             raise BoxRefused(403, "the ID is not the ID of the key")
         if not self.allow(("id", ident), 10):
             raise BoxRefused(429, "too many requests")
-        if not verify(f"{BOX_NS}\n{ident}\n{t}\n".encode("ascii"), sig, pub, BOX_NS):
+        if not verify(proof_text(ident, my_key()[0], t), sig, pub, BOX_NS):
             raise BoxRefused(403, "the proof does not verify")
         with self._mx:
             if t <= self._seen.get(ident, 0):
                 raise BoxRefused(403, "that proof was used already")
             self._seen[ident] = t
         with Store() as s:
-            codes = [v["code"] for v in s["invites"].values() if v.get("to") == ident]
+            codes = [v["code"] for v in s["invites"].values() if v.get("to") == ident and not _expired(v)]
             for v in s["invites"].values():
                 if v.get("to") == ident:
                     v["fetched"] = _now()
@@ -818,7 +844,8 @@ def friends_view() -> dict:
                     for k, v in sorted(part("friends").items())],
         "invites": [{"nonce": k, "text": clean(v.get("text", "")), "created": v.get("created"),
                      "code": v.get("code", ""), "to": v.get("to", ""),
-                     "nick": clean(v.get("nick", "")), "fetched": v.get("fetched", "")}
+                     "nick": clean(v.get("nick", "")), "fetched": v.get("fetched", ""),
+                     "expires": expires(v.get("created")) if v.get("to") else ""}
                     for k, v in part("invites").items()],
         "incoming": [{"nonce": k, "id": v.get("id"), "text": clean(v.get("text", "")),
                       "created": v.get("created"), "via": v.get("via", "paste")}
@@ -1025,6 +1052,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def _state(srv, data) -> dict:
     cfg = srv.cfg
+    srv.sync_box()                               # expired invitations go before they are listed
     try:
         ident = my_key()[0]
     except PageError:
@@ -1185,7 +1213,7 @@ class Server(ThreadingHTTPServer):
             time.sleep(min(5.0, limit / 4))
             self.sync_box()                      # a reply taken by the box, with no page open, closes it
             with self._mx:
-                quiet = self._busy == 0 and time.time() - self._last > limit and self.box is None
+                quiet = self._busy == 0 and time.time() - self._last > limit
             if quiet:
                 self.shutdown()
                 return
@@ -1470,7 +1498,7 @@ a.btn{text-decoration:none;color:inherit} a.btn.primary{color:#fff}
   <aside class="col left" id="left"></aside>
   <section class="col center" id="center"></section>
   <aside class="col right" id="right"></aside>
-  <div class="foot">Served by Baton on 127.0.0.1. It stops by itself after 30 minutes without use, but not while your box is open.</div>
+  <div class="foot">Served by Baton on 127.0.0.1. It stops by itself after 30 minutes without use, and your box with it.</div>
 </main>
 <div class="toast" id="toast" role="status"></div>
 <script>
@@ -1672,7 +1700,7 @@ function inviteCard(){
       const whom = v.to ? [" for ", v.nick ? el("b", null, v.nick) : null, v.nick ? " (" : "", el("span.mono", null, v.to), v.nick ? ")" : ""]
                         : (v.nick ? [" for ", el("b", null, v.nick)] : []);
       list.appendChild(el("div.pending", null,
-        el("div", null, "Invitation", ...whom, (v.fetched ? ", fetched by them," : "") + " waiting for a reply since " + (v.created || "").replace("T", " ").slice(0, 16) + (v.text ? ": " : ""), v.text ? el("span", null, v.text) : null),
+        el("div", null, "Invitation", ...whom, (v.fetched ? ", fetched by them," : "") + " waiting for a reply since " + (v.created || "").replace("T", " ").slice(0, 16) + (v.expires ? ", in your box until " + v.expires.slice(0, 10) : "") + (v.text ? ": " : ""), v.text ? el("span", null, v.text) : null),
         el("div.btns", null,
           shareButtons(v.share, "Invitation", true),
           el("button.btn.sm", {type: "button", on: {click: async () => { await api("cancel", {nonce: v.nonce}); toast("Invitation cancelled"); refresh(); }}}, "Cancel"))));
@@ -1747,7 +1775,7 @@ function renderRight(){
   const R = document.getElementById("right"); R.replaceChildren();
   const B = S.box, card = el("div.card", null, el("h2", null, icon("inbox"), "My box"));
   if (B.on) card.append(el("div.small", null, "Open to friends on this network while an invitation of yours waits."));
-  else card.append(el("div.small.muted", null, B.error ? "Closed: " + B.error : "Closed. It opens by itself while an invitation you addressed waits."));
+  else card.append(el("div.small.muted", null, B.error ? "Closed: " + B.error : "Closed. It opens by itself while an invitation you addressed waits (7 days at most) and this page's server runs."));
   for (const id of B.nearby || []) card.append(el("div.pending", null,
     el("div", null, el("span.mono", null, id), " (nearby) has a box open"),
     el("div.btns", null, el("button.btn.sm.primary", {type: "button", on: {click: async () => {

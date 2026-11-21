@@ -880,11 +880,13 @@ addressed invitation waits and `BATON_BOX` is not `off`, it opens a second `Thre
 404 to everything else; when none waits it closes it (the idle loop checks too, every few seconds,
 so a reply the box took with no page open closes it). While it is open, a thread sends
 `{"baton":"box","v":1,"id":...,"port":...}` every 5 s by UDP broadcast to port `BATON_BOX_UDP`
-(47800), and the page server does not stop for idleness.
+(47800). The server still stops after its idle time, and the box with it; the next start opens it
+again. An addressed invitation older than 7 days (`BOX_DAYS`) is dropped before the box decides or
+the page lists it.
 
 - `POST /box/v1/fetch {id, pub, time, sig}`: `sig` is `ssh-keygen -Y sign -n baton-box` over
-  `baton-box\n<id>\n<time>\n`. Checked: the shape, the time within 300 s, the key's ID is `id`,
-  the signature, and the time later than the last one this box took from that ID. The answer is the
+  `baton-box\n<id>\n<box's own ID>\n<time>\n`. Checked: the shape, the time within 300 s, the
+  key's ID is `id`, the signature over this box's own ID (a proof made for another box fails), and the time later than the last one this box took from that ID. The answer is the
   codes of the invitations whose `to` is `id`.
 - `POST /box/v1/reply {code}`: a reply (`kind` accept) of at most 8 KiB, read by `read_code()`: kept
   only if it answers an invitation waiting here whose `to` is the reply's maker.

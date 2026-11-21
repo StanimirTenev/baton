@@ -185,7 +185,9 @@ answers it. A code to copy by hand still works.
    the text, their ID, the time and a random number, signed with this install's key (`ssh-keygen -Y
    sign -n baton-invite`), and keeps it in your box. Without their ID you get the code to send
    yourself, in the form v3.43 reads.
-2. **Your box opens by itself** while an invitation with an ID waits, and closes when none does. The
+2. **Your box opens by itself** while an invitation with an ID waits and the page's server runs, and
+   closes when none waits. Such an invitation waits 7 days (the page shows until when; Cancel ends it
+   sooner), then it is dropped. The
    page server listens on port 47800 of this machine's addresses (`BATON_BOX=<ip>:<port>` to choose,
    `BATON_BOX=off` never), and every 5 s says on the local network, by UDP broadcast, "a Baton box,
    this ID, this port". On the same network your friend's page, while open, hears that and shows
@@ -197,7 +199,7 @@ answers it. A code to copy by hand still works.
    invitation**, which reads the clipboard on that click, or pastes into the box below it; the code
    is found inside whatever the messenger put around it (names, times, a mail's `> `).
 3. Their page fetches with a proof that it holds the key of the ID the invitation is for (`ssh-keygen
-   -Y sign -n baton-box` over that ID and the time, within 5 minutes, each proof used once). It checks
+   -Y sign -n baton-box` over that ID, your box's ID and the time, so it is good at your box only, within 5 minutes, each proof used once). It checks
    every code itself, never trusting the box: the signature against the key in the code, the key
    against the ID it claims, and that the invitation is for this install. It shows your ID and text, as
    plain text, links not clickable. **Accept** (with a nickname for you) or **Ignore**; ignoring tells
@@ -221,8 +223,8 @@ python3 tools/baton_page.py --serve --no-open         # run the page here and pr
 ```
 
 `--accept` does not print an invitation's text; the page shows it. The command line never opens the
-box or reaches one. The server stops after 30 minutes without use, but not while your box is open;
-`--open` starts it again, and while invitations wait the agent is told that command (never the link),
+box or reaches one. The server stops after 30 minutes without use, and closes your box with it;
+`--open` (or the next session start of a new version) starts it again, and the box with it, and while invitations wait the agent is told that command (never the link),
 so "open the Baton page" is enough.
 
 **What the box exposes.** To anyone who reaches the port: two calls, fetch and reply, and a 404 for
