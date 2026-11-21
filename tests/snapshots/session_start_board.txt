@@ -1,4 +1,7 @@
 [baton:board v<VERSION>]
+🪪 This Baton's ID: BTN-36NS-VS44-LYJZ
+(Show this line first, above the board, exactly as it is: the human's own Baton number, given only to people they trust.)
+
 The human has not seen this board -- only one line saying Baton is on. Whatever the human's first message is -- a greeting, a question or a task -- the first thing in your first reply is the WHOLE board, translated into the human's language; then answer them. Show every group and every line, nothing shortened or left out -- no summary, no merged lines, no "...and the rest", and the notes in parentheses too. Task names, file names, commands, fields in backticks and identifiers stay as they are.
 
 Baton — the tasks in <ROOT>, ordered by whose move it is and by priority:

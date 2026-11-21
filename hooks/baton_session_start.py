@@ -2118,6 +2118,52 @@ SHOW_BOARD = (
 )
 
 
+# -- The install's own ID: a passport number, shown above the board ---------------------------
+#
+# The first piece of shared tasks between trusted people (zadachi/baton-doverie, 21.11.2026):
+# every Baton has a number of its own, which its human gives to people they trust. The number
+# is a short fingerprint of an Ed25519 key made here once, by ssh-keygen, kept outside the
+# plugin's folder so an update or a reinstall keeps it. 12 base32 characters, 60 bits: short
+# because it is read aloud between people who trust each other; the full key travels apart.
+
+def identity_dir() -> Path:
+    return Path(os.environ.get("BATON_IDENTITY") or claude_dir() / "baton" / "identity")
+
+
+def own_id() -> str | None:
+    """`BTN-XXXX-XXXX-XXXX` for this install, the key made on first use. None without ssh-keygen."""
+    key = identity_dir() / "baton_ed25519"
+    pub = key.with_name(key.name + ".pub")
+    if not pub.is_file():
+        import shutil
+        import subprocess
+        exe = shutil.which("ssh-keygen")
+        if not exe or key.exists():
+            return None             # never overwrite a private key that lost its public half
+        try:
+            key.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run([exe, "-q", "-t", "ed25519", "-N", "", "-C", "baton", "-f", str(key)],
+                           check=True, timeout=10, capture_output=True, stdin=subprocess.DEVNULL)
+        except Exception:
+            return None
+    try:
+        import base64
+        import hashlib
+        blob = base64.b64decode(pub.read_text("utf-8").split()[1])
+    except Exception:
+        return None
+    code = base64.b32encode(hashlib.sha256(blob).digest()).decode()[:12]
+    return "BTN-" + "-".join(code[i:i + 4] for i in range(0, 12, 4))
+
+
+def id_line() -> str | None:
+    try:
+        ident = own_id()
+    except Exception:
+        return None                 # an ID that cannot be made must not cost the board
+    return f"🪪 This Baton's ID: {ident}" if ident else None
+
+
 def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
                root: Path | None = None, twice: bool = False, plain: int = 0) -> str:
     """The one line the human sees in the terminal at session start. English, because the hook
@@ -2185,6 +2231,14 @@ def _marked(block: str, text: str | None) -> str | None:
 def _emit(context: str | None, line: str | None = None, block: str = "board") -> int:
     """The one way out: the agent's context (plus the rules in plugin mode) and the one line
     the human sees."""
+    if block == "board" and (context or line):
+        ident = id_line()
+        if ident:
+            if context:
+                context = (ident + "\n(Show this line first, above the board, exactly as it is: "
+                           "the human's own Baton number, given only to people they trust.)\n\n"
+                           + context)
+            line = ident + (" · " + line if line else "")
     text = "\n\n".join(t for t in (_marked(block, context), _marked("rules", plugin_rules()))
                        if t)
     out: dict = {}

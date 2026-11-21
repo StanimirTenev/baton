@@ -2,7 +2,7 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
-**v3.42.0** — a weekly reminder to check for a newer version, as a plugin too
+**v3.42.0** — an ID of its own above the board, and a weekly reminder to check for a newer version
 
 Installed as a plugin, Baton never said a word about new versions: the hooks make no network request
 there, and Claude Code's auto-update is off by default for catalogs other than Anthropic's. Most people
@@ -12,6 +12,12 @@ run Baton that way.
   the two commands (`claude plugin marketplace update <catalog>`, `claude plugin update baton@<catalog>`)
   and a restart. Nothing is checked, fetched or installed by the hooks; the promise of no network
   request as a plugin stands. The first session after install only marks the day.
+- **Every Baton has its own ID, shown above the board.** At every session start and `/clear` the
+  first line is `🪪 This Baton's ID: BTN-XXXX-XXXX-XXXX`: a short fingerprint of an Ed25519 key that
+  `ssh-keygen` makes once in `~/.claude/baton/identity/`, outside the plugin's folder, so updates
+  keep it. It is the first piece of tasks shared between people who trust each other; nothing
+  uses it yet. Without `ssh-keygen` there is no ID and the board comes as before. 12 characters,
+  60 bits: short, because it is read out between people who trust each other.
 - **Installed by script, nothing changes**: the opt-in weekly check (`tools/baton_update.py on`) is as before.
 - **Not checked:** a live session after a real week; proven by tests through `update_notice` and one run of
   the session hook as a plugin process.

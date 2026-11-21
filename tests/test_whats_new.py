@@ -42,7 +42,8 @@ def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
     assert "Once a week the agent reminds you to check." in ctx   # a lead
-    for lead in ("Installed by script, nothing changes",
+    for lead in ("Every Baton has its own ID, shown above the board.",
+                 "Installed by script, nothing changes",
                  "Not checked:"):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx

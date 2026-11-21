@@ -204,6 +204,7 @@ there and asks nothing of Claude's memory or of any service.
 | where | what |
 |---|---|
 | your task root | the root itself, if it is missing, at the first session |
+| `~/.claude/baton/identity/baton_ed25519` (+ `.pub`) | since v3.42.0: this install's own key, made once by `ssh-keygen` (Ed25519, no passphrase, readable only by you). Its short fingerprint, `BTN-XXXX-XXXX-XXXX`, is the ID shown above the board at every start and `/clear` -- the number you give to people you trust, for tasks shared between them (still being built). Nothing is sent anywhere. Delete the folder and a new ID is made; `BATON_IDENTITY` points it elsewhere |
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear`. Beside it a `.gitignore` of `*` (since v3.39.0), so a task root that is a git repository never takes it |
 | `<task folder>/<logbook>` | only when a turn ends on an API error (StopFailure, since v3.40.0): one entry, `turn ended on <error>`, with the files written in that turn, in the logbook of the one task folder the turn worked in. Never in a folder it cannot tie the turn to |
@@ -236,8 +237,9 @@ The hooks never write a logbook; the agent does, and you can read every entry. W
 and no instruction is fetched from anywhere. As a plugin the hooks make no network request; the
 review tools you run by hand send the text under review, as the table below says. Installed
 by script, the opt-in weekly update check fetches the latest release number and its page
-address, and only those two go into a fixed sentence; see the table below. A test command
-you pinned yourself is the one command the hooks run that is not their own.
+address, and only those two go into a fixed sentence; see the table below. Besides a test command
+you pinned yourself, the one command the hooks run that is not their own is `ssh-keygen`, once,
+to make this install's key (below).
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
 Baton's state folder. Keeping the conversation has no switch to turn it off in v3.42.0.
@@ -253,7 +255,8 @@ Baton's state folder. Keeping the conversation has no switch to turn it off in v
 | `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; anything holding a word listed in `review_confidential` (in its path or its text) is held back before anything is sent |
 
 `tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
-schedule except the opt-in update check above. The one command the hooks run that is not their
+schedule except the opt-in update check above. Besides `ssh-keygen`, run once on this machine to
+make the install's key (no network), the one command the hooks run that is not their
 own is a test command **you** pinned in `baton.local.json` (lesson L4, since v3.21.0): run on this
 machine after a turn whose entry says tests pass, and never without that pin.
 

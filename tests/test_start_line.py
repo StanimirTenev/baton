@@ -47,7 +47,9 @@ def _run(tmp_path, *, tasks=True, plugin=False, installer=False):
 def test_the_human_sees_one_line_and_the_agent_gets_the_board(tmp_path):
     out = _run(tmp_path)
     line = out["systemMessage"]
-    assert line.startswith("🧭 Baton") and "\n" not in line
+    assert line.startswith("🪪 This Baton's ID: BTN-") and "\n" not in line
+    line = line.split(" · ", 1)[1]                  # the ID first, then the board line
+    assert line.startswith("🧭 Baton")
     assert "1 on your move" in line and "Write anything" in line
     assert "send the invoice" not in line, "the board itself is for the agent to translate"
     assert "send the invoice" in out["hookSpecificOutput"]["additionalContext"]
@@ -59,7 +61,7 @@ def test_the_agent_is_told_to_open_with_the_board_whatever_the_first_message(tmp
 
 
 def test_a_new_user_with_no_tasks_is_told_baton_is_on(tmp_path):
-    line = _run(tmp_path, tasks=False)["systemMessage"]
+    line = _run(tmp_path, tasks=False)["systemMessage"].split(" · ", 1)[-1]
     assert line.startswith("🧭 Baton is on") and "no task folders yet" in line
 
 

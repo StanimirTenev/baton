@@ -91,8 +91,12 @@ def _env(tmp_path: Path, root: Path) -> dict:
     home.mkdir(exist_ok=True)
     data = tmp_path / "data"
     data.mkdir(exist_ok=True)
+    ident = tmp_path / "identity"           # a fixed key, so the ID above the board is the same every run
+    ident.mkdir(exist_ok=True)
+    (ident / "baton_ed25519.pub").write_text(
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKg0lJAwz51wOh4hyUerw7DMSHJlX0BuIxg48Jacoijw baton\n")
     return child_env(BATON_HOME=str(root), BATON_LOGBOOK="LOGBOOK.md", HOME=str(home),
-                     USERPROFILE=str(home), CLAUDE_PLUGIN_DATA=str(data),
+                     USERPROFILE=str(home), CLAUDE_PLUGIN_DATA=str(data), BATON_IDENTITY=str(ident),
                      BATON_STATE_DIR=str(tmp_path / "state"), LANG="C.UTF-8")
 
 
