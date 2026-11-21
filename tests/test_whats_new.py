@@ -44,6 +44,7 @@ def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     assert "Once a week the agent reminds you to check." in ctx   # a lead
     for lead in ("Every Baton has its own ID, shown above the board.",
                  "Installed by script, nothing changes",
+                 "Tried on two machines.",
                  "Not checked:"):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx

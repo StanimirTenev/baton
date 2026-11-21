@@ -19,8 +19,12 @@ run Baton that way.
   uses it yet. Without `ssh-keygen` there is no ID and the board comes as before. 12 characters,
   60 bits: short, because it is read out between people who trust each other.
 - **Installed by script, nothing changes**: the opt-in weekly check (`tools/baton_update.py on`) is as before.
-- **Not checked:** a live session after a real week; proven by tests through `update_notice` and one run of
-  the session hook as a plugin process.
+- **Tried on two machines.** Linux and Windows (Cyrillic user folder with a space) each made their ID;
+  each computed the other's ID from its public key alone and verified the other's signed note, and a
+  changed word, changed line endings or a wrong namespace failed. That probe found that on Windows two
+  sessions starting at once could pair the wrong halves of the key; it is now made aside and moved in whole.
+- **Not checked:** a live session after a real week; the reminder is proven by tests through
+  `update_notice` and runs of the session hook as a plugin process, on both machines.
 
 **v3.41.0** — a README you can grasp in one screen, and the changelog in its own file
 
