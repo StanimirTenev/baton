@@ -2,6 +2,20 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.42.0** — a weekly reminder to check for a newer version, as a plugin too
+
+Installed as a plugin, Baton never said a word about new versions: the hooks make no network request
+there, and Claude Code's auto-update is off by default for catalogs other than Anthropic's. Most people
+run Baton that way.
+
+- **Once a week the agent reminds you to check.** As a plugin, at session start, once in seven days:
+  the two commands (`claude plugin marketplace update <catalog>`, `claude plugin update baton@<catalog>`)
+  and a restart. Nothing is checked, fetched or installed by the hooks; the promise of no network
+  request as a plugin stands. The first session after install only marks the day.
+- **Installed by script, nothing changes**: the opt-in weekly check (`tools/baton_update.py on`) is as before.
+- **Not checked:** a live session after a real week; proven by tests through `update_notice` and one run of
+  the session hook as a plugin process.
+
 **v3.41.0** — a README you can grasp in one screen, and the changelog in its own file
 
 The README was 1,892 lines, 84% of them version notes, and opened with no screenshot or video. Nothing the

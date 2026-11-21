@@ -204,7 +204,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.41.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
+BATON_VERSION = "3.42.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -596,6 +596,38 @@ def _version(tag: str) -> tuple:
     return tuple(int(x) for x in re.findall(r"\d+", tag)[:3])
 
 
+def plugin_update_reminder(today: date) -> str | None:
+    """Once a week as a plugin: remind the human to check for a newer Baton. No network.
+
+    The first session only marks the day, so a fresh install is not told to update what it
+    has just installed.
+    """
+    try:
+        state = json.loads(_state_file().read_text("utf-8"))
+    except Exception:
+        state = {}
+    last = _as_date(state.get("plugin_reminded"))
+    if last is not None and 0 <= (today - last).days < 7:
+        return None
+    state["plugin_reminded"] = today.isoformat()
+    try:
+        _state_file().write_text(json.dumps(state), "utf-8")
+    except OSError:
+        return None                 # a reminder that cannot be remembered would come every session
+    if last is None:
+        return None
+    root = Path(os.environ["CLAUDE_PLUGIN_ROOT"])
+    try:
+        root.resolve().relative_to((claude_dir() / "plugins" / "cache").resolve())
+        catalog = root.resolve().parent.parent.name
+    except ValueError:
+        catalog = "baton"
+    return (f"🔔 A week has passed: remind the human, in one line in their language, to check for a "
+            f"newer Baton (this session runs v{BATON_VERSION}): `claude plugin marketplace update "
+            f"{catalog}` then `claude plugin update baton@{catalog}`, and a restart of the session. "
+            "Nothing was checked or installed; run nothing without their yes.")
+
+
 def update_notice(today: date) -> str | None:
     """Once a week, IF the human switched it on: is there a newer Baton? Never installs.
 
@@ -603,11 +635,13 @@ def update_notice(today: date) -> str | None:
     promise changed by default is a promise broken. While nobody has chosen, the agent is
     asked -- once a day -- to put the question to the human.
 
-    Not as a plugin: Claude Code updates it (`claude plugin update`, or auto-update for the
-    marketplace), and a plugin-mode hook makes no network request at all.
+    As a plugin a hook makes no network request at all, and Claude Code updates the plugin only
+    when told to -- auto-update is off for a catalog that is not Anthropic's own. So a plugin
+    install heard nothing, ever: the way most people run Baton never learned of a new version.
+    There it is a reminder instead, once a week, with no request: the human runs the check.
     """
     if plugin():
-        return None
+        return plugin_update_reminder(today)
     cfg = _local()
     repo = cfg.get("repo")          # written by the installer since v3.6.1
     py = "python" if os.name == "nt" else "python3"

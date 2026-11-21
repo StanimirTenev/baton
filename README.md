@@ -186,7 +186,7 @@ without any of this, which is the point.
 
 Baton changes what Claude Code knows at the start of a session: that is what it is for, and
 you install it for that. Everything it hands over comes from files on your disk that you can
-open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.41.0.
+open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.42.0.
 
 **Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
@@ -240,13 +240,13 @@ address, and only those two go into a fixed sentence; see the table below. A tes
 you pinned yourself is the one command the hooks run that is not their own.
 
 **To remove what was kept:** delete `<task root>/.baton-chat/` and the `baton-chat-*.md` files in
-Baton's state folder. Keeping the conversation has no switch to turn it off in v3.41.0.
+Baton's state folder. Keeping the conversation has no switch to turn it off in v3.42.0.
 
 ## What Baton sends over the network
 
 | what | when | to |
 |---|---|---|
-| the hooks, installed as a plugin | never | -- |
+| the hooks, installed as a plugin | never (once a week they only remind you to check for a newer version yourself) | -- |
 | the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
 | `tools/baton_ledger.py push`, `verify --remote` | when you run them, and only after you added a remote to the ledger's repository | that remote, by git -- the ledger: the task root (`~/...` under home), folder names, entry headings, times, hashes, ack reasons, and commit messages naming folders |

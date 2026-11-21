@@ -99,7 +99,8 @@ As a plugin, Baton behaves as it does when installed by script, with these diffe
   - **After an update, the agent tells you once what is new**, from the notes in [CHANGELOG.md](../CHANGELOG.md) that
     came with it -- the bold first line of each note under the new version, and a link to the
     release. The hooks do not check for a newer version themselves, so **as a plugin they make
-    no network request at all.**
+    no network request at all.** Instead, since v3.42.0, once a week the agent reminds you to
+    run the two update commands yourself (the first session after install only marks the day).
 - **Installed both ways** (script and plugin), every hook would run twice. The plugin's copy
   notices the script's entries in `settings.json`, stands down, and at each session start says
   which to remove, until one is.

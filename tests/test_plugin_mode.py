@@ -3,9 +3,9 @@
 - install_drift compares running hooks with a working copy; Claude Code owns the plugin's
   copy, so there is nothing of ours to drift. (Since v3.17.0 `plugin_drift` compares that copy
   with Claude Code's record and the catalog instead -- tests/test_plugin_drift.py.)
-- the weekly GitHub check and its question are the installer's update path; a plugin is
-  updated by Claude Code (`claude plugin update`, or auto-update for the marketplace), so
-  in plugin mode the hooks make no network request at all.
+- the weekly GitHub check and its question are the installer's update path; in plugin mode the
+  hooks make no network request at all. Since v3.42.0 a plugin install gets a reminder once a
+  week instead, to run the check itself (auto-update is off for a catalog not Anthropic's own).
 - a plugin's skills are namespaced: /baton:baton-plan, not /baton-plan.
 - a skill a task header names may live inside the plugin, not in ~/.claude/skills."""
 import importlib.util
@@ -54,7 +54,53 @@ def test_no_update_question_and_no_network_in_plugin_mode(plugin, monkeypatch, s
     def refuse(*a, **k):
         raise AssertionError("a plugin-mode hook reached for the network")
     monkeypatch.setattr("urllib.request.urlopen", refuse)
-    assert _hook().update_notice(date(2026, 9, 29)) is None
+    assert _hook().update_notice(date(2026, 9, 29)) is None     # the first session only marks the day
+
+
+def _cached_plugin(tmp_path, monkeypatch):
+    """CLAUDE_PLUGIN_ROOT inside Claude Code's cache, as an installed plugin runs: cache/<catalog>/baton/<v>."""
+    root = tmp_path / "home" / ".claude" / "plugins" / "cache" / "baton-cat" / "baton" / "9.9.9"
+    root.mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(root))
+    return root
+
+
+def test_plugin_reminds_once_a_week_without_the_network(plugin, tmp_path, monkeypatch):
+    _cached_plugin(tmp_path, monkeypatch)
+    def refuse(*a, **k):
+        raise AssertionError("a plugin-mode hook reached for the network")
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    h = _hook()
+    day = date(2026, 11, 21)
+    assert h.update_notice(day) is None, "a fresh install is told to update what it just installed"
+    for n in range(1, 7):
+        assert h.update_notice(date.fromordinal(day.toordinal() + n)) is None, f"reminded on day {n}"
+    note = h.update_notice(date.fromordinal(day.toordinal() + 7))
+    assert note and "claude plugin marketplace update baton-cat" in note
+    assert "claude plugin update baton@baton-cat" in note and h.BATON_VERSION in note
+    assert h.update_notice(date.fromordinal(day.toordinal() + 8)) is None, "reminded two days running"
+    assert h.update_notice(date.fromordinal(day.toordinal() + 14))
+
+
+def test_plugin_reminder_that_cannot_be_remembered_stays_silent(plugin, tmp_path, monkeypatch):
+    _cached_plugin(tmp_path, monkeypatch)
+    h = _hook()
+    state = tmp_path / "state.json"
+    state.write_text(json.dumps({"plugin_reminded": "2026-11-01"}))
+    monkeypatch.setattr(h, "_state_file", lambda: state)
+    state.chmod(0o444)
+    try:
+        assert h.update_notice(date(2026, 11, 21)) is None
+    finally:
+        state.chmod(0o644)
+
+
+def test_plugin_outside_the_cache_names_the_baton_catalog(plugin, monkeypatch, tmp_path):
+    h = _hook()
+    state = tmp_path / "s.json"
+    state.write_text(json.dumps({"plugin_reminded": "2026-11-01"}))
+    monkeypatch.setattr(h, "_state_file", lambda: state)
+    assert "baton@baton" in h.update_notice(date(2026, 11, 21))
 
 
 def test_commands_are_named_with_the_plugin_prefix(plugin):

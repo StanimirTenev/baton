@@ -41,11 +41,9 @@ def _run(tmp_path, state=None):
 def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
-    assert "The version notes are in CHANGELOG.md." in ctx   # a lead
-    for lead in ("The README opens with what Baton is.",
-                 "The demo shows real hook output, not a live session.",
-                 "The ledger's full description is in docs/how-it-works.md.",
-                 "Still not done."):
+    assert "Once a week the agent reminds you to check." in ctx   # a lead
+    for lead in ("Installed by script, nothing changes",
+                 "Not checked:"):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx
     assert "once" in ctx
@@ -69,6 +67,6 @@ def test_a_fresh_install_is_not_told_it_was_updated(tmp_path):
 
 def test_the_notes_come_from_the_changelog_section_of_this_version():
     leads = hook.release_leads(NOW)
-    assert leads and leads[0].startswith("The version notes are in CHANGELOG.md")
+    assert leads and leads[0].startswith("Once a week the agent reminds you to check")
     assert all(len(x) < 200 for x in leads)
     assert hook.release_leads("0.0.1") == []
