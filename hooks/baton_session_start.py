@@ -204,7 +204,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.43.1"   # bumped with every release; a test holds it to CHANGELOG.md's top version
+BATON_VERSION = "3.44.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -2267,7 +2267,8 @@ def page_step(own: dict) -> str | None:
                   "here. Tell them in one line, in their language." + how)
     elif sent:
         notice = (f"👥 Baton: {sent} friend invitation{'s' if sent > 1 else ''} the human made "
-                  f"wait{'' if sent > 1 else 's'} for a reply code, which they paste on the Baton page. "
+                  f"wait{'' if sent > 1 else 's'} for a reply, which arrives on the Baton page (through the "
+                  "box while the page server runs, or pasted). "
                   "Say nothing about it unless they bring it up." + how)
     if own.get("source") not in ("startup", "resume") or tool is None or _baton is None:
         return notice

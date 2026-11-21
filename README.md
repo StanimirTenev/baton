@@ -164,8 +164,8 @@ display, an SDK or CI run, or `BATON_NO_BROWSER=1`) nothing opens; the line at t
 session carries the link instead, `🆕 page: http://127.0.0.1:<port>/<key>/`, until a session can
 open it. The link is on that line only: the agent never gets it, because the page's buttons are yours.
 
-The page is served by `tools/baton_page.py`, which ships with Baton (Python's own library only). It
-listens on 127.0.0.1 only, on a port the system picks, and answers only a request that carries the
+The page is served by `tools/baton_page.py`, which ships with Baton (Python's own library only). The
+page listens on 127.0.0.1 only (the box for invitations, below, is another listener that never serves it), on a port the system picks, and answers only a request that carries the
 random 128-bit key from its link, a `Host` of `127.0.0.1:<port>`, and, for a button (POST), no other site's `Origin`.
 **That key stops other web pages in your browser from pressing the buttons; it does not stop a
 program running on this machine as you**, which can read the key from the state file. One server per
@@ -176,32 +176,63 @@ marketplace update <catalog>` and `claude plugin update baton@<catalog>`, shows 
 you to restart the session. Nothing runs without the click. Installed by script, or as a Gemini or
 Codex clone, the page shows how that install is updated and runs nothing.
 
-**Friends.** There is no server and no directory: an invitation is a code you send yourself.
+**Friends.** There is no server of ours and no directory. Since v3.44.0 an invitation waits on your
+own machine, in a small **box**, for the one Baton ID it is for; your friend's page fetches it and
+answers it. A code to copy by hand still works.
 
-1. **Invite a friend** makes a code with your ID, your public key, an optional text of up to 140
-   characters, the time and a random number, signed with this install's key
-   (`ssh-keygen -Y sign -n baton-invite`). Send it by any channel: a message, a mail, in person.
-2. Your friend pastes it into their page. Their Baton checks the signature against the key in the
-   code and that the key gives the ID it claims, then shows your ID and text, as plain text, links not
-   clickable. **Accept** or **Ignore**; ignoring tells nobody.
-3. Accepting makes a reply code for you, signed the same way and naming your invitation. Their page
-   shows you as "send them your reply" and keeps the code to copy again; nothing comes back to it.
-4. You paste the reply. It must answer an invitation made on your install and still waiting; each is
-   used once. Now you are friends on your side too.
+1. **Invite a friend** takes their Baton ID (they find it on their own page), a **nickname** for them
+   and an optional text of up to 140 characters. It makes an invitation with your ID, your public key,
+   the text, their ID, the time and a random number, signed with this install's key (`ssh-keygen -Y
+   sign -n baton-invite`), and keeps it in your box. Without their ID you get the code to send
+   yourself, in the form v3.43 reads.
+2. **Your box opens by itself** while an invitation with an ID waits, and closes when none does. The
+   page server listens on port 47800 of this machine's addresses (`BATON_BOX=<ip>:<port>` to choose,
+   `BATON_BOX=off` never), and every 5 s says on the local network, by UDP broadcast, "a Baton box,
+   this ID, this port". On the same network your friend's page, while open, hears that and fetches:
+   nothing is typed. **Across networks the code goes by a messenger you already use.** After
+   **Invite**, the message (one line, "BTN-... invites you to be friends on Baton", and the code) is
+   on the clipboard, with a big **Send on WhatsApp** button (`wa.me/?text=...`: WhatsApp opens with
+   the message ready and you pick the contact), **Email** and **Copy**. Your friend presses **Paste
+   invitation**, which reads the clipboard on that click, or pastes into the box below it; the code
+   is found inside whatever the messenger put around it (names, times, a mail's `> `).
+3. Their page fetches with a proof that it holds the key of the ID the invitation is for (`ssh-keygen
+   -Y sign -n baton-box` over that ID and the time, within 5 minutes, each proof used once). It checks
+   every code itself, never trusting the box: the signature against the key in the code, the key
+   against the ID it claims, and that the invitation is for this install. It shows your ID and text, as
+   plain text, links not clickable. **Accept** (with a nickname for you) or **Ignore**; ignoring tells
+   nobody.
+4. Accepting posts a reply, signed the same way and naming your invitation, back to your box. Your box
+   keeps it only if it answers an invitation waiting there, from the ID it was for, once. Then you are
+   friends on both sides. If your box cannot be reached, their page puts the reply on the clipboard
+   with the same WhatsApp, Email and Copy buttons, and you paste it on yours.
 
-**Remove** stops new things only: what a friend already has stays with them. The agent hears how many
-invitations wait (`👥 1 invitation waiting`), never their text. Without a browser:
+**Nicknames** are yours: up to 40 characters of plain text, shown as "nickname (BTN-...)", changed
+with **Rename**. They are kept in `friends.json` only: never in a code, never sent, never in the
+agent's context. **Remove** stops new things only: what a friend already has stays with them. The
+agent hears how many invitations wait (`👥 1 invitation waiting`), never their text. Without a browser:
 
 ```
-python3 tools/baton_page.py --invite "Hi, it's Ana"   # prints an invitation code
+python3 tools/baton_page.py --invite "Hi, it's Ana"   # prints an invitation code (no box: you send it)
 python3 tools/baton_page.py --accept CODE             # accept an invitation (prints the reply), or take in a reply
 python3 tools/baton_page.py --open                    # open the page; the link is not printed
 python3 tools/baton_page.py --serve --no-open         # run the page here and print its link, for a demo
 ```
 
-`--accept` does not print an invitation's text; the page shows it. The server stops after 30 minutes
-without use; `--open` starts it again, and while invitations wait the agent is told that command
-(never the link), so "open the Baton page" is enough. What pairing does **not** protect:
+`--accept` does not print an invitation's text; the page shows it. The command line never opens the
+box or reaches one. The server stops after 30 minutes without use, but not while your box is open;
+`--open` starts it again, and while invitations wait the agent is told that command (never the link),
+so "open the Baton page" is enough.
+
+**What the box exposes.** To anyone who reaches the port: two calls, fetch and reply, and a 404 for
+everything else; never the page or its buttons, which stay on 127.0.0.1 behind their key. A fetch gives
+an ID only the invitations addressed to it, after the key proof. At most 30 requests a minute from one
+address and 10 for one ID; a request is at most 16 KiB. It writes no log. What it does **not** hide:
+the box speaks plain HTTP, so on a shared network others can read an invitation's text and see who
+invites whom; the broadcast says your ID to the local network while the box is open. **A messenger
+only carries signed codes**: WhatsApp (Meta) or the mail provider sees the code and its note text
+(your ID, your public key, the text, their ID), and nothing else leaves the machine; your nicknames
+never do. The first time it listens, Windows and macOS may ask whether Python may accept
+connections: allow it for private networks only. What pairing does **not** protect:
 
 - **The ID is 60 bits**, short so it can be read aloud. The code carries the whole key, and the ID is
   checked against it, but compare IDs over a channel you trust: someone who can change the code on its
@@ -211,7 +242,7 @@ without use; `--open` starts it again, and while invitations wait the agent is t
 - **On disk the text is plain.** `friends.json` is readable by any program running as you, the
   agent's own tools included; Baton only never puts it in the agent's context.
 - The signature says who made a code, not that its text is safe. Friends exist only on this page in
-  v3.43.0: nothing else uses them yet.
+  v3.44.0: nothing else uses them yet.
 
 ## The ledger: an older entry edited is seen
 
@@ -264,7 +295,7 @@ there and asks nothing of Claude's memory or of any service.
 | your task root | the root itself, if it is missing, at the first session |
 | `~/.claude/baton/identity/baton_ed25519` (+ `.pub`) | since v3.42.0: this install's own key, made once by `ssh-keygen` (Ed25519, no passphrase, readable only by you). Its short fingerprint, `BTN-XXXX-XXXX-XXXX`, is the ID shown above the board at every start and `/clear` -- the number you give to people you trust, for tasks shared between them (still being built). Nothing is sent anywhere. Delete the folder and a new ID is made; `BATON_IDENTITY` points it elsewhere |
 | `~/.claude/baton/baton.page.json` (beside the identity folder) | since v3.43.0: the page server's pid, port, version and the random key of its link, readable only by you; written when it starts, removed when it stops. Beside it `baton.page.lock` for a moment while a server starts |
-| `~/.claude/baton/identity/friends.json` | since v3.43.0: your friends (ID, public key, whether both sides accepted, the text of their invitation), the invitations you made that wait for a reply, and those pasted on the page and not yet decided; `friends.lock` beside it while it is written |
+| `~/.claude/baton/identity/friends.json` | since v3.43.0: your friends (ID, public key, whether both sides accepted, the text of their invitation, since v3.44.0 your nickname for them and the box address their invitation came from), the invitations you made that wait for a reply (with the ID they are for and your nickname), and those fetched or pasted on the page and not yet decided; `friends.lock` beside it while it is written |
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear`. Beside it a `.gitignore` of `*` (since v3.39.0), so a task root that is a git repository never takes it |
 | `<task folder>/<logbook>` | only when a turn ends on an API error (StopFailure, since v3.40.0): one entry, `turn ended on <error>`, with the files written in that turn, in the logbook of the one task folder the turn worked in. Never in a folder it cannot tie the turn to |
@@ -316,14 +347,18 @@ Baton's state folder. Keeping the conversation has no switch to turn it off in v
 |---|---|---|
 | the hooks, installed as a plugin | never (once a week they only remind you to check for a newer version yourself) | -- |
 | the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
-| the page's server, `tools/baton_page.py` | listens while it runs (from the first session start of a version until 30 minutes without use); it sends nothing | nowhere: it listens on 127.0.0.1 only, and answers only requests that carry the random key from its link. The key stops other web pages; it does not stop programs on this machine running as you |
+| the page's server, `tools/baton_page.py` | listens while it runs (from the first session start of a version until 30 minutes without use) | nowhere: the page listens on 127.0.0.1 only, and answers only requests that carry the random key from its link. The key stops other web pages; it does not stop programs on this machine running as you |
+| **Send on WhatsApp** and **Email** on the page | only when you click them | the browser opens `wa.me` or your mail program with the message (the code and its note); you pick who gets it and send it yourself |
+| the box, in the page's server (v3.44.0) | listens only while an invitation you addressed to a Baton ID waits (`BATON_BOX=off`: never); every 5 s it broadcasts on the local network | it listens on port 47800 of this machine's addresses and answers two calls: a fetch, giving an ID the invitations addressed to it after a proof that the caller holds its key, and a reply. The broadcast, UDP to the local network on port 47800: your Baton ID and the port. Your nicknames never go out |
+| the page, when it fetches from a friend's box or posts a reply to it | while the page is open, every 15 s, from a box it heard on the local network; and when you accept an invitation fetched from one | that box, by plain HTTP: your ID, public key, a signed time; the reply code (your ID, key, their ID and the invitation's number). Nothing else of yours, no nickname |
 | **Update Baton** on the page, as a plugin | only when you click it | Claude Code's own `claude plugin` commands fetch the catalog and the new version, as they do when you type them |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
 | `tools/baton_ledger.py push`, `verify --remote` | when you run them, and only after you added a remote to the ledger's repository | that remote, by git -- the ledger: the task root (`~/...` under home), folder names, entry headings, times, hashes, ack reasons, and commit messages naming folders |
 | `tools/baton_review.py`, `tools/baton_sift.py` | when you run them | `openrouter.ai` -- the text under review; anything holding a word listed in `review_confidential` (in its path or its text) is held back before anything is sent |
 
 `tools/baton_corpus.py` and every other tool work on your files only. Nothing runs on a
-schedule except the opt-in update check above. Besides `ssh-keygen`, run once on this machine to
+schedule except the opt-in update check above and, while the page's server runs, the box's
+broadcast (only while it is open) and the open page's look for nearby boxes. Besides `ssh-keygen`, run once on this machine to
 make the install's key (no network), and the system's browser opener for the page, the one command
 the hooks run that is not their own is a test command **you** pinned in `baton.local.json` (lesson L4, since v3.21.0): run on this
 machine after a turn whose entry says tests pass, and never without that pin.
@@ -350,8 +385,9 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   of a key pasted into a message -- is in `hooks/_baton.py`, which makes no network request.
   The session hook's one network request is the opt-in update check (`update_notice`): a GET
   for the latest release number on GitHub that sends nothing of the user's, never made as a
-  plugin. Since v3.43.0 it also starts `tools/baton_page.py`, which listens on 127.0.0.1 and
-  sends nothing; its environment is built in `hooks/_baton.py` from a fixed list (`PAGE_ENV`). `plugin.json` reads nothing: its description only says that the review tools send
+  plugin. Since v3.43.0 it also starts `tools/baton_page.py`, which listens on 127.0.0.1; since
+  v3.44.0 that server, never the hook, also opens the box for invitations while one the human
+  addressed waits, and reaches a friend's box when the page asks; its environment is built in `hooks/_baton.py` from a fixed list (`PAGE_ENV`). `plugin.json` reads nothing: its description only says that the review tools send
   text to OpenRouter, and it was flagged the same way from v3.15.0, when it did not mention
   OpenRouter at all. A `userConfig` option would not reach these tools -- Claude Code hands
   plugin options to hook processes, and these tools are run by hand.

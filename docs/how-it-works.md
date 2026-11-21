@@ -864,13 +864,43 @@ version and key; a lock taken with `O_EXCL` lets one of two sessions starting at
 and the other uses it. A server of another version gives way to the new one. It stops after 30
 minutes without a request (`BATON_PAGE_IDLE` seconds). Its environment is a fixed list
 (`PAGE_ENV` in `hooks/_baton.py`): the board's names, Claude Code's config folder for the update
-button, the identity folder, and a proxy with its certificates.
+button, the identity folder, where the box listens (`BATON_BOX`, `BATON_BOX_UDP`), and a proxy with
+its certificates.
 
 Invitations and replies are signed and checked with `ssh-keygen -Y sign` / `-Y verify` in the
 `baton-invite` namespace, over the exact bytes the code carries. As the probe of 21.11.2026 found:
 an old `.sig` is removed before signing, `ssh-keygen` gets no input, the message reaches `-Y verify`
 from a file and its output goes to a file, with a time limit; lines are `\n`. How pairing works and
 what it does not protect: [the README](../README.md#the-page-and-friends).
+
+**The box (v3.44.0).** An invitation made with the friend's Baton ID carries it (`"v": 2`, `"to"`)
+and waits in `friends.json`. After every button and at its start the page server compares: if an
+addressed invitation waits and `BATON_BOX` is not `off`, it opens a second `ThreadingHTTPServer` on
+`BATON_BOX` (default `0.0.0.0:47800`), with a handler of its own that routes two paths and answers
+404 to everything else; when none waits it closes it. While it is open, a thread sends
+`{"baton":"box","v":1,"id":...,"port":...}` every 5 s by UDP broadcast to port `BATON_BOX_UDP`
+(47800), and the page server does not stop for idleness.
+
+- `POST /box/v1/fetch {id, pub, time, sig}`: `sig` is `ssh-keygen -Y sign -n baton-box` over
+  `baton-box\n<id>\n<time>\n`. Checked: the shape, the time within 300 s, the key's ID is `id`,
+  the signature, and the time later than the last one this box took from that ID. The answer is the
+  codes of the invitations whose `to` is `id`.
+- `POST /box/v1/reply {code}`: a reply (`kind` accept) of at most 8 KiB, read by `read_code()`: kept
+  only if it answers an invitation waiting here whose `to` is the reply's maker.
+- Limits: 30 requests a minute per source address, 10 per ID, 16 KiB a request. No log.
+
+The page's side: the open page posts `/api/watch` every 15 s, which is not counted as use. The
+first one opens a UDP listener (`SO_REUSEADDR`) on `BATON_BOX_UDP`; a box heard there in the last
+30 s is fetched from, at most once a minute. Every code fetched goes through `read_code()`, as a pasted one does, and is kept only if
+it is an invitation made by the ID the box claims. Accept posts the reply to the box the invitation
+came from, without a proxy and without following redirects; once the box answers OK, the friend is
+mutual on this side too. Nicknames (`nick`, at most 40 characters after `clean()`) are written to
+`friends.json` and read by the page only; the session hook counts invitations and reads nothing else
+from that file. Across networks the code goes by a messenger: the invite and accept answers carry
+`share_links()`, the message text and its `https://wa.me/?text=` and `mailto:` links, percent-encoded
+with nothing left unescaped; the page sets them as `href` of links that open a new tab, and copies the
+text on the click. A pasted message is searched for the `BEGIN`...`END` block, and inside it only
+base64 characters count. How to use it and what it exposes: [the README](../README.md#the-page-and-friends).
 
 ## A free check of the memory index
 

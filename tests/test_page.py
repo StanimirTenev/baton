@@ -59,7 +59,7 @@ def _base_env(tmp_path, **extra):
     env = {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "USERPROFILE": str(home),
            "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
            "PROGRAMDATA": os.environ.get("PROGRAMDATA"), "BATON_IDENTITY": str(tmp_path / "identity"),
-           "BATON_PAGE_IDLE": "60", "BATON_OPENER": str(_opener(tmp_path))}
+           "BATON_PAGE_IDLE": "60", "BATON_OPENER": str(_opener(tmp_path)), "BATON_BOX": "off"}
     env.update(extra)
     return {k: v for k, v in env.items() if v is not None}
 

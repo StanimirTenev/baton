@@ -18,12 +18,16 @@ SessionStart starts it, detached, the first time a version runs, and opens the p
     python3 tools/baton_page.py --accept CODE       accept an invitation (prints the reply
                                                     code) or take in a reply ("-" reads stdin)
 
-Friends: an invitation is a code the human sends by any channel. It carries the sender's ID,
-public key, a text of up to 140 characters, a time and a nonce, signed with this install's key
+Friends: an invitation is a code. It carries the sender's ID, public key, a text of up to 140
+characters, a time, a nonce and (since v3.44.0) the ID it is for, signed with this install's key
 (`ssh-keygen -Y sign -n baton-invite`). The receiver checks the signature against the key inside
 and that the key gives the ID claimed. Accepting makes a reply code, signed the same way, that
-names the invitation; the inviter pastes it and both have accepted. Nothing is sent by Baton.
-The text of an invitation is for the human: nothing here prints it, and the hook counts them.
+names the invitation. An addressed invitation waits in this install's box (below), which the
+friend's page fetches from, and the reply is posted back to it; or the human copies the code and
+sends it by any channel. Only the page server opens the box and talks to other boxes, never a
+hook, never the command line. The text of an invitation is
+for the human: nothing here prints it, and the hook counts them. A nickname is the human's own
+name for a friend: kept in friends.json only, never sent, never given to the agent.
 """
 from __future__ import annotations   # `str | None`: Python 3.8 and 3.9 too
 
@@ -32,16 +36,21 @@ import base64
 import hashlib
 import hmac
 import importlib.util
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -50,6 +59,7 @@ HOOKS = Path(__file__).resolve().parent.parent / "hooks"
 HEADER = "X-Baton-Ticket"
 NAMESPACE = "baton-invite"
 TEXT_MAX = 140
+NICK_MAX = 40
 BODY_MAX = 65536
 ID_RE = re.compile(r"BTN-[A-Z2-7]{4}-[A-Z2-7]{4}-[A-Z2-7]{4}")
 PUB_RE = re.compile(r"ssh-ed25519 [A-Za-z0-9+/]{68}")    # 51 bytes of key blob, one line
@@ -209,8 +219,8 @@ def _keygen() -> str:
     return exe
 
 
-def sign(message: bytes) -> str:
-    """An SSH signature of `message` in the baton-invite namespace. The old .sig is removed
+def sign(message: bytes, namespace: str = NAMESPACE) -> str:
+    """An SSH signature of `message` in the baton-invite namespace (or `namespace`). The old .sig is removed
     first (ssh-keygen asks before overwriting one and, with no input, keeps the old one and
     exits 0); its input is closed; its output goes to a file, never a pipe (Windows)."""
     _, _, key = my_key()
@@ -222,7 +232,7 @@ def sign(message: bytes) -> str:
             sig.unlink()
         with open(out, "wb") as fo:
             try:
-                subprocess.run([exe, "-Y", "sign", "-f", str(key), "-n", NAMESPACE, str(msg)],
+                subprocess.run([exe, "-Y", "sign", "-f", str(key), "-n", namespace, str(msg)],
                                stdin=subprocess.DEVNULL, stdout=fo, stderr=fo, timeout=15)
             except (OSError, subprocess.TimeoutExpired):
                 raise PageError("ssh-keygen did not sign")
@@ -231,8 +241,8 @@ def sign(message: bytes) -> str:
         return sig.read_text("ascii").replace("\r\n", "\n")
 
 
-def verify(message: bytes, signature: str, pub: str) -> bool:
-    """Whether `signature` is `pub`'s over `message` in the baton-invite namespace. The message
+def verify(message: bytes, signature: str, pub: str, namespace: str = NAMESPACE) -> bool:
+    """Whether `signature` is `pub`'s over `message` in the baton-invite namespace (or `namespace`). The message
     goes in from a file and the output to a file, with a time limit: on Windows a wrong
     signature checked through a pipe hung (2 of 2, 21.11.2026)."""
     if not PUB_RE.fullmatch(pub):
@@ -243,11 +253,11 @@ def verify(message: bytes, signature: str, pub: str) -> bool:
         allowed, out = Path(work) / "allowed", Path(work) / "out"
         msg.write_bytes(message)
         sig.write_bytes(signature.replace("\r\n", "\n").encode("ascii", "replace"))
-        allowed.write_text(f'peer namespaces="{NAMESPACE}" {pub}\n', "ascii")
+        allowed.write_text(f'peer namespaces="{namespace}" {pub}\n', "ascii")
         with open(msg, "rb") as fi, open(out, "wb") as fo:
             try:
                 done = subprocess.run([exe, "-Y", "verify", "-f", str(allowed), "-I", "peer",
-                                       "-n", NAMESPACE, "-s", str(sig)],
+                                       "-n", namespace, "-s", str(sig)],
                                       stdin=fi, stdout=fo, stderr=fo, timeout=15)
             except (OSError, subprocess.TimeoutExpired):
                 return False
@@ -270,7 +280,8 @@ def decode(code: str) -> tuple:
     if len(text) > 20000:
         raise PageError("that is too long to be a Baton code")
     armored = re.search(r"-----BEGIN BATON (INVITE|REPLY)-----(.*?)-----END BATON \1-----", text, re.S)
-    body = re.sub(r"\s+", "", armored.group(2) if armored else text)
+    # Inside the armour only base64 counts: a mail's "> ", a messenger's spaces and line breaks go.
+    body = re.sub(r"[^A-Za-z0-9+/=]" if armored else r"\s+", "", armored.group(2) if armored else text)
     try:
         outer = json.loads(base64.b64decode(body, validate=True).decode("ascii"))
         message, signature = outer["m"].encode("ascii"), outer["s"]
@@ -282,15 +293,20 @@ def decode(code: str) -> tuple:
     kind = payload.get("kind")
     if kind not in ARMOR or (armored and ARMOR[kind] != f"BATON {armored.group(1)}"):
         raise PageError("that is not a Baton code")
+    # v1: an invitation for anyone (v3.43); v2 (v3.44.0): addressed, `to` the ID it is for.
+    # A reply always names its `to`, and stays v1.
     want = {"v": int, "kind": str, "id": str, "pub": str, "created": str, "nonce": str}
     want.update({"text": str} if kind == "invite" else {"to": str, "invite": str})
+    if kind == "invite" and payload.get("v") == 2:
+        want["to"] = str
     if set(payload) != set(want) or any(not isinstance(payload[k], t) for k, t in want.items()):
         raise PageError("that code is not in a form this Baton reads")
-    if (payload["v"] != 1 or not ID_RE.fullmatch(payload["id"]) or not PUB_RE.fullmatch(payload["pub"])
+    if (payload["v"] != (2 if "to" in want and kind == "invite" else 1)
+            or not ID_RE.fullmatch(payload["id"]) or not PUB_RE.fullmatch(payload["pub"])
             or not NONCE_RE.fullmatch(payload["nonce"])
+            or ("to" in want and not ID_RE.fullmatch(payload["to"]))
             or (kind == "invite" and len(payload["text"]) > TEXT_MAX)
-            or (kind == "accept" and not (ID_RE.fullmatch(payload["to"])
-                                         and NONCE_RE.fullmatch(payload["invite"])))):
+            or (kind == "accept" and not NONCE_RE.fullmatch(payload["invite"]))):
         raise PageError("that code is not in a form this Baton reads")
     return payload, message, signature
 
@@ -335,22 +351,45 @@ class Store:
             _LOCK.release()
 
 
-def make_invite(text: str = "") -> str:
-    text = clean(text)
+def check_nick(nick) -> str:
+    """The human's own name for a friend: plain text of one line, at most NICK_MAX characters."""
+    nick = clean(nick or "")
+    if len(nick) > NICK_MAX:
+        raise PageError(f"a nickname is at most {NICK_MAX} characters")
+    return nick
+
+
+def _their_id(to) -> str:
+    to = clean(to or "").upper()
+    if to and not ID_RE.fullmatch(to):
+        raise PageError("a Baton ID looks like BTN-XXXX-XXXX-XXXX")
+    return to
+
+
+def make_invite(text: str = "", to: str = "", nick: str = "") -> str:
+    """An invitation code, kept here as waiting. With `to` (their Baton ID) it is addressed: only
+    that install takes it, and it waits in this install's box for them to fetch. Without, the v1
+    code of v3.43, which any Baton reads, to copy and send."""
+    text, to, nick = clean(text), _their_id(to), check_nick(nick)
     if len(text) > TEXT_MAX:
         raise PageError(f"the text is longer than {TEXT_MAX} characters")
     ident, pub, _ = my_key()
-    payload = {"v": 1, "kind": "invite", "id": ident, "pub": pub, "text": text,
+    if to == ident:
+        raise PageError("that is this install's own ID")
+    payload = {"v": 2 if to else 1, "kind": "invite", "id": ident, "pub": pub, "text": text,
                "created": _now(), "nonce": os.urandom(16).hex()}
+    if to:
+        payload["to"] = to
     code = _signed(payload)
     with Store() as s:
-        s["invites"][payload["nonce"]] = {"text": text, "created": payload["created"], "code": code}
+        s["invites"][payload["nonce"]] = {"text": text, "created": payload["created"], "code": code,
+                                          "to": to, "nick": nick}
     return code
 
 
-def read_code(code: str) -> dict:
-    """Check a pasted code and keep what it says. An invitation waits for the human's decision;
-    a reply to an invitation made here makes the friendship mutual."""
+def read_code(code: str, via: str = "paste", box: str = "") -> dict:
+    """Check a code (pasted, or from a box) and keep what it says. An invitation waits for
+    the human's decision; a reply to an invitation made here makes the friendship mutual."""
     payload, message, signature = decode(code)
     if id_of(payload["pub"]) != payload["id"]:
         raise PageError("the ID in that code is not the ID of the key in it")
@@ -359,24 +398,29 @@ def read_code(code: str) -> dict:
     ident, _, _ = my_key()
     if payload["id"] == ident:
         raise PageError("that code was made by this install")
+    if payload["kind"] == "invite" and payload.get("to", ident) != ident:
+        raise PageError(f"that invitation is for another Baton ({payload['to']}), not this one")
     with Store() as s:
         if payload["kind"] == "invite":
             s["incoming"][payload["nonce"]] = {"id": payload["id"], "pub": payload["pub"],
-                                               "text": payload["text"], "created": payload["created"]}
+                                               "text": payload["text"], "created": payload["created"],
+                                               "to": payload.get("to", ""), "via": via, "box": box}
             return {"kind": "invite", "id": payload["id"], "nonce": payload["nonce"],
                     "text": clean(payload["text"])}
-        if payload["to"] != ident or payload["invite"] not in s["invites"]:
+        inv = s["invites"].get(payload["invite"])
+        if payload["to"] != ident or not inv or (inv.get("to") or payload["id"]) != payload["id"]:
             raise PageError("that reply does not answer an invitation waiting on this install "
-                            "(made elsewhere, cancelled, or already used)")
-        note = s["invites"].pop(payload["invite"]).get("text", "")
+                            "(made elsewhere, for someone else, cancelled, or already used)")
+        s["invites"].pop(payload["invite"])
         s["friends"][payload["id"]] = {"pub": payload["pub"], "status": "mutual", "since": _now(),
-                                       "note": note}
+                                       "note": inv.get("text", ""), "nick": inv.get("nick", "")}
         return {"kind": "accept", "id": payload["id"], "status": "mutual"}
 
 
-def accept(nonce: str) -> str:
-    """Accept a pasted invitation: the peer is trusted from this side, and the reply code to
-    send back is returned. Mutual only once the inviter pastes it."""
+def accept(nonce: str, nick: str = "") -> str:
+    """Accept an invitation: the peer is trusted from this side, and the reply code to send back
+    is returned. Mutual only once the inviter has it (accept_to_box() posts it to their box)."""
+    nick = check_nick(nick)
     ident, pub, _ = my_key()
     with Store() as s:
         got = s["incoming"].get(nonce)
@@ -390,8 +434,25 @@ def accept(nonce: str) -> str:
         old = s["friends"].get(got["id"]) or {}
         s["friends"][got["id"]] = {"pub": got["pub"], "since": _now(), "note": got.get("text", ""),
                                    "status": "mutual" if old.get("status") == "mutual" else "accepted-by-me",
-                                   "reply": code}
+                                   "reply": code, "nick": nick or old.get("nick", ""),
+                                   "box": got.get("box", "") if got.get("to") == ident else ""}
     return code
+
+
+def accept_to_box(nonce: str, nick: str = "") -> dict:
+    """The page's Accept: the reply goes back the way the invitation came. One fetched from the
+    inviter's box is posted to that box, and once the box took it both sides have accepted; a
+    pasted one is answered by the human, with the code."""
+    with Store() as s:
+        got = dict(s["incoming"].get(nonce) or {})
+    code = accept(nonce, nick)
+    if not got.get("box") or got.get("to") != my_key()[0]:
+        return {"code": code, "sent": False, "error": ""}
+    try:
+        send_reply(got["id"])
+        return {"code": code, "sent": True, "error": ""}
+    except PageError as err:
+        return {"code": code, "sent": False, "error": str(err)}
 
 
 def ignore(nonce: str) -> None:
@@ -409,6 +470,342 @@ def remove(ident: str) -> None:
         s["friends"].pop(ident, None)
 
 
+def set_nick(nick: str, ident: str = "", nonce: str = "") -> None:
+    """The human's name for a friend (`ident`) or for an invitation still waiting (`nonce`)."""
+    nick = check_nick(nick)
+    with Store() as s:
+        row = s["friends"].get(ident) if ident else s["invites"].get(nonce)
+        if not isinstance(row, dict):
+            raise PageError("no such friend or invitation")
+        row["nick"] = nick
+
+
+# -- the box: invitations fetched from the inviter's own machine ------------------------------
+#
+# While an addressed invitation waits here, the page server opens a second listener, the box,
+# on BATON_BOX (default 0.0.0.0:47800; BATON_BOX=off: never). It answers two calls and nothing
+# else -- never the page or its buttons:
+#   POST /box/v1/fetch {id, pub, time, sig}: the invitations addressed to `id`, for the holder of
+#     its key (`ssh-keygen -Y sign -n baton-box` over "baton-box\n<id>\n<time>\n", within 5
+#     minutes, later than the last time used, and the key gives the ID);
+#   POST /box/v1/reply {code}: a signed reply, kept only if it answers an invitation waiting here.
+# Every 5 s it says on the local network "a Baton box, this ID, this port" (UDP broadcast on
+# BATON_BOX_UDP, default 47800); an open page hears that and fetches by itself, so on one network
+# nothing is typed. Across networks the code goes by a messenger (share_links()). The page
+# trusts no box: every code from one gets read_code()'s checks, as a pasted one does.
+
+BOX_NS = "baton-box"
+BOX_PORT = 47800
+CODE_MAX = 8192
+ANSWER_MAX = 1 << 20
+SKEW = 300
+
+
+def box_bind() -> tuple | None:
+    """(host, port) the box listens on, or None when BATON_BOX=off or not an IP:port."""
+    raw = (os.environ.get("BATON_BOX") or f"0.0.0.0:{BOX_PORT}").strip()
+    host, _, port = raw.rpartition(":")
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+        return host.strip("[]"), int(port)
+    except ValueError:
+        return None
+
+
+def udp_port() -> int:
+    try:
+        return int(os.environ.get("BATON_BOX_UDP") or BOX_PORT)
+    except ValueError:
+        return BOX_PORT
+
+
+def parse_announce(data: bytes, ip: str) -> tuple | None:
+    """(ID, ip, port) from a box's broadcast, or None for anything else."""
+    try:
+        got = json.loads(data[:512].decode("ascii")) if len(data) <= 512 else None
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if (not isinstance(got, dict) or got.get("baton") != "box" or not isinstance(got.get("id"), str)
+            or not ID_RE.fullmatch(got["id"]) or not isinstance(got.get("port"), int)
+            or not 0 < got["port"] < 65536):
+        return None
+    return got["id"], ip, got["port"]
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def _call(host: str, port: int, name: str, body: dict) -> dict:
+    """One POST to a friend's box: no proxy (a box is on this network or the VPN), no redirect."""
+    h = f"[{host}]" if ":" in host else host
+    req = urllib.request.Request(f"http://{h}:{port}/box/v1/{name}", method="POST",
+                                 data=json.dumps(body).encode("ascii"),
+                                 headers={"Content-Type": "application/json"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
+    try:
+        with opener.open(req, timeout=10) as resp:
+            raw = resp.read(ANSWER_MAX + 1)
+    except urllib.error.HTTPError as err:
+        try:
+            said = clean(json.loads(err.read(4096)).get("error"))[:200]
+        except Exception:
+            said = ""
+        raise PageError(f"their box refused it ({err.code}{': ' + said if said else ''})")
+    except (urllib.error.URLError, OSError, ValueError) as err:
+        raise PageError(f"their box at {h}:{port} could not be reached "
+                        f"({clean(getattr(err, 'reason', err))[:200]})")
+    try:
+        got = json.loads(raw) if len(raw) <= ANSWER_MAX else None
+    except ValueError:
+        got = None
+    if not isinstance(got, dict) or not got.get("ok"):
+        raise PageError("their box's answer is not one this Baton reads")
+    return got
+
+
+_PROOF = {"last": 0}
+_PROOF_LOCK = threading.Lock()
+
+
+def _proof() -> dict:
+    ident, pub, _ = my_key()
+    with _PROOF_LOCK:
+        t = max(int(time.time()), _PROOF["last"] + 1)
+        _PROOF["last"] = t
+    return {"id": ident, "pub": pub, "time": str(t),
+            "sig": sign(f"{BOX_NS}\n{ident}\n{t}\n".encode("ascii"), BOX_NS)}
+
+
+def share_links(kind: str, code: str) -> dict:
+    """The message that carries a code by a messenger the human already uses: its text, a
+    WhatsApp link (wa.me opens WhatsApp with the text ready; the human picks the contact) and a
+    mail link. Only the ID goes in the line: a nickname is never sent."""
+    ident = my_key()[0]
+    line = (f"{ident} invites you to be friends on Baton \u2014 paste this into your Baton page:"
+            if kind == "invite" else
+            f"{ident} accepted your Baton invitation \u2014 paste this into your Baton page:")
+    text = line + "\n\n" + code
+
+    def q(x):
+        return urllib.parse.quote(x, safe="")
+    subject = "Baton: an invitation" if kind == "invite" else "Baton: my reply"
+    return {"text": text, "whatsapp": "https://wa.me/?text=" + q(text),
+            "email": "mailto:?subject=" + q(subject) + "&body=" + q(text)}
+
+
+def fetch_from(their_id: str, host: str, port: int) -> dict:
+    """Take the invitations `their_id`'s box holds for this install. Only invitations made by
+    `their_id` are kept, each after read_code()'s checks."""
+    their_id = _their_id(their_id)
+    got = _call(host, port, "fetch", _proof())
+    codes = got.get("codes") if isinstance(got.get("codes"), list) else []
+    kept = refused = 0
+    for code in codes[:20]:
+        try:
+            if decode(str(code))[0]["id"] != their_id or decode(str(code))[0]["kind"] != "invite":
+                raise PageError("not an invitation from that ID")
+            read_code(str(code), via="box", box=f"{host}:{port}")
+            kept += 1
+        except PageError:
+            refused += 1
+    return {"invites": kept, "refused": refused}
+
+
+def send_reply(ident: str) -> None:
+    """The reply to an invitation fetched from a box, posted to that box (again)."""
+    with Store() as s:
+        f = dict(s["friends"].get(ident) or {})
+    if not f.get("reply") or not f.get("box"):
+        raise PageError("no box to send that reply to: copy it and send it yourself")
+    host, _, port = f["box"].rpartition(":")
+    _call(host, int(port), "reply", {"code": f["reply"]})
+    with Store() as s:
+        if ident in s["friends"]:
+            s["friends"][ident]["status"] = "mutual"
+
+
+def waiting_for_box() -> int:
+    """Addressed invitations waiting here: the box is open while there is one."""
+    data = _read_json(friends_path()) or {}
+    inv = data.get("invites") if isinstance(data.get("invites"), dict) else {}
+    return sum(1 for v in inv.values() if isinstance(v, dict) and v.get("to"))
+
+
+class BoxRefused(Exception):
+    def __init__(self, status: int, reason: str) -> None:
+        super().__init__(reason)
+        self.status, self.reason = status, reason
+
+
+class BoxHandler(BaseHTTPRequestHandler):
+    server_version = "Baton"
+    sys_version = ""
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *args) -> None:
+        pass
+
+    def _say(self, status: int, data: dict) -> None:
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:
+        self.close_connection = True
+        self._say(404, {"ok": False, "error": "not here"})
+
+    do_PUT = do_DELETE = do_OPTIONS = do_HEAD = do_GET
+
+    def do_POST(self) -> None:
+        self.close_connection = True
+        name = {"/box/v1/fetch": "fetch", "/box/v1/reply": "reply"}.get(self.path)
+        try:
+            if not self.server.allow(("ip", self.client_address[0]), 30):
+                raise BoxRefused(429, "too many requests")
+            size = int(self.headers.get("Content-Length") or 0)
+            if size < 0 or size > 2 * CODE_MAX:
+                raise BoxRefused(413, "too large")
+            data = json.loads(self.rfile.read(size) or b"{}")
+            if name is None:
+                raise BoxRefused(404, "not here")
+            if not isinstance(data, dict):
+                raise BoxRefused(400, "not JSON")
+            self._say(200, getattr(self.server, name)(data))
+        except BoxRefused as err:
+            self._say(err.status, {"ok": False, "error": err.reason})
+        except PageError as err:
+            self._say(403, {"ok": False, "error": str(err)})
+        except ValueError:
+            self._say(400, {"ok": False, "error": "not JSON"})
+        except Exception:
+            self._say(500, {"ok": False, "error": "error"})
+
+
+class Box(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, host: str, port: int) -> None:
+        if ":" in host:
+            self.address_family = socket.AF_INET6
+        super().__init__((host, port), BoxHandler)
+        self._mx, self._hits, self._seen = threading.Lock(), {}, {}
+
+    def allow(self, key, limit: int) -> bool:
+        now = time.time()
+        with self._mx:
+            hits = [t for t in self._hits.get(key, []) if now - t < 60]
+            ok = len(hits) < limit
+            self._hits[key] = hits + [now] if ok else hits
+            if len(self._hits) > 10000:
+                self._hits = {k: v for k, v in self._hits.items() if v and now - v[-1] < 60}
+            return ok
+
+    def fetch(self, data: dict) -> dict:
+        ident, pub, when, sig = (data.get(k) for k in ("id", "pub", "time", "sig"))
+        if not (all(isinstance(x, str) for x in (ident, pub, when, sig)) and ID_RE.fullmatch(ident)
+                and PUB_RE.fullmatch(pub) and re.fullmatch(r"[0-9]{1,12}", when)):
+            raise BoxRefused(400, "fetch wants id, pub, time and sig")
+        t = int(when)
+        if abs(time.time() - t) > SKEW:
+            raise BoxRefused(403, "the proof's time is too far from now")
+        if id_of(pub) != ident:
+            raise BoxRefused(403, "the ID is not the ID of the key")
+        if not self.allow(("id", ident), 10):
+            raise BoxRefused(429, "too many requests")
+        if not verify(f"{BOX_NS}\n{ident}\n{t}\n".encode("ascii"), sig, pub, BOX_NS):
+            raise BoxRefused(403, "the proof does not verify")
+        with self._mx:
+            if t <= self._seen.get(ident, 0):
+                raise BoxRefused(403, "that proof was used already")
+            self._seen[ident] = t
+        with Store() as s:
+            codes = [v["code"] for v in s["invites"].values() if v.get("to") == ident]
+            for v in s["invites"].values():
+                if v.get("to") == ident:
+                    v["fetched"] = _now()
+        return {"ok": True, "codes": codes}
+
+    def reply(self, data: dict) -> dict:
+        code = data.get("code")
+        if not isinstance(code, str) or len(code.encode("utf-8")) > CODE_MAX:
+            raise BoxRefused(400, "reply wants a code of at most 8 KiB")
+        payload = decode(code)[0]
+        if payload["kind"] != "accept":
+            raise BoxRefused(400, "only a reply goes here")
+        if not self.allow(("id", payload["id"]), 10):
+            raise BoxRefused(429, "too many requests")
+        read_code(code, via="box")
+        return {"ok": True}
+
+
+class Nearby:
+    """The boxes this page heard on the local network in the last 30 s: {ID: (ip, port)}."""
+
+    def __init__(self) -> None:
+        self.seen, self.sock = {}, None
+
+    def start(self) -> None:
+        if self.sock is not None:
+            return
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if hasattr(socket, "SO_REUSEPORT"):
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            s.bind(("", udp_port()))
+        except OSError:
+            return
+        self.sock = s
+        threading.Thread(target=self._listen, daemon=True).start()
+
+    def _listen(self) -> None:
+        while self.sock is not None:
+            try:
+                data, addr = self.sock.recvfrom(1024)
+            except OSError:
+                return
+            got = parse_announce(data, addr[0])
+            if got:
+                self.seen[got[0]] = (got[1], got[2], time.time())
+
+    def boxes(self) -> dict:
+        now = time.time()
+        return {k: v[:2] for k, v in list(self.seen.items()) if now - v[2] < 30}
+
+    def stop(self) -> None:
+        s, self.sock = self.sock, None
+        if s is not None:
+            s.close()
+
+
+def announce(box: Box, port: int, stop: threading.Event) -> None:
+    """Every 5 s while the box is open: "a Baton box, this ID, this port", by UDP broadcast."""
+    host = box.server_address[0]
+    target = "127.255.255.255" if host.startswith("127.") else "255.255.255.255"
+    try:
+        ident = my_key()[0]
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        if host not in ("0.0.0.0", "::"):
+            s.bind((host, 0))                    # the hearer fetches from where it came from
+    except (PageError, OSError):
+        return
+    msg = json.dumps({"baton": "box", "v": 1, "id": ident, "port": port}).encode("ascii")
+    with s:
+        while not stop.is_set():
+            try:
+                s.sendto(msg, (target, udp_port()))
+            except OSError:
+                pass
+            stop.wait(5)
+
+
 def friends_view() -> dict:
     data = _read_json(friends_path()) or {}
 
@@ -416,12 +813,16 @@ def friends_view() -> dict:
         return data.get(name) if isinstance(data.get(name), dict) else {}
     return {
         "friends": [{"id": k, "status": v.get("status"), "since": v.get("since"),
-                     "note": clean(v.get("note", "")), "reply": v.get("reply", "")}
+                     "note": clean(v.get("note", "")), "reply": v.get("reply", ""),
+                     "nick": clean(v.get("nick", "")), "box": v.get("box", "")}
                     for k, v in sorted(part("friends").items())],
         "invites": [{"nonce": k, "text": clean(v.get("text", "")), "created": v.get("created"),
-                     "code": v.get("code", "")} for k, v in part("invites").items()],
+                     "code": v.get("code", ""), "to": v.get("to", ""),
+                     "nick": clean(v.get("nick", "")), "fetched": v.get("fetched", "")}
+                    for k, v in part("invites").items()],
         "incoming": [{"nonce": k, "id": v.get("id"), "text": clean(v.get("text", "")),
-                      "created": v.get("created")} for k, v in part("incoming").items()],
+                      "created": v.get("created"), "via": v.get("via", "paste")}
+                     for k, v in part("incoming").items()],
     }
 
 
@@ -566,7 +967,11 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {"ok": False, "error": "not here"})
 
     def do_POST(self) -> None:
-        self.server.touch()
+        # The open page looks every 15 s: that is not use, so a forgotten tab does not keep the
+        # server going past its idle time.
+        polled = self.path.split("?", 1)[0] == "/api/watch"
+        if not polled:
+            self.server.touch()
         if not self._host_ok():
             return self._refuse()
         origin = self.headers.get("Origin")
@@ -600,15 +1005,22 @@ class Handler(BaseHTTPRequestHandler):
         fn = ROUTES.get((method, name))
         if fn is None:
             return self._json(404, {"ok": False, "error": "not here"})
-        self.server.busy(+1)
+        use = name != "watch"
+        self.server.busy(+1, use)
         try:
-            self._json(200, fn(self.server, data))
+            status, out = 200, fn(self.server, data)
         except PageError as err:
-            self._json(200, {"ok": False, "error": str(err)})
+            status, out = 200, {"ok": False, "error": str(err)}
         except Exception as err:
-            self._json(500, {"ok": False, "error": type(err).__name__})
+            status, out = 500, {"ok": False, "error": type(err).__name__}
+        try:
+            if name not in ("quit", "ping"):  # before the answer, so the page sees the box as it is
+                self.server.sync_box()
+            if name in ("state", "watch", "invite") and isinstance(out.get("box"), dict):
+                out["box"] = self.server.box_view()
+            self._json(status, out)
         finally:
-            self.server.busy(-1)
+            self.server.busy(-1, use)
 
 
 def _state(srv, data) -> dict:
@@ -623,7 +1035,19 @@ def _state(srv, data) -> dict:
         leads = []
     return {"ok": True, "id": ident, "version": cfg.version, "leads": leads, "kind": cfg.kind,
             "how": cfg.how, "catalog": cfg.catalog, "keygen": bool(shutil.which("ssh-keygen")),
-            **friends_view()}
+            "box": srv.box_view(), **_with_shares(friends_view())}
+
+
+def _with_shares(view: dict) -> dict:
+    """The messenger links for what can still be sent again: invitations waiting, replies."""
+    try:
+        for v in view["invites"]:
+            v["share"] = share_links("invite", v["code"]) if v.get("code") else None
+        for f in view["friends"]:
+            f["share"] = share_links("accept", f["reply"]) if f.get("reply") else None
+    except PageError:
+        pass
+    return view
 
 
 def _update(srv, data) -> dict:
@@ -647,14 +1071,53 @@ def _nonce(data) -> str:
     return n
 
 
+def _invite(srv, data) -> dict:
+    code = make_invite(str(data.get("text", "")), str(data.get("to", "")), str(data.get("nick", "")))
+    return {"ok": True, "code": code, "share": share_links("invite", code)}
+
+
+def _watch(srv, data) -> dict:
+    """The open page's look every 15 s, not counted as use: boxes nearby fetched from (each at
+    most once a minute), then the state."""
+    srv.nearby.start()
+    for ident, (host, port) in srv.nearby.boxes().items():
+        if time.time() - srv.fetched.get(ident, 0) > 60:
+            srv.fetched[ident] = time.time()
+            try:
+                if ident != my_key()[0]:
+                    fetch_from(ident, host, port)
+            except PageError:
+                pass
+    return _state(srv, data)
+
+
+def _accept(srv, data) -> dict:
+    got = accept_to_box(_nonce(data), str(data.get("nick", "")))
+    return {"ok": True, **got, "share": share_links("accept", got["code"])}
+
+
+def _send(srv, data) -> dict:
+    send_reply(str(data.get("id", "")))
+    return {"ok": True}
+
+
+def _nick(srv, data) -> dict:
+    ident = str(data.get("id", ""))
+    set_nick(str(data.get("nick", "")), ident=ident, nonce="" if ident else _nonce(data))
+    return {"ok": True}
+
+
 ROUTES = {
     ("GET", "ping"): lambda srv, data: {"ok": True, "version": srv.cfg.version},
     ("GET", "state"): _state,
     ("POST", "quit"): _quit,
     ("POST", "update"): _update,
-    ("POST", "invite"): lambda srv, data: {"ok": True, "code": make_invite(str(data.get("text", "")))},
+    ("POST", "invite"): _invite,
     ("POST", "paste"): lambda srv, data: {"ok": True, **read_code(str(data.get("code", "")))},
-    ("POST", "accept"): lambda srv, data: {"ok": True, "code": accept(_nonce(data))},
+    ("POST", "accept"): _accept,
+    ("POST", "send"): _send,
+    ("POST", "nick"): _nick,
+    ("POST", "watch"): _watch,
     ("POST", "ignore"): lambda srv, data: (ignore(_nonce(data)), {"ok": True})[1],
     ("POST", "cancel"): lambda srv, data: (cancel(_nonce(data)), {"ok": True})[1],
     ("POST", "remove"): lambda srv, data: (remove(str(data.get("id", ""))), {"ok": True})[1],
@@ -670,21 +1133,55 @@ class Server(ThreadingHTTPServer):
         self.ticket = os.urandom(16).hex()      # 128 bits, never on a command line
         self.updating = threading.Lock()
         self._last, self._busy, self._mx = time.time(), 0, threading.Lock()
+        self.box, self._box_stop, self._box_mx, self.box_error = None, None, threading.Lock(), ""
+        self.nearby, self.fetched = Nearby(), {}
+
+    def sync_box(self) -> None:
+        """The box open while an addressed invitation waits here, closed when none does."""
+        with self._box_mx:
+            want = box_bind() if waiting_for_box() else None
+            if want and self.box is None:
+                try:
+                    self.box = Box(*want)
+                except OSError as err:
+                    self.box_error = f"the box could not open {want[0]}:{want[1]} ({err.strerror or err})"
+                    return
+                self.box_error, self._box_stop = "", threading.Event()
+                threading.Thread(target=self.box.serve_forever, kwargs={"poll_interval": 0.2},
+                                 daemon=True).start()
+                threading.Thread(target=announce, args=(self.box, want[1], self._box_stop),
+                                 daemon=True).start()
+            elif not want and self.box is not None:
+                self.close_box()
+
+    def close_box(self) -> None:
+        box, self.box = self.box, None
+        if box is not None:
+            self._box_stop.set()
+            box.shutdown()
+            box.server_close()
+
+    def box_view(self) -> dict:
+        box = self.box
+        if box is None:
+            return {"on": False, "error": self.box_error, "nearby": sorted(self.nearby.boxes())}
+        return {"on": True, "nearby": sorted(self.nearby.boxes())}
 
     def touch(self) -> None:
         self._last = time.time()
 
-    def busy(self, n: int) -> None:
+    def busy(self, n: int, use: bool = True) -> None:
         with self._mx:
             self._busy += n
-            self._last = time.time()
+            if use:
+                self._last = time.time()
 
     def idle_watch(self) -> None:
         limit = _idle()
         while True:
             time.sleep(min(5.0, limit / 4))
             with self._mx:
-                quiet = self._busy == 0 and time.time() - self._last > limit
+                quiet = self._busy == 0 and time.time() - self._last > limit and self.box is None
             if quiet:
                 self.shutdown()
                 return
@@ -719,9 +1216,12 @@ def serve(cfg: Config, open_it: bool, quiet: bool = False) -> int:
     if open_it:
         open_url(url)
     threading.Thread(target=srv.idle_watch, daemon=True).start()
+    srv.sync_box()
     try:
         srv.serve_forever(poll_interval=0.2)
     finally:
+        srv.close_box()
+        srv.nearby.stop()
         srv.server_close()
         if (_read_json(path) or {}).get("pid") == os.getpid():
             try:
@@ -922,6 +1422,8 @@ svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .st{font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
 .st.ok{color:var(--ok);background:var(--ok-soft)} .st.wait{color:var(--turn-text);background:var(--turn);border:1px solid var(--turn-line)}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:13px;color:var(--muted)}
+.field input{font:inherit;font-size:14px;color:var(--text);background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:7px 10px;width:100%}
+.field input.mono{font-family:var(--mono);font-size:13px}
 .field textarea{font:inherit;font-size:14px;color:var(--text);background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%;resize:vertical;min-height:64px}
 .field textarea.code-in{font-family:var(--mono);font-size:12px;min-height:110px}
 .field textarea:focus{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);border-color:var(--accent)}
@@ -937,6 +1439,8 @@ svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.primary svg{stroke:#fff}
 .btn.sm{padding:3px 10px;font-size:12.5px}
+a.btn{text-decoration:none;color:inherit} a.btn.primary{color:#fff}
+.btn.big{padding:10px 18px;font-size:15px}
 .note{display:flex;gap:8px;font-size:12.5px;color:var(--muted);margin-top:12px;line-height:1.45}
 .note svg{margin-top:2px}
 .leads{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
@@ -955,14 +1459,14 @@ svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-widt
 <header class="top"><div class="top-in">
   <div class="brand"><span class="logo" data-icon="baton"></span>Baton</div>
   <div class="sp"></div>
-  <span class="pill hide-sm"><span data-icon="lock"></span>this machine only</span>
+  <span class="pill hide-sm"><span data-icon="lock"></span><span id="where-pill">this machine only</span></span>
   <span class="pill" id="ver-pill"></span>
 </div></header>
 <main class="wrap">
   <aside class="col left" id="left"></aside>
   <section class="col center" id="center"></section>
   <aside class="col right" id="right"></aside>
-  <div class="foot">Served by Baton on 127.0.0.1. It stops by itself after 30 minutes without use.</div>
+  <div class="foot">Served by Baton on 127.0.0.1. It stops by itself after 30 minutes without use, but not while your box is open.</div>
 </main>
 <div class="toast" id="toast" role="status"></div>
 <script>
@@ -1011,6 +1515,26 @@ function copy(text, what){
   (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
     () => toast(what + " copied"), () => toast("Copy failed: select the text"));
 }
+/* A code goes by the messenger the human already uses: WhatsApp (wa.me opens it with the text
+   ready; they pick the contact), a mail, or the clipboard. The links come from the server. */
+function link(spec, href, ...kids){
+  const a = el(spec, {target: "_blank", rel: "noopener noreferrer"}, ...kids);
+  a.setAttribute("href", href);
+  return a;
+}
+function shareButtons(sh, what, small){
+  if (!sh) return null;
+  const sz = small ? ".sm" : "";
+  return el("div.btns", null,
+    link("a.btn" + sz + (small ? "" : ".primary.big"), sh.whatsapp, "Send on WhatsApp"),
+    link("a.btn" + sz, sh.email, "Email"),
+    el("button.btn" + sz, {type: "button", on: {click: () => copy(sh.text, what)}}, icon("copy"), "Copy"));
+}
+function shareBox(sh, what){
+  copy(sh.text, what);                       // on the click that made it: ready to paste anywhere
+  return el("div", null, shareButtons(sh, what, false),
+    el("div.note", null, icon("info"), el("span", null, "WhatsApp opens with the message ready; you pick the contact. The messenger carries a signed code: it sees the code and its note, nothing else of yours.")));
+}
 async function api(name, body){
   const opt = {method: body === undefined ? "GET" : "POST", headers: {"X-Baton-Ticket": KEY}};
   if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
@@ -1033,6 +1557,7 @@ async function refresh(){
 
 function render(){
   document.getElementById("ver-pill").textContent = "v" + S.version;
+  document.getElementById("where-pill").textContent = S.box.on ? "this machine; my box is open to friends" : "this machine only";
   renderLeft(); renderCenter(); renderRight();
 }
 
@@ -1046,22 +1571,31 @@ function renderLeft(){
       S.id ? el("button.icon-btn", {type: "button", "aria-label": "Copy my Baton ID", title: "Copy",
         on: {click: () => copy(S.id, "ID")}}, icon("copy")) : null),
     el("div.note", null, icon("info"), el("span", null, S.id
-      ? "Your install's ID. Give it only to people you trust. It is a fingerprint of a key made on this machine; nothing is sent anywhere."
+      ? "Your install's ID. Give it only to people you trust: they need it to invite you. It is a fingerprint of a key made on this machine."
       : "The ID is made at a session start by ssh-keygen" + (S.keygen ? "." : ", which is not on this machine.")))));
 
   const fc = el("div.card", null, el("h2", null, icon("users"), "Friends", el("span.count.muted", null, String(S.friends.length))));
   if (!S.friends.length) fc.appendChild(el("div.small.muted", null, "No friends yet. Invite someone, or paste their invitation."));
   for (const f of S.friends) {
     const mutual = f.status === "mutual";
+    const name = f.nick ? el("span", {title: f.id}, el("b", null, f.nick), " (", el("span.mono", null, f.id), ")")
+                        : el("span.mono", {title: f.id}, f.id);
     const row = el("div.friend", null,
-      el("div.nm", null, el("span.mono", {title: f.id}, f.id),
+      el("div.nm", null, name,
         el("span.st." + (mutual ? "ok" : "wait"), null, mutual ? "friends" : "send them your reply"),
+        el("button.btn.sm", {type: "button", title: "Your own name for them: kept on this machine only",
+          on: {click: async () => { const n = prompt("Nickname for " + f.id + " (only you see it, up to 40 characters)", f.nick || "");
+            if (n === null) return; const r = await api("nick", {id: f.id, nick: n}); toast(r.ok ? "Saved" : r.error); refresh(); }}}, "Rename"),
         el("button.btn.sm", {type: "button", title: "Stops new things only; what they already have stays with them",
           on: {click: async () => { if (!confirm("Remove " + f.id + "? It stops new things only.")) return;
             const r = await api("remove", {id: f.id}); toast(r.ok ? "Removed" : r.error); refresh(); }}}, "Remove")));
     if (!mutual) {
       row.appendChild(el("div.small.muted", null, "You accepted. Send them your reply; on their side you become friends when they paste it. Nothing more comes back here."));
-      if (f.reply) row.appendChild(el("div", null, el("button.btn.sm", {type: "button", on: {click: () => copy(f.reply, "Reply")}}, icon("copy"), "Copy my reply again")));
+      const b = el("div.btns");
+      if (f.share) b.appendChild(shareButtons(f.share, "Reply", true));
+      if (f.reply && f.box) b.appendChild(el("button.btn.sm", {type: "button", on: {click: async () => {
+        const r = await api("send", {id: f.id}); toast(r.ok ? "Reply sent to their box" : r.error); refresh(); }}}, "Send it to their box again"));
+      row.appendChild(b);
     }
     if (f.note) row.appendChild(el("div.small.muted", null, "Their note: ", el("span", null, f.note)));
     fc.appendChild(row);
@@ -1107,32 +1641,43 @@ function updateCard(){
 
 function inviteCard(){
   if (keep.invite) { keep.drawInvites(); return keep.invite; }
+  const toIn = el("input.mono", {maxlength: "18", placeholder: "BTN-XXXX-XXXX-XXXX", "aria-label": "Your friend's Baton ID", spellcheck: "false", autocomplete: "off"});
+  const nickIn = el("input", {maxlength: "40", placeholder: "Optional: what you call them", "aria-label": "Nickname"});
   const msgIn = el("textarea", {maxlength: "140", placeholder: "Optional: who you are, in a sentence", "aria-label": "Short message"});
   const counter = el("span", null, "0 / 140");
   const result = el("div"), err = el("div.err"), list = el("div");
   msgIn.addEventListener("input", () => { counter.textContent = msgIn.value.length + " / 140"; });
-  const create = el("button.btn.primary", {type: "button"}, icon("user"), "Invite a friend");
+  const create = el("button.btn.primary", {type: "button"}, icon("user"), "Invite");
   create.addEventListener("click", async () => {
-    err.textContent = ""; create.disabled = true;
-    const r = await api("invite", {text: msgIn.value});
+    err.textContent = ""; result.replaceChildren(); create.disabled = true;
+    const addressed = toIn.value.trim() !== "";
+    const r = await api("invite", {text: msgIn.value, to: toIn.value, nick: nickIn.value});
     create.disabled = false;
     if (!r.ok) { err.textContent = r.error; return; }
-    msgIn.value = ""; counter.textContent = "0 / 140";
-    result.replaceChildren(el("div.code", {title: "Invitation code"}, r.code),
-      el("div.btns", null, el("button.btn", {type: "button", on: {click: () => copy(r.code, "Invitation")}}, icon("copy"), "Copy")),
-      el("div.note", null, icon("info"), el("span", null, "Send it to them yourself: a message, a mail, in person. Baton sends nothing. When they accept, paste their reply below.")));
-    refresh();
+    msgIn.value = ""; toIn.value = ""; nickIn.value = ""; counter.textContent = "0 / 140";
+    await refresh();
+    result.replaceChildren(
+      addressed ? el("div.okline", null, icon("check"), S.box.on ? "Waiting in your box, which is now open to friends." : "Kept here; the box did not open: " + (S.box.error || "switched off")) : null,
+      addressed ? el("div.small.muted", null, "On the same network their page finds it by itself. Otherwise send it (it is copied already):") : null,
+      shareBox(r.share, "Invitation"),
+      el("div.small.muted", null, "When they accept, their reply comes back to your box, or they send it the same way and you paste it below."));
   });
   keep.drawInvites = () => {
     list.replaceChildren();
-    for (const v of S.invites) list.appendChild(el("div.pending", null,
-      el("div", null, "Waiting for a reply since " + (v.created || "").replace("T", " ").slice(0, 16) + (v.text ? ": " : ""), v.text ? el("span", null, v.text) : null),
-      el("div.btns", null,
-        el("button.btn.sm", {type: "button", on: {click: () => copy(v.code, "Invitation")}}, icon("copy"), "Copy again"),
-        el("button.btn.sm", {type: "button", on: {click: async () => { await api("cancel", {nonce: v.nonce}); toast("Invitation cancelled"); refresh(); }}}, "Cancel"))));
+    for (const v of S.invites) {
+      const whom = v.to ? [" for ", v.nick ? el("b", null, v.nick) : null, v.nick ? " (" : "", el("span.mono", null, v.to), v.nick ? ")" : ""]
+                        : (v.nick ? [" for ", el("b", null, v.nick)] : []);
+      list.appendChild(el("div.pending", null,
+        el("div", null, "Invitation", ...whom, (v.fetched ? ", fetched by them," : "") + " waiting for a reply since " + (v.created || "").replace("T", " ").slice(0, 16) + (v.text ? ": " : ""), v.text ? el("span", null, v.text) : null),
+        el("div.btns", null,
+          shareButtons(v.share, "Invitation", true),
+          el("button.btn.sm", {type: "button", on: {click: async () => { await api("cancel", {nonce: v.nonce}); toast("Invitation cancelled"); refresh(); }}}, "Cancel"))));
+    }
   };
   keep.drawInvites();
   keep.invite = el("div.card", null, el("h2", null, icon("users"), "Invite a friend"),
+    el("label.field", null, "Their Baton ID (on their own page). With it, the invitation waits in your box for them; without, you get a code to send yourself", toIn),
+    el("label.field", null, "Nickname (only for you: kept on this machine, never sent)", nickIn),
     el("label.field", null, "Message (plain text, shown to them; Baton never puts it in their agent's context)", msgIn, el("div.hint", null, el("span", null, "Links are not clickable"), counter)),
     create, err, result, list);
   return keep.invite;
@@ -1140,33 +1685,47 @@ function inviteCard(){
 
 function pasteCard(){
   if (keep.paste) { keep.drawIncoming(); return keep.paste; }
-  const codeIn = el("textarea.code-in", {placeholder: "-----BEGIN BATON INVITE----- ...", "aria-label": "Invitation or reply code", spellcheck: "false"});
+  const codeIn = el("textarea.code-in", {placeholder: "The whole message is fine: -----BEGIN BATON INVITE----- ...", "aria-label": "Invitation or reply code", spellcheck: "false"});
   const err = el("div.err"), out = el("div"), list = el("div");
-  const check = el("button.btn.primary", {type: "button"}, icon("check"), "Check");
+  const check = el("button.btn", {type: "button"}, icon("check"), "Check");
   check.addEventListener("click", async () => {
     err.textContent = ""; out.replaceChildren(); check.disabled = true;
-    const r = await api("paste", {code: codeIn.value});
+    await take(codeIn.value);
     check.disabled = false;
+  });
+  async function take(text){
+    const r = await api("paste", {code: text});
     if (!r.ok) { err.textContent = r.error; return; }
     codeIn.value = "";
     if (r.kind === "accept") out.appendChild(el("div.okline", null, icon("check"), "You and " + r.id + " are friends now."));
     refresh();
+  }
+  const fromClip = el("button.btn.primary.big", {type: "button"}, icon("inbox"), "Paste invitation or reply");
+  fromClip.addEventListener("click", async () => {
+    err.textContent = ""; out.replaceChildren();
+    let text = null;
+    try { text = await navigator.clipboard.readText(); } catch (e) { text = null; }
+    if (!text) { err.textContent = "The page could not read the clipboard here: paste it into the box below and press Check."; codeIn.focus(); return; }
+    await take(text);
   });
   keep.drawIncoming = () => {
     list.replaceChildren();
     for (const v of S.incoming) {
       const box = el("div.request", null,
         el("div", null, el("b", null, "Invitation from "), el("span.mono", null, v.id)),
-        el("div.small.muted", null, "Signature checked against the key inside; the ID matches that key."));
+        el("div.small.muted", null, (v.via === "box" ? "Fetched from their box. " : "") + "Signature checked against the key inside; the ID matches that key."));
       if (v.text) box.appendChild(el("blockquote.msg", null, v.text));
+      const nickIn = el("input", {maxlength: "40", placeholder: "Optional: what you call them", "aria-label": "Nickname"});
+      box.appendChild(el("label.field", null, "Nickname (only for you)", nickIn));
       const reply = el("div");
       box.appendChild(el("div.btns", null,
         el("button.btn.primary", {type: "button", on: {click: async () => {
-          const r = await api("accept", {nonce: v.nonce});
+          const r = await api("accept", {nonce: v.nonce, nick: nickIn.value});
           if (!r.ok) { toast(r.error); return; }
-          out.replaceChildren(el("div.okline", null, icon("check"), "Accepted. Send this reply back to " + v.id + ":"),
-            el("div.code", null, r.code),
-            el("div.btns", null, el("button.btn", {type: "button", on: {click: () => copy(r.code, "Reply")}}, icon("copy"), "Copy")));
+          if (r.sent) out.replaceChildren(el("div.okline", null, icon("check"), "Accepted. Your reply went to " + v.id + "'s box: you are friends."));
+          else out.replaceChildren(r.error ? el("div.err", null, "Their box did not take the reply: " + r.error) : null,
+            el("div.okline", null, icon("check"), "Accepted. Send this reply back to " + v.id + " (it is copied already):"),
+            shareBox(r.share, "Reply"));
           refresh(); }}}, icon("check"), "Accept"),
         el("button.btn", {type: "button", on: {click: async () => { await api("ignore", {nonce: v.nonce}); toast("Ignored. They are not told."); refresh(); }}}, "Ignore")));
       box.appendChild(reply);
@@ -1174,14 +1733,20 @@ function pasteCard(){
     }
   };
   keep.drawIncoming();
-  keep.paste = el("div.card", null, el("h2", null, icon("inbox"), "Paste an invitation or a reply"),
-    el("label.field", null, "The code they sent you", codeIn), check, err, list, out,
-    el("div.note", null, icon("info"), el("span", null, "An invitation's message is shown here; Baton never puts it in your agent's context. Ignore tells nobody.")));
+  keep.paste = el("div.card", null, el("h2", null, icon("inbox"), "An invitation or a reply"),
+    el("div.btns", null, fromClip), el("label.field", null, "Or paste the message they sent you here", codeIn), check, err, list, out,
+    el("div.note", null, icon("info"), el("span", null, "On the same network, an invitation from a friend's box shows here by itself while this page is open. An invitation's message is shown here; Baton never puts it in your agent's context. Ignore tells nobody.")));
   return keep.paste;
 }
 
 function renderRight(){
   const R = document.getElementById("right"); R.replaceChildren();
+  const B = S.box, card = el("div.card", null, el("h2", null, icon("inbox"), "My box"));
+  if (B.on) card.append(el("div.small", null, "Open to friends on this network while an invitation of yours waits."));
+  else card.append(el("div.small.muted", null, B.error ? "Closed: " + B.error : "Closed. It opens by itself while an invitation you addressed waits."));
+  if (B.nearby && B.nearby.length) card.append(el("div.small", null, "Nearby: ", B.nearby.join(", ")));
+  card.append(el("div.note", null, icon("info"), el("span", null, "On one network the pages find each other and nothing is typed. Across networks, send the code by WhatsApp or mail. The box gives an invitation only to the ID it is for, after a key proof; nicknames never leave this machine.")));
+  R.appendChild(card);
   R.appendChild(el("div.card.soon", null, el("h2", null, icon("book"), "Shared tasks"),
     el("div.small.muted", null, "Coming soon: tasks shared with friends, and their feed, on this page.")));
   const n = S.incoming.length;
@@ -1190,7 +1755,14 @@ function renderRight(){
     el("div.note", null, icon("info"), el("span", null, "Counts only: never a message, never this page's link."))));
 }
 
-refresh();
+let POLL = null;
+async function watch(){
+  const got = await api("watch", {});
+  if (!got.ok) { if (/has stopped/.test(got.error || "")) { clearInterval(POLL); toast(got.error); } return; }
+  const was = JSON.stringify([S.incoming, S.friends, S.invites, S.box]);
+  if (JSON.stringify([got.incoming, got.friends, got.invites, got.box]) !== was) { S = got; render(); }
+}
+refresh().then(() => { watch(); POLL = setInterval(watch, 15000); });
 </script>
 </body>
 </html>

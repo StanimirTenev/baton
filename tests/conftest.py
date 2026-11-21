@@ -42,6 +42,9 @@ def _baton_state_outside_the_repo(tmp_path, monkeypatch):
     # started with its environment built by hand loses these two, so there is no display either.
     monkeypatch.setenv("BATON_PAGE", "off")
     monkeypatch.setenv("BATON_NO_BROWSER", "1")
+    # The box (v3.44.0): no test listens on the network or broadcasts; tests/test_box.py opens
+    # its own on 127.0.0.1.
+    monkeypatch.setenv("BATON_BOX", "off")
     for name in ("DISPLAY", "WAYLAND_DISPLAY"):
         monkeypatch.delenv(name, raising=False)
 
@@ -92,7 +95,7 @@ CHILD_ENV = ("PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT
              "WINDIR", "COMSPEC", "PATHEXT", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR",
              "LANG", "LC_ALL", "LC_CTYPE", "BATON_BODY_STATE", "BATON_SESSION_STATE",
              "BATON_LESSONS_STATE", "BATON_MEMLINT_STATE", "BATON_MANAGED_DIR", "BATON_LEDGER",
-             "BATON_IDENTITY", "BATON_PAGE", "BATON_NO_BROWSER")
+             "BATON_IDENTITY", "BATON_PAGE", "BATON_NO_BROWSER", "BATON_BOX", "BATON_BOX_UDP")
 
 
 def child_env(**extra) -> dict:

@@ -2,6 +2,45 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.44.0** — invitations found by themselves on one network, sent by WhatsApp across networks; a nickname for each friend
+
+In 3.43 an invitation was a code to copy into a message, and the reply another code to copy back.
+Now on one network the page does both, through a small box on the inviter's own machine; across
+networks one button hands the code to WhatsApp or mail. No server of ours, no outside service.
+
+- **An invitation for a Baton ID waits in your box.** "Invite a friend" takes their Baton ID, an
+  optional nickname and the note. The invitation now names that ID (`to`, a v2 code) and waits on
+  this machine, in a box the page server opens on port 47800 while such an invitation waits, and
+  closes when none does. The box answers two calls only: a fetch, which gives an ID the invitations
+  addressed to it after a proof that the caller holds that ID's key (`ssh-keygen -Y sign -n
+  baton-box` over the ID and the time, within 5 minutes, each proof once), and a reply. Never the
+  page or its buttons. At most 30 requests a minute from one address and 10 for one ID.
+- **On one network nothing is typed.** While it is open the box says on the local network, every 5
+  s, "a Baton box, this ID, this port" (UDP broadcast); an open page hears it, fetches, and the
+  invitation shows on it.
+- **Across networks, a button for WhatsApp.** After Invite (and after Accept, for the reply) the
+  message, one line and the code, is on the clipboard, with "Send on WhatsApp" (`wa.me`, the human
+  picks the contact), "Email" and "Copy". "Paste invitation" reads the clipboard on the click and finds
+  the code inside whatever the messenger put around it. The messenger sees the code and its note.
+- **Accept answers by itself.** Accepting an invitation fetched from a box posts the reply back to
+  that box; once the box took it both sides are friends. If the box cannot be reached, the reply is
+  offered with the same buttons. A reply is kept only if it answers an invitation waiting
+  there, from the ID it was for.
+- **The page trusts no box.** Every code from a box gets the checks a pasted one gets: the signature
+  against the key inside, the key against the ID, and `to` against this install. An addressed
+  invitation pasted on another install is refused; the old unaddressed codes still read, and "copy the
+  code" still makes them.
+- **A nickname for each friend**, set when inviting, when accepting, and with Rename in the list, shown
+  as "nickname (BTN-...)". Up to 40 characters of plain text, kept in `friends.json` only: never sent,
+  never in a code, never in the agent's context.
+- **The hooks still make no network request.** Only the page server listens on the box and talks to
+  a friend's box, and the open page's look every 15 s does not count as use. While the box is open the
+  page server does not stop for idleness.
+- **Not checked:** two real machines on a real network (the tests and the probe ran on 127.0.0.x on one
+  machine), a router or Wi-Fi that drops broadcasts, the firewall prompt on Windows and macOS when the
+  box first listens, Windows at all, and a real WhatsApp: the link and its length (about 1.3 KB) were
+  checked as text only, not opened in WhatsApp Desktop or Web.
+
 **v3.43.1** — on Windows the page's buttons can sign and check codes
 
 The Windows test of 3.43.0 found that the page started by the session hook could not make an
