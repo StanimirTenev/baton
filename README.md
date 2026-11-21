@@ -188,8 +188,9 @@ answers it. A code to copy by hand still works.
 2. **Your box opens by itself** while an invitation with an ID waits, and closes when none does. The
    page server listens on port 47800 of this machine's addresses (`BATON_BOX=<ip>:<port>` to choose,
    `BATON_BOX=off` never), and every 5 s says on the local network, by UDP broadcast, "a Baton box,
-   this ID, this port". On the same network your friend's page, while open, hears that and fetches:
-   nothing is typed. **Across networks the code goes by a messenger you already use.** After
+   this ID, this port". On the same network your friend's page, while open, hears that and shows
+   "BTN-... (nearby)" with a **Get invitation** button: nothing is typed, and no box is asked before
+   that click. **Across networks the code goes by a messenger you already use.** After
    **Invite**, the message (one line, "BTN-... invites you to be friends on Baton", and the code) is
    on the clipboard, with a big **Send on WhatsApp** button (`wa.me/?text=...`: WhatsApp opens with
    the message ready and you pick the contact), **Email** and **Copy**. Your friend presses **Paste
@@ -351,7 +352,7 @@ Baton's state folder. Keeping the conversation has no switch to turn it off in v
 | the page's server, `tools/baton_page.py` | listens while it runs (from the first session start of a version until 30 minutes without use) | nowhere: the page listens on 127.0.0.1 only, and answers only requests that carry the random key from its link. The key stops other web pages; it does not stop programs on this machine running as you |
 | **Send on WhatsApp** and **Email** on the page | only when you click them | the browser opens `wa.me` or your mail program with the message (the code and its note); you pick who gets it and send it yourself |
 | the box, in the page's server (v3.44.0) | listens only while an invitation you addressed to a Baton ID waits (`BATON_BOX=off`: never); every 5 s it broadcasts on the local network | it listens on port 47800 of this machine's addresses and answers two calls: a fetch, giving an ID the invitations addressed to it after a proof that the caller holds its key, and a reply. The broadcast, UDP to the local network on port 47800: your Baton ID and the port. Your nicknames never go out |
-| the page, when it fetches from a friend's box or posts a reply to it | while the page is open, every 15 s, from a box it heard on the local network; and when you accept an invitation fetched from one | that box, by plain HTTP: your ID, public key, a signed time; the reply code (your ID, key, their ID and the invitation's number). Nothing else of yours, no nickname |
+| the page, when it fetches from a friend's box or posts a reply to it | when you click **Get invitation** for a box it heard on the local network, and when you accept an invitation fetched from one | that box, by plain HTTP: your ID, public key, a signed time; the reply code (your ID, key, their ID and the invitation's number). Nothing else of yours, no nickname |
 | **Update Baton** on the page, as a plugin | only when you click it | Claude Code's own `claude plugin` commands fetch the catalog and the new version, as they do when you type them |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
 | `tools/baton_ledger.py push`, `verify --remote` | when you run them, and only after you added a remote to the ledger's repository | that remote, by git -- the ledger: the task root (`~/...` under home), folder names, entry headings, times, hashes, ack reasons, and commit messages naming folders |

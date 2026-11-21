@@ -255,8 +255,11 @@ def test_a_reply_is_kept_only_if_it_answers_an_invitation_waiting_here(inviter, 
     other = page.make_invite("an invitation is not a reply", to=inviter.id)
     assert _post(host, port, "/box/v1/reply", {"code": other})[0] == 400
     assert _post(host, port, "/box/v1/reply", {"code": reply})[0] == 200
+    end = time.time() + 15                                    # no page request: the server closes it
+    while time.time() < end and not _closed(host, port):
+        time.sleep(0.2)
+    assert _closed(host, port), "the box stayed open with nothing waiting"
     assert [(f["id"], f["status"]) for f in inviter.api("state")["friends"]] == [(bob, "mutual")]
-    assert inviter.api("state")["box"]["on"] is False and _closed(host, port)   # nothing waits: closed
 
 
 def test_too_many_requests_from_one_address_or_for_one_id(inviter, page):
@@ -273,12 +276,14 @@ def test_too_many_requests_from_one_address_or_for_one_id(inviter, page):
 
 class _Liar(BaseHTTPRequestHandler):
     codes: list = []
+    seen: list = []
 
     def log_message(self, *a):
         pass
 
     def do_POST(self):
         self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        type(self).seen.append(self.path)
         data = json.dumps({"ok": True, "codes": type(self).codes}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -425,8 +430,10 @@ def test_on_one_network_invite_shows_up_accept_and_both_are_friends_with_nicknam
     b.api("watch", {})                                                     # the page is open: it listens
     a.api("invite", {"text": "nearby", "to": bob, "nick": "Bobby"})
     end = time.time() + 20
-    while time.time() < end and not b.api("watch", {})["incoming"]:
-        time.sleep(0.5)
+    a_id = a.api("state")["id"]
+    while time.time() < end and a_id not in b.api("watch", {})["box"]["nearby"]:
+        time.sleep(0.3)
+    assert b.api("fetch", {"id": a_id}) == {"ok": True, "invites": 1, "refused": 0}   # "Get invitation"
     st = b.api("watch", {})
     assert [v["text"] for v in st["incoming"]] == ["nearby"], st["box"]
     assert a.api("state")["id"] in st["box"]["nearby"]
@@ -437,3 +444,29 @@ def test_on_one_network_invite_shows_up_accept_and_both_are_friends_with_nicknam
     got = a.api("state")
     assert [(f["id"], f["status"], f["nick"]) for f in got["friends"]] == [(bob, "mutual", "Bobby")]
     assert got["invites"] == [] and got["box"]["on"] is False
+
+
+def test_a_box_heard_nearby_is_not_asked_until_the_human_clicks(tmp_path):
+    udp = _free(socket.SOCK_DGRAM)
+    b = Page(tmp_path, "b", udp=udp)
+    _Liar.codes, _Liar.seen = [], []
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _Liar)
+    threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+    stranger = "BTN-AAAA-BBBB-CCCC"
+    try:
+        b.api("watch", {})
+        msg = json.dumps({"baton": "box", "v": 1, "id": stranger, "port": srv.server_port}).encode()
+        end = time.time() + 10
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            while time.time() < end and stranger not in b.api("watch", {})["box"]["nearby"]:
+                s.sendto(msg, ("127.0.0.1", udp))
+                time.sleep(0.3)
+        for _ in range(3):
+            b.api("watch", {})
+        assert stranger in b.api("watch", {})["box"]["nearby"]
+        assert _Liar.seen == [], "the page asked a box nobody chose"
+        assert b.api("fetch", {"id": stranger})["ok"]
+        assert _Liar.seen == ["/box/v1/fetch"]
+    finally:
+        srv.shutdown()
+        srv.server_close()

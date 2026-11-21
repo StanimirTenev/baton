@@ -877,7 +877,8 @@ what it does not protect: [the README](../README.md#the-page-and-friends).
 and waits in `friends.json`. After every button and at its start the page server compares: if an
 addressed invitation waits and `BATON_BOX` is not `off`, it opens a second `ThreadingHTTPServer` on
 `BATON_BOX` (default `0.0.0.0:47800`), with a handler of its own that routes two paths and answers
-404 to everything else; when none waits it closes it. While it is open, a thread sends
+404 to everything else; when none waits it closes it (the idle loop checks too, every few seconds,
+so a reply the box took with no page open closes it). While it is open, a thread sends
 `{"baton":"box","v":1,"id":...,"port":...}` every 5 s by UDP broadcast to port `BATON_BOX_UDP`
 (47800), and the page server does not stop for idleness.
 
@@ -891,7 +892,8 @@ addressed invitation waits and `BATON_BOX` is not `off`, it opens a second `Thre
 
 The page's side: the open page posts `/api/watch` every 15 s, which is not counted as use. The
 first one opens a UDP listener (`SO_REUSEADDR`) on `BATON_BOX_UDP`; a box heard there in the last
-30 s is fetched from, at most once a minute. Every code fetched goes through `read_code()`, as a pasted one does, and is kept only if
+30 s is listed on the page, and fetched from only when the human clicks its **Get invitation**
+(`/api/fetch` with that ID). Every code fetched goes through `read_code()`, as a pasted one does, and is kept only if
 it is an invitation made by the ID the box claims. Accept posts the reply to the box the invitation
 came from, without a proxy and without following redirects; once the box answers OK, the friend is
 mutual on this side too. Nicknames (`nick`, at most 40 characters after `clean()`) are written to

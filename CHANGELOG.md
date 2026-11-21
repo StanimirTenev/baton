@@ -16,8 +16,8 @@ networks one button hands the code to WhatsApp or mail. No server of ours, no ou
   baton-box` over the ID and the time, within 5 minutes, each proof once), and a reply. Never the
   page or its buttons. At most 30 requests a minute from one address and 10 for one ID.
 - **On one network nothing is typed.** While it is open the box says on the local network, every 5
-  s, "a Baton box, this ID, this port" (UDP broadcast); an open page hears it, fetches, and the
-  invitation shows on it.
+  s, "a Baton box, this ID, this port" (UDP broadcast); an open page hears it and shows
+  "BTN-... (nearby)" with a "Get invitation" button. Nothing is asked of a box before that click.
 - **Across networks, a button for WhatsApp.** After Invite (and after Accept, for the reply) the
   message, one line and the code, is on the clipboard, with "Send on WhatsApp" (`wa.me`, the human
   picks the contact), "Email" and "Copy". "Paste invitation" reads the clipboard on the click and finds
@@ -38,8 +38,10 @@ networks one button hands the code to WhatsApp or mail. No server of ours, no ou
   page server does not stop for idleness.
 - **Not checked:** two real machines on a real network (the tests and the probe ran on 127.0.0.x on one
   machine), a router or Wi-Fi that drops broadcasts, the firewall prompt on Windows and macOS when the
-  box first listens, Windows at all, and a real WhatsApp: the link and its length (about 1.3 KB) were
-  checked as text only, not opened in WhatsApp Desktop or Web.
+  box first listens, Windows at all, the page's JavaScript in a browser (it was only parsed, with
+  `node --check`), and a real WhatsApp: the link was checked as text only, not opened in WhatsApp
+  Desktop or Web. Its length depends on the note: 1.3 KB with 140 Latin letters, 2.2 KB with 140
+  Cyrillic ones, 3.8 KB with 140 emoji.
 
 **v3.43.1** — on Windows the page's buttons can sign and check codes
 

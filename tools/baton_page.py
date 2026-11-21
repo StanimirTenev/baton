@@ -1060,7 +1060,8 @@ def _update(srv, data) -> dict:
 
 
 def _quit(srv, data) -> dict:
-    threading.Thread(target=srv.shutdown, daemon=True).start()
+    # A moment later, so this answer is written before the process ends (a test saw it cut, 21.11).
+    threading.Timer(0.3, srv.shutdown).start()
     return {"ok": True}
 
 
@@ -1077,18 +1078,19 @@ def _invite(srv, data) -> dict:
 
 
 def _watch(srv, data) -> dict:
-    """The open page's look every 15 s, not counted as use: boxes nearby fetched from (each at
-    most once a minute), then the state."""
+    """The open page's look every 15 s, not counted as use: it listens for boxes nearby and lists
+    them. Nothing is fetched from one until the human clicks (_fetch)."""
     srv.nearby.start()
-    for ident, (host, port) in srv.nearby.boxes().items():
-        if time.time() - srv.fetched.get(ident, 0) > 60:
-            srv.fetched[ident] = time.time()
-            try:
-                if ident != my_key()[0]:
-                    fetch_from(ident, host, port)
-            except PageError:
-                pass
     return _state(srv, data)
+
+
+def _fetch(srv, data) -> dict:
+    """"Get invitation" for a box heard nearby: its ID, from the list the page shows."""
+    ident = _their_id(data.get("id", ""))
+    found = srv.nearby.boxes().get(ident)
+    if not ident or not found:
+        raise PageError("that box is no longer heard on this network")
+    return {"ok": True, **fetch_from(ident, *found)}
 
 
 def _accept(srv, data) -> dict:
@@ -1118,6 +1120,7 @@ ROUTES = {
     ("POST", "send"): _send,
     ("POST", "nick"): _nick,
     ("POST", "watch"): _watch,
+    ("POST", "fetch"): _fetch,
     ("POST", "ignore"): lambda srv, data: (ignore(_nonce(data)), {"ok": True})[1],
     ("POST", "cancel"): lambda srv, data: (cancel(_nonce(data)), {"ok": True})[1],
     ("POST", "remove"): lambda srv, data: (remove(str(data.get("id", ""))), {"ok": True})[1],
@@ -1134,7 +1137,7 @@ class Server(ThreadingHTTPServer):
         self.updating = threading.Lock()
         self._last, self._busy, self._mx = time.time(), 0, threading.Lock()
         self.box, self._box_stop, self._box_mx, self.box_error = None, None, threading.Lock(), ""
-        self.nearby, self.fetched = Nearby(), {}
+        self.nearby = Nearby()
 
     def sync_box(self) -> None:
         """The box open while an addressed invitation waits here, closed when none does."""
@@ -1180,6 +1183,7 @@ class Server(ThreadingHTTPServer):
         limit = _idle()
         while True:
             time.sleep(min(5.0, limit / 4))
+            self.sync_box()                      # a reply taken by the box, with no page open, closes it
             with self._mx:
                 quiet = self._busy == 0 and time.time() - self._last > limit and self.box is None
             if quiet:
@@ -1656,11 +1660,11 @@ function inviteCard(){
     if (!r.ok) { err.textContent = r.error; return; }
     msgIn.value = ""; toIn.value = ""; nickIn.value = ""; counter.textContent = "0 / 140";
     await refresh();
-    result.replaceChildren(
+    result.replaceChildren(el("div", null,
       addressed ? el("div.okline", null, icon("check"), S.box.on ? "Waiting in your box, which is now open to friends." : "Kept here; the box did not open: " + (S.box.error || "switched off")) : null,
-      addressed ? el("div.small.muted", null, "On the same network their page finds it by itself. Otherwise send it (it is copied already):") : null,
+      addressed ? el("div.small.muted", null, "On the same network their page finds it by itself. Otherwise send it:") : null,
       shareBox(r.share, "Invitation"),
-      el("div.small.muted", null, "When they accept, their reply comes back to your box, or they send it the same way and you paste it below."));
+      el("div.small.muted", null, "When they accept, their reply comes back to your box, or they send it the same way and you paste it below.")));
   });
   keep.drawInvites = () => {
     list.replaceChildren();
@@ -1723,9 +1727,9 @@ function pasteCard(){
           const r = await api("accept", {nonce: v.nonce, nick: nickIn.value});
           if (!r.ok) { toast(r.error); return; }
           if (r.sent) out.replaceChildren(el("div.okline", null, icon("check"), "Accepted. Your reply went to " + v.id + "'s box: you are friends."));
-          else out.replaceChildren(r.error ? el("div.err", null, "Their box did not take the reply: " + r.error) : null,
-            el("div.okline", null, icon("check"), "Accepted. Send this reply back to " + v.id + " (it is copied already):"),
-            shareBox(r.share, "Reply"));
+          else out.replaceChildren(el("div", null, r.error ? el("div.err", null, "Their box did not take the reply: " + r.error) : null,
+            el("div.okline", null, icon("check"), "Accepted. Send this reply back to " + v.id + ":"),
+            shareBox(r.share, "Reply")));
           refresh(); }}}, icon("check"), "Accept"),
         el("button.btn", {type: "button", on: {click: async () => { await api("ignore", {nonce: v.nonce}); toast("Ignored. They are not told."); refresh(); }}}, "Ignore")));
       box.appendChild(reply);
@@ -1744,7 +1748,12 @@ function renderRight(){
   const B = S.box, card = el("div.card", null, el("h2", null, icon("inbox"), "My box"));
   if (B.on) card.append(el("div.small", null, "Open to friends on this network while an invitation of yours waits."));
   else card.append(el("div.small.muted", null, B.error ? "Closed: " + B.error : "Closed. It opens by itself while an invitation you addressed waits."));
-  if (B.nearby && B.nearby.length) card.append(el("div.small", null, "Nearby: ", B.nearby.join(", ")));
+  for (const id of B.nearby || []) card.append(el("div.pending", null,
+    el("div", null, el("span.mono", null, id), " (nearby) has a box open"),
+    el("div.btns", null, el("button.btn.sm.primary", {type: "button", on: {click: async () => {
+      const r = await api("fetch", {id: id});
+      toast(!r.ok ? r.error : r.invites ? "An invitation from " + id + " is below" : "Nothing there for you" + (r.refused ? " that checks out" : ""));
+      refresh(); }}}, "Get invitation"))));
   card.append(el("div.note", null, icon("info"), el("span", null, "On one network the pages find each other and nothing is typed. Across networks, send the code by WhatsApp or mail. The box gives an invitation only to the ID it is for, after a key proof; nicknames never leave this machine.")));
   R.appendChild(card);
   R.appendChild(el("div.card.soon", null, el("h2", null, icon("book"), "Shared tasks"),
