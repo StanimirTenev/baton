@@ -38,6 +38,9 @@ def _load(path, name):
     return mod
 
 
+VERSION = _load(HOOK, "bss_for_box_tests").BATON_VERSION
+
+
 def _free(kind=socket.SOCK_STREAM):
     with socket.socket(socket.AF_INET, kind) as s:
         s.bind(("127.0.0.1", 0))
@@ -203,6 +206,12 @@ def test_a_fetch_without_a_valid_proof_is_refused(inviter, page):
     assert fetch({"id": bob}) == 400
     page.use("c")
     assert fetch(dict(_proof(page), id=bob)) == 403                         # c's proof, b's ID
+    t = int(time.time())
+    _, cpub, _ = page.my_key()
+    claim = {"id": bob, "pub": cpub, "time": str(t),                        # c's key signs for b's ID
+             "sig": page.sign(f"baton-box\n{bob}\n{t}\n".encode(), page.BOX_NS)}
+    status, got = _post(host, port, "/box/v1/fetch", claim)
+    assert status == 403 and "ID" in got["error"], got
     page.use("b")
     good = _proof(page)
     page.use("c")
@@ -393,13 +402,16 @@ def test_a_nickname_never_reaches_the_agent(page, tmp_path):
     for who in ("a", "b"):
         env = _env(tmp_path, who)
         env["BATON_BOX"] = "off"
-        env.update(BATON_PAGE="off", BATON_HOME=str(tmp_path / "tasks"),
-                   BATON_SESSION_STATE=str(tmp_path / f"{who}.state.json"))
+        state = tmp_path / f"{who}.state.json"                             # the page counts as opened:
+        state.write_text(json.dumps({"page_opened_version": VERSION, "seen_version": VERSION}))  # no server
+        env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_SESSION_STATE=str(state))
         out = subprocess.run([sys.executable, str(HOOK)], input=b'{"source":"startup"}',
                              capture_output=True, env=env, timeout=60)
         assert out.returncode == 0, out.stderr
         assert b"ZEBRA" not in out.stdout + out.stderr
         assert b"wa.me" not in out.stdout and b"mailto" not in out.stdout     # the share buttons are the human's
+        if who == "a":
+            assert "invitation" in json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
 
 
 # -- the whole way, two page servers --------------------------------------------------------
