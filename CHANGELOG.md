@@ -33,7 +33,7 @@ the machine of whoever started it, read and written by the friend through that m
   README says what this does not protect: plain HTTP on the network, your friend's agent sending what
   it reads to its provider, and no gate on what an agent does after reading.
 - **On Windows, a logbook took one entry and refused the next** ("the front matter broke"), in every
-  version up to 3.44.0: the write turned the file into CRLF and the next read wanted LF. A CRLF logbook
+  version checked, 3.32.0 to 3.44.0: the write turned the file into CRLF and the next read wanted LF. A CRLF logbook
   is now read as LF and written back as LF bytes. Found and checked on a real Windows PC: three entries
   in a row, no CR left.
 - **Checked on two real machines** (a Linux laptop and a Windows PC on one network, throwaway
