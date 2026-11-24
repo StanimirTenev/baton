@@ -2,7 +2,7 @@
   "name": "baton",
   "displayName": "Baton",
   "version": "3.45.0",
-  "description": "Baton is a Claude Code plugin. A task logbook for Claude Code, for offices, companies and individuals: persistent memory in a LOGBOOK.md per task that hooks make the agent read at session start and write before a turn ends. Local, MIT. Hooks run in Claude Code (terminal, IDE, desktop Code tab); in claude.ai chat only the skills load. The hooks make no network requests; a local page, opened when you ask, shares invitations and tasks with friends on the LAN; review tools run by hand send text to OpenRouter.",
+  "description": "Baton is a Claude Code plugin. A task logbook for Claude Code, for offices, companies and individuals: persistent memory in a LOGBOOK.md per task that hooks make the agent read at session start and write before a turn ends. Local, MIT. Hooks run in Claude Code (terminal, IDE, desktop Code tab); in claude.ai chat only the skills load. The hooks make no network requests; a local page, opened on request, shares invitations and tasks on the LAN; review tools run by hand send text to OpenRouter.",
   "icon": "./icon.png",
   "author": {
     "name": "Stanimir Tenev",

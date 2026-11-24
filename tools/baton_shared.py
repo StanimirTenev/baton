@@ -35,7 +35,6 @@ import importlib.util
 import json
 import os
 import re
-import secrets
 import sys
 import threading
 import time
@@ -386,7 +385,7 @@ def create(title: str, who: str) -> dict:
         i += 1
         folder = base / f"{slug}-{i}"
     folder.mkdir(parents=True)
-    task = secrets.token_hex(16)
+    task = os.urandom(16).hex()
     book = folder / name
     with open(book, "w", encoding="utf-8", newline="\n") as fh:       # `\n` on Windows too
         fh.write(f'---\nstate: active\nshared: "{task}"\nowner: "{me}"\nmember: "{friend}"\n'
@@ -587,7 +586,7 @@ def closed(owner: str) -> str:
 
 def _proof(box_id: str) -> dict:
     ident, pub, _ = page().my_key()
-    t, nonce = int(time.time()), secrets.token_hex(16)
+    t, nonce = int(time.time()), os.urandom(16).hex()
     return {"id": ident, "pub": pub, "time": str(t), "nonce": nonce,
             "sig": page().sign(_pull_text(ident, box_id, t, nonce), NS)}
 
@@ -755,7 +754,7 @@ def write(ref: str, text: str, title: str = "", turn: str = "", at: str = "") ->
                     got = _post(host, port, "write", {"entry": e})
                 except SharedError as err:
                     if err.why in ("stale", "replayed", "busy"):     # another writer came first: again
-                        time.sleep(0.05 + secrets.randbelow(200) / 1000)
+                        time.sleep(0.05 + os.urandom(1)[0] / 1275)
                         continue
                     raise
                 pull_from(owner, host, port)
