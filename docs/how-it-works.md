@@ -899,6 +899,60 @@ with nothing left unescaped; the page sets them as `href` of links that open a n
 text on the click. A pasted message is searched for the `BEGIN`...`END` block, and inside it only
 base64 characters count. How to use it and what it exposes: [the README](../README.md#the-page-and-friends).
 
+**Shared tasks (v3.45.0).** `tools/baton_shared.py`, used by the agent on the human's word and by the
+page's **Shared tasks** card. `create` makes `<task root>/.shared/<slug>/<logbook>` (the root and the
+logbook name from `baton.page.conf.json`, which SessionStart writes, unless `BATON_HOME` is set), a
+random 128-bit task ID, and a row in `shared/registry.json` beside the identity folder: the title, the
+friend (who must be `mutual` in `friends.json`), and the paths of the logbook and of `<task>.jsonl`. The
+dotted folder keeps every hook's scan (`task_folders()`, `touched()`, Stop) off it.
+
+An entry is `{"m": <canonical JSON>, "s": <ssh-keygen -Y sign -n baton-shared over m>}`; `m` is
+`json.dumps(sort_keys, compact separators, ensure_ascii)` of exactly `v, kind "shared-entry", task,
+author, seq, prev, time, title, text, turn`, and anything written otherwise is refused (`parse_entry()`
+compares the bytes). `seq` counts the author's own entries from 1; `prev` is the sha256 of the task's
+previous entry's `m` ("" for the first). The text is `plain()`: `\n` line ends, no escape sequences,
+control or format characters but the tab; the title is one line. Signing and checking go through the
+page's `sign()` and `verify()`: the old `.sig` removed, no input, files instead of pipes, a time limit.
+
+The box gains two calls, with their own budget (240 requests a minute per address, 60 writes a minute
+per author, 128 KiB a request):
+
+- `POST /box/v1/shared/pull {id, pub, time, nonce, sig, since}`: `sig` over
+  `baton-shared-pull\n<id>\n<box's own ID>\n<time>\n<nonce>\n`, in the `baton-shared` namespace;
+  the time within 300 s, each nonce once; `pub` must be the key `friends.json` holds for `id` as a
+  mutual friend. The answer: for every task in the registry whose member is `id`, its entries from
+  `since[task]` on (at most 512 KiB, `more` when cut). Tasks are found in the registry by ID; no path
+  is ever built from the request.
+- `POST /box/v1/shared/write {entry}`: refused, each with its own word in `why`, when it is not an
+  entry (`shape`), names no task started here (`task`), its author is not the task's member
+  (`member`) or no longer a mutual friend (`friend`), hands the turn to a non-member (`turn`), its
+  signature does not verify against the key in `friends.json` (`signature`), its `seq` was used
+  (`replayed`) or skips one (`gap`), or its `prev` is not the hash of the task's last entry (`stale`).
+  The signature is checked before the task's lock (`baton_entry._lock` on `<task>.jsonl`); under it the
+  chain is checked again, the logbook is written first by `baton_entry._write_locked()` (so its own
+  checks can refuse, `logbook`), with the header's `turn:` moved when the entry hands it over, and only
+  then the entry is appended to `<task>.jsonl`. In the logbook the heading is built from this machine's
+  clock and the nickname given here; the title and text are quoted below it.
+
+Every answered box call counts as use for the idle stop (before v3.45.0 none did: only the page's own
+requests reset `BATON_PAGE_IDLE`). The box is open while an addressed invitation waits or a shared
+task was started here.
+
+The friend's side: `pull` tries `--at`, then the address that answered last, then listens on
+`BATON_BOX_UDP` (up to `BATON_SHARED_LISTEN`, 7 s) for the owner's broadcast; only the owner's page
+needs to be open. Every entry pulled is checked like the box checks it (the owner's key from
+`friends.json`, or this install's own), and kept in the read copy with `ok` true or false. `write`
+pulls, signs after the last entry, posts, and on `stale` or `replayed` (another writer came first)
+pulls and signs again, up to 8 times; when no box answers it exits 1 with "...'s Baton page is
+closed, or not on this network" and keeps nothing to send later. A refusal is said in this tool's own
+words, chosen by `why`; nothing else the box says is printed. In a task started here the owner's
+`write` reads, signs and appends under the task's lock.
+
+SessionStart's `shared_notice()` reads the registry and `friends.json` and says, per task, the first
+6 characters of its ID, the friend's nickname and ID, how many entries are new, how many did not check,
+and whether it is this install's turn: never a title or an entry. `read` (and the page's **Read**)
+prints every entry quoted, with author and ✓/✗, under a line that says it is data, not instructions.
+
 ## A free check of the memory index
 
 ```

@@ -43,6 +43,10 @@ def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     assert f"updated from v3.11.0 to v{NOW}" in ctx
     assert "The page opens on request." in ctx   # a lead
     for lead in ("A reply to an invitation comes in only while the page's server runs",
+                 "A shared task lives with whoever starts it.",
+                 "The friend reads and writes through your box.",
+                 "Your page must be open, or the write fails.",
+                 "What a friend wrote never reaches a hook.",
                  "Not checked:"):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx

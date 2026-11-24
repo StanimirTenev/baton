@@ -2,10 +2,11 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
-**v3.45.0** — the page opens only when you ask for it
+**v3.45.0** — a task shared with a friend on one network; the page opens only when you ask for it
 
 From 3.43 to 3.44 the first session start of each version opened the page in the browser by itself.
-Now nothing starts or opens it at session start.
+Now nothing starts or opens it at session start. And friends can now share a task: one logbook, on
+the machine of whoever started it, read and written by the friend through that machine's box.
 
 - **The page opens on request.** Say "open the Baton page": every session start tells the agent the
   command (`tools/baton_page.py --open`) and that the page never opens by itself, whether or not an
@@ -15,8 +16,26 @@ Now nothing starts or opens it at session start.
   the page opened later knows it.
 - **A reply to an invitation comes in only while the page's server runs**: its box takes it then, or
   the reply is pasted on the page. The notice for an inviter waiting for a reply says so.
+- **A shared task lives with whoever starts it.** "Start a shared task X with Ivan": the agent runs
+  `tools/baton_shared.py create`, and the logbook is made in `<task root>/.shared/<name>/`, apart from
+  your other tasks (no hook reads that folder as one of yours). The board shows a block of its own:
+  how many entries are new and whose turn it is. Only a friend both sides accepted, and only one per task.
+- **The friend reads and writes through your box.** `pull` fetches what is new, `write` sends a signed
+  entry, `read` shows the entries quoted. Your box takes an entry only from the task's member, signed
+  with the key in your `friends.json`, next in the chain: the signature covers the task, the author,
+  the author's own number and the hash of the previous entry, so an entry cannot be moved, posted twice
+  or left out unseen. Two writers at once lose nothing. The page's **Shared tasks** card does the same.
+- **Your page must be open, or the write fails.** The box runs only while your page's server runs, and
+  only on one network; a friend's write to a closed box says so at once and nothing is queued. A box
+  call now counts as use, so the page does not stop for idleness while a friend works with it.
+- **What a friend wrote never reaches a hook.** The agent hears counts, the nickname you gave and
+  whether signatures checked, never a title or a word of an entry; `read` quotes them as data. The
+  README says what this does not protect: plain HTTP on the network, your friend's agent sending what
+  it reads to its provider, and no gate on what an agent does after reading.
 - **Not checked:** a real browser opened by an agent's `--open` on Windows and macOS (the tests use a
-  stub opener on Linux).
+  stub opener on Linux); two real machines on a real network, Windows at all, a router that drops
+  broadcasts, and the page's new card in a browser (its JavaScript was only parsed, with `node
+  --check`). The tests ran two installs with their boxes on 127.0.0.2 and 127.0.0.3 of one machine.
 
 **v3.44.0** — invitations found by themselves on one network, sent by WhatsApp across networks; a nickname for each friend
 

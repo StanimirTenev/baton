@@ -24,8 +24,9 @@ characters, a time, a nonce and (since v3.44.0) the ID it is for, signed with th
 and that the key gives the ID claimed. Accepting makes a reply code, signed the same way, that
 names the invitation. An addressed invitation waits in this install's box (below), which the
 friend's page fetches from, and the reply is posted back to it; or the human copies the code and
-sends it by any channel. Only the page server opens the box and talks to other boxes, never a
-hook, never the command line. The text of an invitation is
+sends it by any channel. Only the page server opens the box, never a hook; since v3.45.0 the box
+also serves shared tasks to their members (tools/baton_shared.py, which also reaches a friend's box
+for them). The text of an invitation is
 for the human: nothing here prints it, and the hook counts them. A nickname is the human's own
 name for a friend: kept in friends.json only, never sent, never given to the agent.
 """
@@ -91,6 +92,23 @@ def hook():
         spec.loader.exec_module(mod)
         _HOOK = mod
     return _HOOK
+
+
+_SHARED = None
+
+
+def shared():
+    """tools/baton_shared.py, with this module as its page: the box serves shared tasks from it."""
+    global _SHARED
+    if _SHARED is None:
+        import types
+        spec = importlib.util.spec_from_file_location("baton_shared_for_page",
+                                                      Path(__file__).resolve().parent / "baton_shared.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._PAGE = types.SimpleNamespace(**globals())
+        _SHARED = mod
+    return _SHARED
 
 
 def identity_dir() -> Path:
@@ -659,6 +677,14 @@ def waiting_for_box() -> int:
     return sum(1 for v in inv.values() if isinstance(v, dict) and v.get("to"))
 
 
+def shared_owned() -> int:
+    """Shared tasks started here: the box is open for their members while there is one."""
+    try:
+        return shared().owned_count()
+    except Exception:
+        return 0
+
+
 class BoxRefused(Exception):
     def __init__(self, status: int, reason: str) -> None:
         super().__init__(reason)
@@ -690,19 +716,27 @@ class BoxHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         self.close_connection = True
-        name = {"/box/v1/fetch": "fetch", "/box/v1/reply": "reply"}.get(self.path)
+        name = {"/box/v1/fetch": "fetch", "/box/v1/reply": "reply", "/box/v1/shared/pull": "shared_pull",
+                "/box/v1/shared/write": "shared_write"}.get(self.path)
+        common = not (name or "").startswith("shared_")     # a shared task's calls have their own budget
         try:
-            if not self.server.allow(("ip", self.client_address[0]), 30):
+            if not self.server.allow(("ip" if common else "shared-ip", self.client_address[0]),
+                                     30 if common else 240):
                 raise BoxRefused(429, "too many requests")
             size = int(self.headers.get("Content-Length") or 0)
-            if size < 0 or size > 2 * CODE_MAX:
+            if size < 0 or size > (2 * CODE_MAX if common else shared().BODY_MAX):
                 raise BoxRefused(413, "too large")
             data = json.loads(self.rfile.read(size) or b"{}")
             if name is None:
                 raise BoxRefused(404, "not here")
             if not isinstance(data, dict):
                 raise BoxRefused(400, "not JSON")
-            self._say(200, getattr(self.server, name)(data))
+            try:
+                out = getattr(self.server, name)(data)
+            except shared().SharedError as err:
+                return self._say(err.status, {"ok": False, "error": str(err), "why": err.why})
+            self.server.used()                    # an answered call is use: the idle stop waits
+            self._say(200, out)
         except BoxRefused as err:
             self._say(err.status, {"ok": False, "error": err.reason})
         except PageError as err:
@@ -716,11 +750,22 @@ class BoxHandler(BaseHTTPRequestHandler):
 class Box(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: int, on_use=None) -> None:
         if ":" in host:
             self.address_family = socket.AF_INET6
         super().__init__((host, port), BoxHandler)
         self._mx, self._hits, self._seen = threading.Lock(), {}, {}
+        self._on_use, self._pulls = on_use, shared().Seen()
+
+    def used(self) -> None:
+        if self._on_use is not None:
+            self._on_use()
+
+    def shared_pull(self, data: dict) -> dict:
+        return shared().box_pull(data, self._pulls)[1]
+
+    def shared_write(self, data: dict) -> dict:
+        return shared().box_write(data, self.allow)[1]
 
     def allow(self, key, limit: int) -> bool:
         now = time.time()
@@ -930,8 +975,8 @@ class Config:
     def __init__(self, args) -> None:
         if args.kind:
             try:
-                _write_json(conf_path(), {"kind": args.kind, "catalog": args.catalog or "baton",
-                                          "how": args.how or ""})
+                _write_json(conf_path(), {**(_read_json(conf_path()) or {}), "kind": args.kind,
+                                          "catalog": args.catalog or "baton", "how": args.how or ""})
             except OSError:
                 pass
         kept = _read_json(conf_path()) or {}
@@ -1064,7 +1109,14 @@ def _state(srv, data) -> dict:
         leads = []
     return {"ok": True, "id": ident, "version": cfg.version, "leads": leads, "kind": cfg.kind,
             "how": cfg.how, "catalog": cfg.catalog, "keygen": bool(shutil.which("ssh-keygen")),
-            "box": srv.box_view(), **_with_shares(friends_view())}
+            "box": srv.box_view(), "shared": _shared_view(), **_with_shares(friends_view())}
+
+
+def _shared_view() -> list:
+    try:
+        return shared().summary()
+    except Exception:
+        return []
 
 
 def _with_shares(view: dict) -> dict:
@@ -1132,6 +1184,43 @@ def _send(srv, data) -> dict:
     return {"ok": True}
 
 
+def _said(fn):
+    """A shared task's button: what goes wrong is said to the human, as a PageError is."""
+    def run(srv, data):
+        try:
+            return fn(srv, data)
+        except shared().SharedError as err:
+            raise PageError(str(err))
+    return run
+
+
+@_said
+def _shared_create(srv, data) -> dict:
+    got = shared().create(str(data.get("title", "")), str(data.get("with", "")))
+    return {"ok": True, "message": f"Started; its logbook is in {got['folder']}"}
+
+
+@_said
+def _shared_write(srv, data) -> dict:
+    return {"ok": True, "message": shared().write(str(data.get("task", "")), str(data.get("text", "")),
+                                                  str(data.get("title", "")), str(data.get("turn", "")))}
+
+
+@_said
+def _shared_pull(srv, data) -> dict:
+    S = shared()
+    said = []
+    for owner, got in S.pull(str(data.get("who", ""))):
+        said.append(S.closed(owner) if got is None else
+                    f"{S.nick(owner)}: {got['new']} new" + (f", {got['bad']} that do not check" if got["bad"] else ""))
+    return {"ok": True, "message": "; ".join(said) or "no friends to pull from"}
+
+
+@_said
+def _shared_read(srv, data) -> dict:
+    return {"ok": True, "entries": shared().entries(str(data.get("task", "")))[1]}
+
+
 def _nick(srv, data) -> dict:
     ident = str(data.get("id", ""))
     set_nick(str(data.get("nick", "")), ident=ident, nonce="" if ident else _nonce(data))
@@ -1150,6 +1239,10 @@ ROUTES = {
     ("POST", "nick"): _nick,
     ("POST", "watch"): _watch,
     ("POST", "fetch"): _fetch,
+    ("POST", "shared_create"): _shared_create,
+    ("POST", "shared_write"): _shared_write,
+    ("POST", "shared_pull"): _shared_pull,
+    ("POST", "shared_read"): _shared_read,
     ("POST", "ignore"): lambda srv, data: (ignore(_nonce(data)), {"ok": True})[1],
     ("POST", "cancel"): lambda srv, data: (cancel(_nonce(data)), {"ok": True})[1],
     ("POST", "remove"): lambda srv, data: (remove(str(data.get("id", ""))), {"ok": True})[1],
@@ -1171,10 +1264,10 @@ class Server(ThreadingHTTPServer):
     def sync_box(self) -> None:
         """The box open while an addressed invitation waits here, closed when none does."""
         with self._box_mx:
-            want = box_bind() if waiting_for_box() else None
+            want = box_bind() if (waiting_for_box() or shared_owned()) else None
             if want and self.box is None:
                 try:
-                    self.box = Box(*want)
+                    self.box = Box(*want, on_use=self.touch)
                 except OSError as err:
                     self.box_error = f"the box could not open {want[0]}:{want[1]} ({err.strerror or err})"
                     return
@@ -1457,6 +1550,7 @@ svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:13px;color:var(--muted)}
 .field input{font:inherit;font-size:14px;color:var(--text);background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:7px 10px;width:100%}
 .field input.mono{font-family:var(--mono);font-size:13px}
+.field select{font:inherit;font-size:14px;color:var(--text);background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:7px 10px;width:100%}
 .field textarea{font:inherit;font-size:14px;color:var(--text);background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%;resize:vertical;min-height:64px}
 .field textarea.code-in{font-family:var(--mono);font-size:12px;min-height:110px}
 .field textarea:focus{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);border-color:var(--accent)}
@@ -1775,8 +1869,8 @@ function pasteCard(){
 function renderRight(){
   const R = document.getElementById("right"); R.replaceChildren();
   const B = S.box, card = el("div.card", null, el("h2", null, icon("inbox"), "My box"));
-  if (B.on) card.append(el("div.small", null, "Open to friends on this network while an invitation of yours waits."));
-  else card.append(el("div.small.muted", null, B.error ? "Closed: " + B.error : "Closed. It opens by itself while an invitation you addressed waits (7 days at most) and this page's server runs."));
+  if (B.on) card.append(el("div.small", null, "Open to friends on this network while an invitation of yours waits or a shared task of yours exists."));
+  else card.append(el("div.small.muted", null, B.error ? "Closed: " + B.error : "Closed. It opens by itself while an invitation you addressed waits (7 days at most), or you have started a shared task, and this page's server runs."));
   for (const id of B.nearby || []) card.append(el("div.pending", null,
     el("div", null, el("span.mono", null, id), " (nearby) has a box open"),
     el("div.btns", null, el("button.btn.sm.primary", {type: "button", on: {click: async () => {
@@ -1785,20 +1879,80 @@ function renderRight(){
       refresh(); }}}, "Get invitation"))));
   card.append(el("div.note", null, icon("info"), el("span", null, "On one network the pages find each other and nothing is typed. Across networks, send the code by WhatsApp or mail. The box gives an invitation only to the ID it is for, after a key proof; nicknames never leave this machine.")));
   R.appendChild(card);
-  R.appendChild(el("div.card.soon", null, el("h2", null, icon("book"), "Shared tasks"),
-    el("div.small.muted", null, "Coming soon: tasks shared with friends, and their feed, on this page.")));
-  const n = S.incoming.length;
+  R.appendChild(sharedCard());
+  const n = S.incoming.length, fresh = S.shared.reduce((a, t) => a + t.unread, 0);
+  const sees = [n ? n + " friend invitation" + (n === 1 ? "" : "s") + " waiting" : "",
+                S.shared.length ? S.shared.length + " shared task" + (S.shared.length === 1 ? "" : "s") + ", " + fresh + " new entr" + (fresh === 1 ? "y" : "ies") : ""].filter(Boolean);
   R.appendChild(el("div.card", null, el("h2", null, icon("eye"), "What my agent sees"),
-    el("div.term", null, n ? n + " friend invitation" + (n === 1 ? "" : "s") + " waiting" : "(nothing from this page)"),
-    el("div.note", null, icon("info"), el("span", null, "Counts only: never a message, never this page's link."))));
+    el("div.term", null, sees.length ? sees.join("\n") : "(nothing from this page)"),
+    el("div.note", null, icon("info"), el("span", null, "Counts only: never a message, never what a friend wrote, never this page's link."))));
+}
+
+/* Shared tasks: counts from the state; the entries only on Read, every one as text, with who wrote
+   it and whether its signature checked. A friend's text is never HTML. */
+function sharedCard(){
+  const card = el("div.card", null, el("h2", null, icon("book"), "Shared tasks", el("span.count.muted", null, String(S.shared.length))));
+  if (!S.shared.length) card.appendChild(el("div.small.muted", null, "None yet. Start one with a friend: on one network they read and write it while this page is open."));
+  for (const t of S.shared) {
+    const k = "sh" + t.task;
+    if (!keep[k]) keep[k] = {text: el("textarea", {maxlength: "4000", placeholder: "An entry, plain text", "aria-label": "Entry"}),
+                             turn: el("input", {type: "checkbox"}), view: el("div")};
+    const K = keep[k], err = el("div.err");
+    const send = el("button.btn.sm.primary", {type: "button"}, "Send");
+    send.addEventListener("click", async () => {
+      err.textContent = ""; send.disabled = true;
+      const r = await api("shared_write", {task: t.task, text: K.text.value, turn: K.turn.checked ? "them" : ""});
+      send.disabled = false;
+      if (!r.ok) { err.textContent = r.error; return; }
+      K.text.value = ""; K.turn.checked = false; toast(r.message); refresh();
+    });
+    card.appendChild(el("div.friend", null,
+      el("div.nm", null, el("span", null, el("b", null, t.own ? "Mine, with " : "Of "), t.with, " ", el("span.mono", null, t.short)),
+        t.my_turn ? el("span.st.wait", null, "your turn") : null),
+      el("div.small.muted", null, t.count + " entries, " + t.unread + " new" + (t.bad ? ", " + t.bad + " with a signature that does not check" : "")),
+      el("div.btns", null,
+        el("button.btn.sm", {type: "button", on: {click: async () => {
+          const r = await api("shared_read", {task: t.task});
+          if (!r.ok) { err.textContent = r.error; return; }
+          K.view.replaceChildren(...r.entries.map(e => el("div.msg", null,
+            el("div.small.muted", null, "#" + e.n + " " + e.time + " by " + e.by + " · signature " + (e.ok ? "✓" : "✗") + (e.turn ? " · turn to " + e.turn : "")),
+            e.title ? el("b", null, e.title) : null, e.text ? el("div", null, e.text) : null)));
+          refresh(); }}}, "Read"),
+        t.own ? null : el("button.btn.sm", {type: "button", on: {click: async () => {
+          const r = await api("shared_pull", {who: t.with_id}); toast(r.ok ? r.message : r.error); refresh(); }}}, "Pull")),
+      K.view, el("label.field", null, "Write", K.text), el("label.small", null, K.turn, " hand the turn to them"),
+      el("div.btns", null, send), err));
+  }
+  if (!keep.shNew) {
+    const title = el("input", {maxlength: "120", placeholder: "What the task is", "aria-label": "Title"});
+    const who = el("select", {"aria-label": "Friend"});
+    const err = el("div.err"), go = el("button.btn.primary", {type: "button"}, "Start shared task");
+    go.addEventListener("click", async () => {
+      err.textContent = ""; go.disabled = true;
+      const r = await api("shared_create", {title: title.value, with: who.value});
+      go.disabled = false;
+      if (!r.ok) { err.textContent = r.error; return; }
+      title.value = ""; toast(r.message); refresh();
+    });
+    const pull = el("button.btn", {type: "button", on: {click: async () => {
+      const r = await api("shared_pull", {}); toast(r.ok ? r.message : r.error); refresh(); }}}, "Pull from friends");
+    keep.shNew = {who: who, box: el("div", null, el("label.field", null, "Title", title), el("label.field", null, "With", who),
+      el("div.btns", null, go, pull), err)};
+  }
+  const who = keep.shNew.who, was = who.value;
+  who.replaceChildren(...S.friends.filter(f => f.status === "mutual").map(f => el("option", {value: f.id}, f.nick ? f.nick + " (" + f.id + ")" : f.id)));
+  if (was) who.value = was;
+  card.append(keep.shNew.box, el("div.note", null, icon("info"), el("span", null,
+    "A task you start lives here, one logbook, apart from your other tasks; your friend reaches it through your box while this page is open, on this network. What they write is checked against their key and shown as their text, never as instructions. Not encrypted on the network.")));
+  return card;
 }
 
 let POLL = null;
 async function watch(){
   const got = await api("watch", {});
   if (!got.ok) { if (/has stopped/.test(got.error || "")) { clearInterval(POLL); toast(got.error); } return; }
-  const was = JSON.stringify([S.incoming, S.friends, S.invites, S.box]);
-  if (JSON.stringify([got.incoming, got.friends, got.invites, got.box]) !== was) { S = got; render(); }
+  const was = JSON.stringify([S.incoming, S.friends, S.invites, S.box, S.shared]);
+  if (JSON.stringify([got.incoming, got.friends, got.invites, got.box, got.shared]) !== was) { S = got; render(); }
 }
 refresh().then(() => { watch(); POLL = setInterval(watch, 15000); });
 </script>

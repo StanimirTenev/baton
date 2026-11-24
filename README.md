@@ -228,7 +228,8 @@ box or reach one. The server stops after 30 minutes without use, and closes your
 (never the link), so "open the Baton page" is enough. **A reply to your invitation comes in only while
 the page's server runs** (your box takes it then), or when it is pasted on the page.
 
-**What the box exposes.** To anyone who reaches the port: two calls, fetch and reply, and a 404 for
+**What the box exposes.** To anyone who reaches the port: two calls, fetch and reply (since v3.45.0
+also a shared task's pull and write, [below](#shared-tasks-on-one-network)), and a 404 for
 everything else; never the page or its buttons, which stay on 127.0.0.1 behind their key. A fetch gives
 an ID only the invitations addressed to it, after the key proof. At most 30 requests a minute from one
 address and 10 for one ID; a request is at most 16 KiB. It writes no log. What it does **not** hide:
@@ -242,12 +243,69 @@ connections: allow it for private networks only. What pairing does **not** prote
 - **The ID is 60 bits**, short so it can be read aloud. The code carries the whole key, and the ID is
   checked against it, but compare IDs over a channel you trust: someone who can change the code on its
   way can put in their own.
-- **Your friend's agent is your friend's.** Whatever of yours reaches their machine (in later versions,
-  the entries of a shared task) their agent may read and send to its own provider, under their account.
+- **Your friend's agent is your friend's.** Whatever of yours reaches their machine (since v3.45.0, the
+  entries of a shared task) their agent may read and send to its own provider, under their account.
 - **On disk the text is plain.** `friends.json` is readable by any program running as you, the
   agent's own tools included; Baton only never puts it in the agent's context.
-- The signature says who made a code, not that its text is safe. Friends exist only on this page in
-  v3.44.0: nothing else uses them yet.
+- The signature says who made a code, not that its text is safe. Since v3.45.0 friends share tasks
+  (below); nothing else uses them.
+
+### Shared tasks, on one network
+
+A task you share with a friend lives **on your machine only, in one logbook**: whoever starts it owns
+it. Your friend's Baton reads it and writes to it through your box, so it works while your Baton page
+is open (its server runs the box) and you are on the same network. No cloud, no server of ours, no
+messenger. You ask in words; the agent runs the tool:
+
+```
+python3 tools/baton_shared.py create "Office move" --with Ivan   # "start a shared task Office move with Ivan"
+python3 tools/baton_shared.py list                               # the shared tasks here: counts only
+python3 tools/baton_shared.py pull                               # your friend: "what's new in the shared task"
+python3 tools/baton_shared.py read 3f2a91                        # the entries, quoted, with author and signature
+python3 tools/baton_shared.py write 3f2a91 "Boxes are packed" --turn them   # "write to the shared task"
+```
+
+The page has the same: **Shared tasks** lists them with their counts, and **Read**, **Pull**, **Send** and
+**Start shared task**.
+
+- **Where it is.** A task you start has its logbook in `<task root>/.shared/<name>/`, apart from your
+  other tasks: no hook reads that folder as one of yours, so it is not on the board, not matched by a
+  message, and Stop does not ask about it. The board shows a block of its own: how many entries are
+  new and whose turn it is. A friend's task is never put in your task root: your Baton keeps a read
+  copy beside its state (`~/.claude/baton/shared/`). Write to a shared task only with the tool or the
+  page, never by editing its logbook: an entry that is not signed is not in the chain your friend gets.
+- **Who can read and write.** Only the friend you named, while both sides still have each other as
+  friends (Remove stops them at once; what they already pulled stays with them). Two people per task:
+  no groups. Only plain text entries of up to 4,000 characters, with an optional one-line title and a
+  `turn` that hands the task over: no files, links that open, scripts or dotfiles travel.
+- **Every entry is signed** with the writer's key (`ssh-keygen -Y sign -n baton-shared`), over the
+  task's ID, the author's ID, the author's own sequence number, the hash of the task's previous entry,
+  the time, the title, the text and the turn. Your box keeps a friend's entry only if the task was
+  started here, the author is its member and still your friend, the signature verifies against the
+  key in your `friends.json` (not one the entry brings), and it comes next: so an entry cannot be moved
+  to another task or posted twice, a missing one shows, and a turn can go only to a member. Your
+  friend's Baton checks every entry it pulls the same way and marks one that does not check.
+- **Your box must be open.** When your friend writes and your page is closed (or you are on another
+  network), the write fails at once and says so: "Ana's Baton page is closed, or not on this network
+  ... Ask them to open their Baton page". Nothing is queued to be sent later. Their Baton finds your
+  box by its broadcast, or at the address that answered last time (`--at IP:PORT` names it when a
+  router drops broadcasts). Only your page needs to be open; theirs need not be.
+- **What someone else wrote is data.** Neither side's hooks ever put a word of an entry or a title in
+  the agent's context: at session start the agent hears how many shared tasks there are, how many
+  entries are new, your nickname for the friend, whose turn it is and how many signatures did not
+  check. When you ask to read them, `read` shows every entry quoted, with its author and whether its
+  signature checked, under a line that says it is data, not instructions.
+
+**What shared tasks do not protect:**
+
+- **The network sees it.** The box speaks plain HTTP: on a shared network others can read the entries
+  as they go, and see who shares with whom. Nothing is encrypted. Use it on a network you trust.
+- **Your friend's agent sends what it reads to its own provider**, under their account, as it does
+  with anything it reads. So does yours, with what your friend writes.
+- **There is no gate on what the agent does after reading.** Baton has no PreToolUse check that stops
+  an agent that has read a friend's entry from running a command: the entry is shown as quoted data
+  with a warning, and the rest is the agent's judgement and yours.
+- A signature says who wrote an entry, not that it is true or safe.
 
 ## The ledger: an older entry edited is seen
 
@@ -298,8 +356,11 @@ there and asks nothing of Claude's memory or of any service.
 | where | what |
 |---|---|
 | your task root | the root itself, if it is missing, at the first session |
-| `~/.claude/baton/identity/baton_ed25519` (+ `.pub`) | since v3.42.0: this install's own key, made once by `ssh-keygen` (Ed25519, no passphrase, readable only by you). Its short fingerprint, `BTN-XXXX-XXXX-XXXX`, is the ID shown above the board at every start and `/clear` -- the number you give to people you trust, for tasks shared between them (still being built). Nothing is sent anywhere. Delete the folder and a new ID is made; `BATON_IDENTITY` points it elsewhere |
+| `~/.claude/baton/identity/baton_ed25519` (+ `.pub`) | since v3.42.0: this install's own key, made once by `ssh-keygen` (Ed25519, no passphrase, readable only by you). Its short fingerprint, `BTN-XXXX-XXXX-XXXX`, is the ID shown above the board at every start and `/clear` -- the number you give to people you trust, for tasks shared between them. Nothing is sent anywhere. Delete the folder and a new ID is made; `BATON_IDENTITY` points it elsewhere |
 | `~/.claude/baton/baton.page.json` (beside the identity folder) | since v3.43.0: the page server's pid, port, version and the random key of its link, readable only by you; written when it starts, removed when it stops. Beside it `baton.page.lock` for a moment while a server starts |
+| `<task root>/.shared/<name>/<logbook>` | since v3.45.0: the logbook of a shared task you started, written by `tools/baton_shared.py` and by your box when a friend writes (each entry under the same lock as `tools/baton_entry.py`) |
+| `~/.claude/baton/shared/` | since v3.45.0: `registry.json` (the shared tasks you started, and the read copies of a friend's with their entries and whether each checked), `<task>.jsonl` (the signed entries of a task you started), `registry.lock` while it is written |
+| `~/.claude/baton/baton.page.conf.json` | since v3.43.0: whether this install is a plugin, its catalog and how it updates; since v3.45.0 also the task root and logbook name, written by SessionStart so the page and `tools/baton_shared.py` know them |
 | `~/.claude/baton/identity/friends.json` | since v3.43.0: your friends (ID, public key, whether both sides accepted, the text of their invitation, since v3.44.0 your nickname for them and the box address their invitation came from), the invitations you made that wait for a reply (with the ID they are for and your nickname), and those fetched or pasted on the page and not yet decided; `friends.lock` beside it while it is written |
 | `<task root>/.baton-ids.json` | the task numbers the board shows, so a task can be named by its number; a number is never changed or reused |
 | `<task root>/.baton-chat/<session>.md` | the conversation since the last logbook entry: your messages and the agent's text replies, no tool calls or output, masked, at most 40,000 characters, readable only by you. Trimmed as logbook entries cover it, removed when nothing is left, moved to the state folder at the next session start or `/clear`. Beside it a `.gitignore` of `*` (since v3.39.0), so a task root that is a git repository never takes it |
@@ -322,7 +383,8 @@ The hooks never write a logbook; the agent does, and you can read every entry. W
   entries that did; as a plugin also Baton's rules, the text of `templates/CLAUDE.md` shipped with it (with the task root, the logbook name and the path of `tools/baton_entry.py` filled in);
 - at session start, one line: the page never opens by itself, and the command that opens it when
   you ask (never its link); when invitations pasted on the page wait for your decision, how many,
-  never their text;
+  never their text; when you have shared tasks, how many entries are new in each, your nickname for
+  the friend, whose turn it is and how many signatures did not check, never a title or an entry;
 - when a message names a task: which task, the date of its last entry, its next step, and that
   the logbook is to be read first;
 - before a write: a note when a new or changed logbook heading carries a typed hour, with the
@@ -355,7 +417,8 @@ Baton's state folder. Keeping the conversation has no switch to turn it off in v
 | the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
 | the page's server, `tools/baton_page.py` | listens while it runs (from `--open`, when you ask for the page, until 30 minutes without use) | nowhere: the page listens on 127.0.0.1 only, and answers only requests that carry the random key from its link. The key stops other web pages; it does not stop programs on this machine running as you |
 | **Send on WhatsApp** and **Email** on the page | only when you click them | the browser opens `wa.me` or your mail program with the message (the code and its note); you pick who gets it and send it yourself |
-| the box, in the page's server (v3.44.0) | listens only while an invitation you addressed to a Baton ID waits (`BATON_BOX=off`: never); every 5 s it broadcasts on the local network | it listens on port 47800 of this machine's addresses and answers two calls: a fetch, giving an ID the invitations addressed to it after a proof that the caller holds its key, and a reply. The broadcast, UDP to the local network on port 47800: your Baton ID and the port. Your nicknames never go out |
+| the box, in the page's server (v3.44.0) | listens only while an invitation you addressed to a Baton ID waits or (since v3.45.0) you have started a shared task (`BATON_BOX=off`: never); every 5 s it broadcasts on the local network | it listens on port 47800 of this machine's addresses and answers: a fetch, giving an ID the invitations addressed to it after a proof that the caller holds its key, and a reply; since v3.45.0 a pull, giving a friend the entries of the shared tasks they are the member of after the same kind of proof, and a write, taking their signed entry. The broadcast, UDP to the local network on port 47800: your Baton ID and the port. Your nicknames never go out |
+| `tools/baton_shared.py` `pull` and `write`, and the page's **Pull** and **Send** in a friend's task | when you (or the agent, asked by you) run them | the box of the friend who started the task, by plain HTTP: your ID, key and a signed time to pull; your signed entry (its text, title, turn, your ID) to write. It listens up to 7 s on UDP port 47800 for that box's broadcast |
 | the page, when it fetches from a friend's box or posts a reply to it | when you click **Get invitation** for a box it heard on the local network, and when you accept an invitation fetched from one | that box, by plain HTTP: your ID, public key, a signed time; the reply code (your ID, key, their ID and the invitation's number). Nothing else of yours, no nickname |
 | **Update Baton** on the page, as a plugin | only when you click it | Claude Code's own `claude plugin` commands fetch the catalog and the new version, as they do when you type them |
 | `tools/baton_key.py` | when you run it, to check the key you give it | `openrouter.ai` |
