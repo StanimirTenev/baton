@@ -9,8 +9,8 @@ running on this machine as you, which can read the state file. One server per in
 port, pid and key are in `baton.page.json` beside the identity folder. It stops by itself after
 30 minutes without a request (BATON_PAGE_IDLE seconds).
 
-SessionStart starts it, detached, the first time a version runs, and opens the page once
-(`--ensure --open`). By hand:
+Nothing starts it by itself (v3.45.0): the agent runs `--open` when the human asks for the page,
+as SessionStart tells it to. By hand:
 
     python3 tools/baton_page.py --serve --no-open   run it here and print the link (a demo)
     python3 tools/baton_page.py --open              open the page; the link is not printed
@@ -923,8 +923,9 @@ def conf_path() -> Path:
 
 
 class Config:
-    """What the page says about this install. SessionStart passes it; it is kept beside the state
-    file, so a page opened later by hand (`--open`) knows a plugin install from a script one."""
+    """What the page says about this install. SessionStart writes it beside the state file (v3.45.0;
+    before, it passed it here), so a page opened on request (`--open`) knows a plugin install from
+    a script one."""
 
     def __init__(self, args) -> None:
         if args.kind:
@@ -1334,7 +1335,7 @@ def main(argv=None) -> int:
     p.add_argument("--serve", action="store_true", help="run the page server here and print its link")
     p.add_argument("--no-open", action="store_true", help="with --serve: do not open the browser")
     p.add_argument("--quiet", action="store_true", help=argparse.SUPPRESS)
-    p.add_argument("--ensure", action="store_true", help=argparse.SUPPRESS)   # SessionStart's
+    p.add_argument("--ensure", action="store_true", help=argparse.SUPPRESS)   # start, print JSON (tests)
     p.add_argument("--open", action="store_true", help="open the page (the link is not printed)")
     p.add_argument("--invite", metavar="TEXT", nargs="?", const="", help="print an invitation code")
     p.add_argument("--accept", metavar="CODE", help="accept an invitation or take in a reply; - reads stdin")

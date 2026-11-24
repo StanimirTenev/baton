@@ -157,12 +157,12 @@ Below: [The page and friends](#the-page-and-friends), [The ledger](#the-ledger-a
 
 ## The page and friends
 
-On the first session start of each version (after an install or an update) Baton opens a page of
-its own in your browser: this install's ID with a copy button, what is new in this version, an
-**Update Baton** button, and your friends. Where no browser can appear (over SSH, Linux without a
-display, an SDK or CI run, or `BATON_NO_BROWSER=1`) nothing opens; the line at the top of the
-session carries the link instead, `🆕 page: http://127.0.0.1:<port>/<key>/`, until a session can
-open it. The link is on that line only: the agent never gets it, because the page's buttons are yours.
+Baton has a page of its own in your browser: this install's ID with a copy button, what is new in
+this version, an **Update Baton** button, and your friends. **It opens only when you ask for it**:
+say "open the Baton page" and the agent runs `tools/baton_page.py --open` (every session start tells
+the agent that command, and that the page never opens by itself). Since v3.45.0 nothing opens or
+starts it at session start. The link goes to the browser only: the agent never gets it, because the
+page's buttons are yours.
 
 The page is served by `tools/baton_page.py`, which ships with Baton (Python's own library only). The
 page listens on 127.0.0.1 only (the box for invitations, below, is another listener that never serves it), on a port the system picks, and answers only a request that carries the
@@ -222,10 +222,11 @@ python3 tools/baton_page.py --open                    # open the page; the link 
 python3 tools/baton_page.py --serve --no-open         # run the page here and print its link, for a demo
 ```
 
-`--accept` does not print an invitation's text; the page shows it. The command line never opens the
-box or reaches one. The server stops after 30 minutes without use, and closes your box with it;
-`--open` (or the next session start of a new version) starts it again, and the box with it, and while invitations wait the agent is told that command (never the link),
-so "open the Baton page" is enough.
+`--accept` does not print an invitation's text; the page shows it. These two commands never open the
+box or reach one. The server stops after 30 minutes without use, and closes your box with it;
+`--open` starts it again, and the box with it. The agent is told that command at every session start
+(never the link), so "open the Baton page" is enough. **A reply to your invitation comes in only while
+the page's server runs** (your box takes it then), or when it is pasted on the page.
 
 **What the box exposes.** To anyone who reaches the port: two calls, fetch and reply, and a 404 for
 everything else; never the page or its buttons, which stay on 127.0.0.1 behind their key. A fetch gives
@@ -319,8 +320,9 @@ The hooks never write a logbook; the agent does, and you can read every entry. W
   last 2,500 characters of the kept conversation with the path to the rest, notices about
   Baton itself, and, when the ledger differs from the logbooks, the folders and headings of the
   entries that did; as a plugin also Baton's rules, the text of `templates/CLAUDE.md` shipped with it (with the task root, the logbook name and the path of `tools/baton_entry.py` filled in);
-- at session start, when invitations pasted on the page wait for your decision: how many, never
-  their text and never the page's link;
+- at session start, one line: the page never opens by itself, and the command that opens it when
+  you ask (never its link); when invitations pasted on the page wait for your decision, how many,
+  never their text;
 - when a message names a task: which task, the date of its last entry, its next step, and that
   the logbook is to be read first;
 - before a write: a note when a new or changed logbook heading carries a typed hour, with the
@@ -335,10 +337,10 @@ and no instruction is fetched from anywhere. As a plugin the hooks make no netwo
 review tools you run by hand send the text under review, as the table below says. Installed
 by script, the opt-in weekly update check fetches the latest release number and its page
 address, and only those two go into a fixed sentence; see the table below. Besides a test command
-you pinned yourself, the commands the hooks run that are not their own are `ssh-keygen`, once,
-to make this install's key (below), and, on the first session start of a version, the browser
-opener of the system (`xdg-open`, `open`, or Windows' own) to open [the page](#the-page-and-friends).
-The page's server is Baton's own `tools/baton_page.py`; it runs `ssh-keygen -Y sign` and `-Y verify`
+you pinned yourself, the command the hooks run that is not their own is `ssh-keygen`, once,
+to make this install's key (below). [The page](#the-page-and-friends) is opened only when you ask,
+by the agent running `tools/baton_page.py --open`, with the system's browser opener (`xdg-open`,
+`open`, or Windows' own). The page's server is Baton's own `tools/baton_page.py`; it runs `ssh-keygen -Y sign` and `-Y verify`
 for invitations, and `claude plugin marketplace update` and `claude plugin update` only when you
 click **Update Baton**.
 
@@ -351,7 +353,7 @@ Baton's state folder. Keeping the conversation has no switch to turn it off in v
 |---|---|---|
 | the hooks, installed as a plugin | never (once a week they only remind you to check for a newer version yourself) | -- |
 | the hooks, installed by script | once a week (a failed check is retried the next day), **only if you switched the update check on** (`tools/baton_update.py on`); off until you choose | `api.github.com/repos/StanimirTenev/baton/releases/latest` -- a version number back, nothing of yours sent |
-| the page's server, `tools/baton_page.py` | listens while it runs (from the first session start of a version until 30 minutes without use) | nowhere: the page listens on 127.0.0.1 only, and answers only requests that carry the random key from its link. The key stops other web pages; it does not stop programs on this machine running as you |
+| the page's server, `tools/baton_page.py` | listens while it runs (from `--open`, when you ask for the page, until 30 minutes without use) | nowhere: the page listens on 127.0.0.1 only, and answers only requests that carry the random key from its link. The key stops other web pages; it does not stop programs on this machine running as you |
 | **Send on WhatsApp** and **Email** on the page | only when you click them | the browser opens `wa.me` or your mail program with the message (the code and its note); you pick who gets it and send it yourself |
 | the box, in the page's server (v3.44.0) | listens only while an invitation you addressed to a Baton ID waits (`BATON_BOX=off`: never); every 5 s it broadcasts on the local network | it listens on port 47800 of this machine's addresses and answers two calls: a fetch, giving an ID the invitations addressed to it after a proof that the caller holds its key, and a reply. The broadcast, UDP to the local network on port 47800: your Baton ID and the port. Your nicknames never go out |
 | the page, when it fetches from a friend's box or posts a reply to it | when you click **Get invitation** for a box it heard on the local network, and when you accept an invitation fetched from one | that box, by plain HTTP: your ID, public key, a signed time; the reply code (your ID, key, their ID and the invitation's number). Nothing else of yours, no nickname |
@@ -389,9 +391,10 @@ The scan holds Baton on three warnings. What each flagged file does, checked aga
   of a key pasted into a message -- is in `hooks/_baton.py`, which makes no network request.
   The session hook's one network request is the opt-in update check (`update_notice`): a GET
   for the latest release number on GitHub that sends nothing of the user's, never made as a
-  plugin. Since v3.43.0 it also starts `tools/baton_page.py`, which listens on 127.0.0.1; since
-  v3.44.0 that server, never the hook, also opens the box for invitations while one the human
-  addressed waits, and reaches a friend's box when the page asks; its environment is built in `hooks/_baton.py` from a fixed list (`PAGE_ENV`). `plugin.json` reads nothing: its description only says that the review tools send
+  plugin. From v3.43.0 to v3.44.0 it also started `tools/baton_page.py`, which listens on
+  127.0.0.1; since v3.45.0 no hook starts it, only the agent's `--open` when the human asks. That
+  server, never a hook, opens the box for invitations while one the human addressed waits, and
+  reaches a friend's box when the page asks. `plugin.json` reads nothing: its description only says that the review tools send
   text to OpenRouter, and it was flagged the same way from v3.15.0, when it did not mention
   OpenRouter at all. A `userConfig` option would not reach these tools -- Claude Code hands
   plugin options to hook processes, and these tools are run by hand.

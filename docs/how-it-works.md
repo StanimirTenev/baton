@@ -827,29 +827,23 @@ terminal board is translated by the agent, and nobody translates a file opened i
 English is the default. The idea came from
 [answer-me-with-html](https://github.com/QingYunA/answer-me-with-html).
 
-## The page: opened once per version
+## The page: opened only when asked
 
-Unlike the board, this one opens by itself, once for each version: new features are shown rather
-than learned as commands. At `startup` or `resume`, when the state file has no
-`page_opened_version` equal to the running version, SessionStart runs
-`tools/baton_page.py --ensure`, which reuses the install's page server or starts one detached (its
-own session on Linux and macOS; `DETACHED_PROCESS`, a new process group and no window on Windows),
-waits until it answers, and opens the link with the system's opener. The opener's output goes
-nowhere, and so does the server's: the hook's output stays one JSON object. The state key is set
-only after the opener started and did not fail; if the state file cannot be written, nothing opens,
-because an open that cannot be remembered would come every session. `whats_new_notice()` keeps its
-own key (`seen_version`) and stays silent on a fresh install; the page opens on a fresh install too.
+Since v3.45.0 nothing opens the page by itself (from v3.43.0 to v3.44.0 SessionStart opened it once
+per version; the owner decided against a browser that appears at session start). On every session
+start (`startup`, `resume`, `clear`, and after a compaction) the agent's context carries one standing
+line, `page_route()`: the page never opens by itself, and when the human asks for it ("open the Baton
+page") the agent runs `tools/baton_page.py --open`. That reuses the install's page server or starts one
+detached (its own session on Linux and macOS; `DETACHED_PROCESS`, a new process group and no window on
+Windows), waits until it answers, and opens the link with the system's opener; it prints no link.
+What the page says about the install (plugin or script, its catalog, how it updates) SessionStart
+writes to `baton.page.conf.json` beside the identity folder at `startup` and `resume`, so a page
+opened later knows it. When invitations wait, the line comes with their count (the human's line says
+the count too), never their text. `BATON_PAGE=off` turns the line off; the tests use it.
 
-No browser where it could not be seen: not with `SSH_CONNECTION` or `SSH_TTY` set, not with `CI` set,
-not when `CLAUDE_CODE_ENTRYPOINT` starts with `sdk` (SessionStart's input says nothing about whether
-the session is interactive, so this is the environment's word; that `claude -p` sets it so was not
-checked in a real run), on Linux not without `DISPLAY` or
-`WAYLAND_DISPLAY`, and never with `BATON_NO_BROWSER=1`. Then the line at the top of the session ends
-in `· 🆕 page: <link>`, every session start, until one opens it. `BATON_PAGE=off` turns the whole page
-off: no server, no link.
-
-The link holds a random 128-bit key and goes to that line (`systemMessage`) only, never into the
-agent's context. The server, `tools/baton_page.py --serve`, binds 127.0.0.1 on a port the system
+The link holds a random 128-bit key and goes to the browser only, never into the agent's context
+(an earlier version put it on the line at the top of the session where no browser could appear).
+ The server, `tools/baton_page.py --serve`, binds 127.0.0.1 on a port the system
 picks, and answers only:
 
 - the page itself at `/<key>/`;
@@ -862,10 +856,9 @@ buttons), sends no referrer, and puts every string from the server on screen as 
 HTML. One server per install: `baton.page.json` beside the identity folder holds its pid, port,
 version and key; a lock taken with `O_EXCL` lets one of two sessions starting at once start it,
 and the other uses it. A server of another version gives way to the new one. It stops after 30
-minutes without a request (`BATON_PAGE_IDLE` seconds). Its environment is a fixed list
-(`PAGE_ENV` in `hooks/_baton.py`): the board's names, Claude Code's config folder for the update
-button, the identity folder, where the box listens (`BATON_BOX`, `BATON_BOX_UDP`), and a proxy with
-its certificates.
+minutes without a request (`BATON_PAGE_IDLE` seconds). It runs with the environment of whoever
+started it, the agent's command; no hook starts it any more, so the fixed list a hook passed it
+(`PAGE_ENV`, v3.43.0 to v3.44.0) is gone.
 
 Invitations and replies are signed and checked with `ssh-keygen -Y sign` / `-Y verify` in the
 `baton-invite` namespace, over the exact bytes the code carries. As the probe of 21.11.2026 found:

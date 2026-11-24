@@ -380,25 +380,6 @@ def start_board(cmd: list, root: Path, logbook: str) -> None:
                      stderr=subprocess.DEVNULL, env=board_env(os.environ, root, logbook), **detach)
 
 
-# The page server's (tools/baton_page.py, v3.43.0): the board's names, and what its buttons need --
-# Claude Code's config folder for `claude plugin update`, the identity folder, a proxy and its
-# certificates for the catalog's fetch, where the box listens (BATON_BOX, BATON_BOX_UDP, v3.44.0),
-# and three switches the tests use. PROGRAMDATA: Windows ssh-keygen exits 255 and prints nothing without it, so the
-# page could not sign or check (21.11).
-PAGE_ENV = BOARD_ENV + ("PROGRAMDATA", "ALLUSERSPROFILE", "CLAUDE_CONFIG_DIR", "BATON_IDENTITY", "BATON_PAGE_IDLE", "BATON_OPENER", "BATON_BOX", "BATON_BOX_UDP",
-                        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy",
-                        "no_proxy", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR")
-
-
-def run_page(cmd: list, timeout: float = 12) -> bytes:
-    """Run the page tool with only the names in PAGE_ENV and return what it printed, which is
-    for the hook to read, never the hook's own output. The server it starts is detached and
-    holds none of these pipes. The caller catches anything this raises."""
-    env = {k: os.environ[k] for k in PAGE_ENV if k in os.environ}
-    return subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, env=env,
-                          timeout=timeout).stdout
-
-
 def claude_pid() -> int | None:
     """The Claude Code process this hook runs under: the nearest ancestor named `claude`, read from
     /proc (Linux). The same across /clear, a new one after a restart. None elsewhere, or not found."""

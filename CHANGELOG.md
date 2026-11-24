@@ -2,6 +2,22 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.45.0** — the page opens only when you ask for it
+
+From 3.43 to 3.44 the first session start of each version opened the page in the browser by itself.
+Now nothing starts or opens it at session start.
+
+- **The page opens on request.** Say "open the Baton page": every session start tells the agent the
+  command (`tools/baton_page.py --open`) and that the page never opens by itself, whether or not an
+  invitation waits. The line at the top no longer carries `🆕 page: <link>`; the count of invitations
+  waiting stays, on that line and for the agent, never their text. What the page says about the
+  install (plugin or script, how it updates) is kept beside the identity folder at session start, so
+  the page opened later knows it.
+- **A reply to an invitation comes in only while the page's server runs**: its box takes it then, or
+  the reply is pasted on the page. The notice for an inviter waiting for a reply says so.
+- **Not checked:** a real browser opened by an agent's `--open` on Windows and macOS (the tests use a
+  stub opener on Linux).
+
 **v3.44.0** — invitations found by themselves on one network, sent by WhatsApp across networks; a nickname for each friend
 
 In 3.43 an invitation was a code to copy into a message, and the reply another code to copy back.

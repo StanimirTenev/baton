@@ -1,5 +1,5 @@
 {
   "name": "baton",
-  "version": "3.44.0",
+  "version": "3.45.0",
   "description": "Baton: task folders and logbooks (https://github.com/StanimirTenev/baton). The hooks are the ones Claude Code runs; they tell the host apart themselves. Link this folder in place: gemini extensions link <clone>/gemini"
 }

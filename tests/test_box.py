@@ -411,8 +411,8 @@ def test_a_nickname_never_reaches_the_agent(page, tmp_path):
     for who in ("a", "b"):
         env = _env(tmp_path, who)
         env["BATON_BOX"] = "off"
-        state = tmp_path / f"{who}.state.json"                             # the page counts as opened:
-        state.write_text(json.dumps({"page_opened_version": VERSION, "seen_version": VERSION}))  # no server
+        state = tmp_path / f"{who}.state.json"
+        state.write_text(json.dumps({"seen_version": VERSION}))
         env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_SESSION_STATE=str(state))
         out = subprocess.run([sys.executable, str(HOOK)], input=b'{"source":"startup"}',
                              capture_output=True, env=env, timeout=60)

@@ -1,4 +1,4 @@
-"""The page (v3.43.0): tools/baton_page.py on 127.0.0.1, opened once per version by SessionStart.
+"""The page (v3.43.0): tools/baton_page.py on 127.0.0.1; since v3.45.0 opened only on request.
 
 Run as the harness runs the hook: a subprocess, its stdout parsed as JSON. The browser is a stub
 named by BATON_OPENER that writes the link it was given to a file; no real browser is started,
@@ -96,82 +96,59 @@ def _page(tmp_path):
 SHOWN = {"DISPLAY": ":0"} if sys.platform.startswith("linux") else {}
 
 
-def test_a_fresh_install_opens_the_page_once(tmp_path):
-    got, ctx = _hook(tmp_path, state=None, **SHOWN)
-    assert len(_opened(tmp_path)) == 1
-    url = _opened(tmp_path)[0]
-    assert url.startswith("http://127.0.0.1:") and url == _page(tmp_path)["url"]
-    assert _state(tmp_path)["page_opened_version"] == VERSION
-    assert "page:" not in got["systemMessage"], "opened, so the line does not carry the link"
-    again, _ = _hook(tmp_path, **SHOWN)
-    assert len(_opened(tmp_path)) == 1, "opened twice for one version"
-    assert "page:" not in again["systemMessage"]
+def _page_processes(tmp_path):
+    """baton_page.py processes serving this test's identity folder (pgrep), [] where none."""
+    if os.name == "nt" or not shutil.which("pgrep"):
+        return []
+    return subprocess.run(["pgrep", "-f", f"baton_page.py.*{tmp_path / 'identity'}"],
+                          capture_output=True, text=True).stdout.split()
 
 
-def test_an_upgrade_opens_it_once_for_the_new_version(tmp_path):
-    _hook(tmp_path, state={"seen_version": "3.41.0", "page_opened_version": "3.41.0"}, **SHOWN)
-    assert len(_opened(tmp_path)) == 1
-    assert _state(tmp_path)["page_opened_version"] == VERSION
-    _hook(tmp_path, source="resume", **SHOWN)
-    assert len(_opened(tmp_path)) == 1
+@pytest.mark.parametrize("source", ["startup", "resume", "clear", "compact"])
+@pytest.mark.parametrize("state", [None, {"seen_version": "3.41.0", "page_opened_version": "3.41.0"}],
+                         ids=["fresh-install", "upgrade"])
+def test_a_session_start_starts_no_page_and_opens_no_browser(tmp_path, source, state):
+    """v3.45.0, the owner: the page opens only when the human asks. Where 3.44.0 opened it (a
+    display, a fresh install or an upgrade) nothing starts and nothing opens."""
+    got, ctx = _hook(tmp_path, state=state, source=source, **SHOWN)
+    again, _ = _hook(tmp_path, source=source, **SHOWN)
+    assert _opened(tmp_path) == [], "a browser was opened at session start"
+    assert not (tmp_path / "baton.page.json").exists(), "a page server was started"
+    time.sleep(0.3)
+    assert _page_processes(tmp_path) == []
+    for out in (got, again):
+        assert "page:" not in out.get("systemMessage", "") and "127.0.0.1" not in json.dumps(out)
+    assert _state(tmp_path).get("page_opened_version") in (None, "3.41.0")
+    # The way to open it on request is in every session's context, not only when invitations wait.
+    assert "--open" in ctx and "never opens by itself" in ctx
 
 
-def test_compact_and_clear_do_not_open_it(tmp_path):
-    _hook(tmp_path, state={}, source="clear", **SHOWN)
-    _hook(tmp_path, source="compact", **SHOWN)
-    assert _opened(tmp_path) == []
-
-
-@pytest.mark.parametrize("env", [
-    {"SSH_CONNECTION": "10.0.0.1 5000 10.0.0.2 22", "DISPLAY": ":0"},
-    {"SSH_TTY": "/dev/pts/3", "DISPLAY": ":0"},
-    {"BATON_NO_BROWSER": "1", "DISPLAY": ":0"},
-    {"CLAUDE_CODE_ENTRYPOINT": "sdk-cli", "DISPLAY": ":0"},
-    pytest.param({}, marks=pytest.mark.skipif(not sys.platform.startswith("linux"),
-                                              reason="no display is a Linux test")),
-], ids=["ssh", "ssh-tty", "opt-out", "sdk", "no-display"])
-def test_no_browser_here_means_the_link_on_the_line_until_it_opens(tmp_path, env):
-    got, ctx = _hook(tmp_path, state={}, **env)
-    assert _opened(tmp_path) == []
-    assert "page_opened_version" not in _state(tmp_path)
-    url = _page(tmp_path)["url"]
-    assert got["systemMessage"].endswith(" · 🆕 page: " + url)
-    assert got["systemMessage"].startswith("🪪 This Baton's ID: BTN-")
-    again, _ = _hook(tmp_path, **env)
-    assert again["systemMessage"].endswith(url), "the link must stay until a real open"
-    _hook(tmp_path, **SHOWN)                     # now with a browser: opened, and the link goes
-    assert _opened(tmp_path) == [url]
-    last, _ = _hook(tmp_path, **SHOWN)
-    assert "page:" not in last["systemMessage"]
-
-
-def test_a_launch_that_fails_does_not_count_as_opened(tmp_path):
-    failing = _opener(tmp_path, code=1)
-    got, _ = _hook(tmp_path, state={}, BATON_OPENER=str(failing), **SHOWN)
-    assert len(_opened(tmp_path)) == 1                         # it was tried
-    assert "page_opened_version" not in _state(tmp_path)
-    assert "🆕 page: http://127.0.0.1:" in got["systemMessage"]
-    missing, _ = _hook(tmp_path, BATON_OPENER=str(tmp_path / "no-such-opener"), **SHOWN)
-    assert "page_opened_version" not in _state(tmp_path)
-    assert "🆕 page:" in missing["systemMessage"]
-
-
-def test_a_state_file_that_cannot_be_written_opens_nothing(tmp_path):
-    (tmp_path / "state.json").mkdir()                          # read and write both fail
-    got, _ = _hook(tmp_path, **SHOWN)
-    assert _opened(tmp_path) == []
-    assert "🆕 page:" in got["systemMessage"]
-
-
-def test_switched_off_there_is_no_server_and_no_link(tmp_path):
-    got, _ = _hook(tmp_path, state={}, BATON_PAGE="off", **SHOWN)
+def test_switched_off_there_is_no_server_no_link_and_no_route(tmp_path):
+    got, ctx = _hook(tmp_path, state={}, BATON_PAGE="off", **SHOWN)
     assert _opened(tmp_path) == [] and not (tmp_path / "baton.page.json").exists()
-    assert "page:" not in got["systemMessage"]
+    assert "page:" not in got["systemMessage"] and "--open" not in ctx
 
 
-def test_without_task_folders_the_line_still_carries_the_link(tmp_path):
-    got, ctx = _hook(tmp_path, state={}, tasks=False, BATON_NO_BROWSER="1")
-    assert "🆕 page: http://127.0.0.1:" in got["systemMessage"]
+def test_without_task_folders_the_agent_still_has_the_route(tmp_path):
+    got, ctx = _hook(tmp_path, state={}, tasks=False, **SHOWN)
+    assert "--open" in ctx and str(TOOL) in ctx
+    assert not (tmp_path / "baton.page.json").exists()
+
+
+def test_asked_for_it_the_agent_opens_it_and_it_knows_the_install(tmp_path):
+    """The other direction: what the hook printed is what opens the page, through the opener."""
+    _, ctx = _hook(tmp_path, state={}, **SHOWN)
+    cmd = ctx.split("📄 Baton page", 1)[1].split("run `", 1)[1].split("`", 1)[0].split()
+    assert cmd[-1] == "--open" and Path(cmd[1]) == TOOL
+    out = subprocess.run([sys.executable, *cmd[1:]], capture_output=True, text=True,
+                         env=_base_env(tmp_path), timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert "127.0.0.1" not in out.stdout + out.stderr, "the link must not be printed"
+    st = _page(tmp_path)
+    assert _opened(tmp_path) == [st["url"]]
+    got = json.loads(_req(st["port"], "GET", "/api/state", {"X-Baton-Ticket": st["ticket"]})[1])
+    assert got["kind"] == "script" and "installer" in got["how"] and got["version"] == VERSION
+    assert got["id"] and got["id"].startswith("BTN-")
 
 
 # -- the server ------------------------------------------------------------------------------
@@ -334,14 +311,6 @@ def test_another_install_is_shown_how_it_updates_and_nothing_runs(tmp_path):
     assert not (tmp_path / "claude.log").exists()
 
 
-def test_the_hook_tells_the_page_how_a_script_install_updates(tmp_path):
-    _hook(tmp_path, state={}, BATON_NO_BROWSER="1")
-    st = _page(tmp_path)
-    got = json.loads(_req(st["port"], "GET", "/api/state", {"X-Baton-Ticket": st["ticket"]})[1])
-    assert got["kind"] == "script" and "installer" in got["how"] and got["version"] == VERSION
-    assert got["id"] and got["id"].startswith("BTN-")
-
-
 # -- invitations -----------------------------------------------------------------------------
 
 @pytest.fixture
@@ -490,8 +459,7 @@ def test_the_invitation_text_never_reaches_the_agent(page, tmp_path):
     code = page.make_invite("ZEBRA-42 call me")
     page.use("b")
     page.read_code(code)                                       # pasted on b's page, undecided
-    got, ctx = _hook(tmp_path / "b", state=None, BATON_IDENTITY=str(tmp_path / "b" / "identity"),
-                     BATON_NO_BROWSER="1")
+    got, ctx = _hook(tmp_path / "b", state=None, BATON_IDENTITY=str(tmp_path / "b" / "identity"))
     out = json.dumps(got, ensure_ascii=False)
     assert "ZEBRA" not in out
     assert "1 friend invitation is waiting" in ctx
@@ -523,8 +491,11 @@ def test_as_a_plugin_the_page_has_the_button_and_the_catalog(tmp_path):
     home = tmp_path / "home"
     root = home / ".claude" / "plugins" / "cache" / "mycat" / "baton" / VERSION
     root.mkdir(parents=True)
-    _hook(tmp_path, state={}, BATON_NO_BROWSER="1", CLAUDE_PLUGIN_ROOT=str(root),
+    _hook(tmp_path, state={}, CLAUDE_PLUGIN_ROOT=str(root),
           CLAUDE_PLUGIN_DATA=str(tmp_path / "data"))
+    assert not (tmp_path / "baton.page.json").exists()
+    assert subprocess.run([sys.executable, str(TOOL), "--open"], capture_output=True,
+                          env=_base_env(tmp_path), timeout=60).returncode == 0
     st = _page(tmp_path)
     got = json.loads(_req(st["port"], "GET", "/api/state", {"X-Baton-Ticket": st["ticket"]})[1])
     assert got["kind"] == "plugin" and got["catalog"] == "mycat"
@@ -575,18 +546,7 @@ def test_a_code_carried_by_mail_or_chat_still_reads(page):
 def test_an_inviter_waiting_for_a_reply_is_told_how_to_reopen_the_page(page, tmp_path):
     page.use("a")
     page.make_invite("ZEBRA-7")
-    got, ctx = _hook(tmp_path / "a", state={"page_opened_version": VERSION},
+    got, ctx = _hook(tmp_path / "a", state={},
                      BATON_IDENTITY=str(tmp_path / "a" / "identity"))
     assert "--open" in ctx and "ZEBRA" not in json.dumps(got, ensure_ascii=False)
     assert "invitation" not in got["systemMessage"]
-
-
-def test_page_env_carries_programdata(monkeypatch):
-    """Windows ssh-keygen exits 255 without PROGRAMDATA: a page started by the hook could not sign
-    or check a code (21.11, found on Windows; Linux does not need it, so it is pinned here)."""
-    sys.path.insert(0, str(HOOK.parent))
-    import _baton
-    assert "PROGRAMDATA" in _baton.PAGE_ENV
-    monkeypatch.setenv("PROGRAMDATA", "C:\\ProgramData")
-    out = _baton.run_page([sys.executable, "-c", "import os; print(os.environ.get('PROGRAMDATA'))"])
-    assert out.decode().strip() == "C:\\ProgramData"

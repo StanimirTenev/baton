@@ -204,7 +204,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.44.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
+BATON_VERSION = "3.45.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -2192,10 +2192,11 @@ def id_line() -> str | None:
 
 # -- The page (v3.43.0): this install's ID, what is new, "Update Baton", friends --------------
 #
-# tools/baton_page.py serves it on 127.0.0.1 with a random key in the link. Opened once per
-# version, on the first session start where a browser can appear; until then the top line
-# carries the link. The link goes to the human's line only, never to the agent's context: its
-# buttons are the human's. Of the invitations the agent hears a count, never the text.
+# tools/baton_page.py serves it on 127.0.0.1 with a random key in the link. Since v3.45.0 it is
+# never started or opened by a session start: only when the human asks, by the agent running
+# `--open` (the command is in every session's context, page_route()). The link goes to no one but
+# the browser: its buttons are the human's. Of the invitations the agent hears a count, never the
+# text; the human's line says the count too.
 PAGE_LINE: list = []
 
 
@@ -2225,21 +2226,6 @@ def update_how(kind: str) -> str:
     return script_how(_local().get("repo")) + ", then start a new session."
 
 
-def browser_here(env, platform: str) -> bool:
-    """A browser can appear for a human: not switched off (BATON_NO_BROWSER), not over SSH, not
-    CI or an SDK run (Claude Code's CLAUDE_CODE_ENTRYPOINT starts with "sdk" there; SessionStart's
-    input has no field for it), and on Linux a display."""
-    if env.get("BATON_NO_BROWSER", "") not in ("", "0"):
-        return False
-    if env.get("SSH_CONNECTION") or env.get("SSH_TTY") or env.get("CI"):
-        return False
-    if str(env.get("CLAUDE_CODE_ENTRYPOINT", "")).startswith("sdk"):
-        return False
-    if platform.startswith("win") or platform == "darwin":
-        return True
-    return bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
-
-
 def invitations_waiting(part: str = "incoming") -> int:
     """Invitations pasted on the page and not yet decided ("incoming"), or made here and waiting
     for a reply ("invites"): a number, nothing else."""
@@ -2250,64 +2236,50 @@ def invitations_waiting(part: str = "incoming") -> int:
         return 0
 
 
-def page_step(own: dict) -> str | None:
-    """Start the page once per version and open it; fill PAGE_LINE. Returns the agent's notice
-    (a count of invitations) or None. BATON_PAGE=off: nothing at all (the tests' switch)."""
+def page_route() -> str | None:
+    """The standing line: how the agent opens the page when the human asks for it. None when the
+    tool is not here or the page is switched off (BATON_PAGE=off, the tests' switch)."""
     if os.environ.get("BATON_PAGE", "") == "off":
         return None
     tool = page_tool()
-    notice = None
+    if tool is None:
+        return None
+    py = "python" if os.name == "nt" else "python3"
+    return (f"📄 Baton page (this install's ID, what is new, Update Baton, friends, shared tasks): it "
+            f"never opens by itself. Only when the human asks for it (\"open the Baton page\"), run "
+            f"`{py} {tool} --open` (it prints no link).")
+
+
+def page_step(own: dict) -> str | None:
+    """The agent's notice about the page: how to open it on request, and a count of the
+    invitations waiting. Starts nothing (v3.45.0). What the page says about this install (plugin
+    or script, its catalog, how it updates) is kept beside the identity folder, so `--open`
+    later knows it. BATON_PAGE=off: nothing at all (the tests' switch)."""
+    route = page_route()
+    if route is None:
+        return None
+    if own.get("source") in ("startup", "resume") and _baton is not None:
+        kind = install_kind(own)
+        conf = {"kind": kind, "catalog": plugin_catalog() if kind == "plugin" else "baton",
+                "how": update_how(kind)}
+        try:
+            path = identity_dir().parent / "baton.page.conf.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(conf), "utf-8")
+        except OSError:
+            pass                # the page then says how a script install updates
     n, sent = invitations_waiting(), invitations_waiting("invites")
-    how = (f" When they ask for the Baton page, `{'python' if os.name == 'nt' else 'python3'} {tool} "
-           "--open` opens it (it prints no link)." if tool else "")
     if n:
         PAGE_LINE.append(f"👥 {n} invitation{'s' if n > 1 else ''} waiting")
-        notice = (f"👥 Baton: {n} friend invitation{'s are' if n > 1 else ' is'} waiting for the "
-                  "human's decision on the Baton page. Its text is for the human only and is not "
-                  "here. Tell them in one line, in their language." + how)
-    elif sent:
-        notice = (f"👥 Baton: {sent} friend invitation{'s' if sent > 1 else ''} the human made "
-                  f"wait{'' if sent > 1 else 's'} for a reply, which arrives on the Baton page (through the "
-                  "box while the page server runs, or pasted). "
-                  "Say nothing about it unless they bring it up." + how)
-    if own.get("source") not in ("startup", "resume") or tool is None or _baton is None:
-        return notice
-    try:
-        state = json.loads(_state_file().read_text("utf-8"))
-    except Exception:
-        state = {}
-    state = state if isinstance(state, dict) else {}
-    if state.get("page_opened_version") == BATON_VERSION:
-        return notice
-    want = browser_here(os.environ, sys.platform)
-    if want:
-        try:
-            _state_file().write_text(json.dumps(state), "utf-8")
-        except OSError:
-            want = False        # an open that cannot be remembered would come every session
-    kind = install_kind(own)
-    cmd = [sys.executable, str(tool), "--ensure", "--identity", str(identity_dir()),
-           "--version", BATON_VERSION, "--kind", kind, "--how", update_how(kind)]
-    if kind == "plugin":
-        cmd += ["--catalog", plugin_catalog()]
-    if want:
-        cmd.append("--open")
-    try:
-        got = json.loads(_baton.run_page(cmd) or b"{}")
-    except Exception:
-        return notice           # a page that cannot start must not cost the board
-    url = got.get("url") if isinstance(got, dict) else None
-    if not isinstance(url, str) or not url.startswith("http://127.0.0.1:"):
-        return notice
-    if got.get("opened"):
-        state["page_opened_version"] = BATON_VERSION
-        try:
-            _state_file().write_text(json.dumps(state), "utf-8")
-        except OSError:
-            pass
-        return notice
-    PAGE_LINE.append(f"🆕 page: {url}")
-    return notice
+        return (f"👥 Baton: {n} friend invitation{'s are' if n > 1 else ' is'} waiting for the "
+                "human's decision on the Baton page. Its text is for the human only and is not "
+                "here. Tell them in one line, in their language.\n" + route)
+    if sent:
+        return (f"👥 Baton: {sent} friend invitation{'s' if sent > 1 else ''} the human made "
+                f"wait{'' if sent > 1 else 's'} for a reply. A reply comes in only while the Baton "
+                "page's server runs (its box takes it then), or when it is pasted on the page. "
+                "Say nothing about it unless they bring it up.\n" + route)
+    return route
 
 
 def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
@@ -2499,7 +2471,8 @@ def main() -> int:
         return 0
     own = _own_session()          # stdin is read once; everything below gets it from here
     if own.get("source") == "compact":
-        return _emit(compacted(own), COMPACT_LINE, block="compact")
+        route = page_route()
+        return _emit(compacted(own) + ("\n\n" + route if route else ""), COMPACT_LINE, block="compact")
     cleared = own.get("source") == "clear"
     root, name = config()
     if os.environ.get("CLAUDE_PLUGIN_ROOT") and not root.exists() and root.parent != root:
