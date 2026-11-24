@@ -32,10 +32,19 @@ the machine of whoever started it, read and written by the friend through that m
   whether signatures checked, never a title or a word of an entry; `read` quotes them as data. The
   README says what this does not protect: plain HTTP on the network, your friend's agent sending what
   it reads to its provider, and no gate on what an agent does after reading.
+- **On Windows, a logbook took one entry and refused the next** ("the front matter broke"), in every
+  version up to 3.44.0: the write turned the file into CRLF and the next read wanted LF. A CRLF logbook
+  is now read as LF and written back as LF bytes. Found and checked on a real Windows PC: three entries
+  in a row, no CR left.
+- **Checked on two real machines** (a Linux laptop and a Windows PC on one network, throwaway
+  identities): the box found by broadcast both ways, three handovers each way with no entry lost, every
+  signature ✓ on both sides, a poisoned entry reaching no hook, a write to a closed page failing with
+  nothing queued, and the roles reversed. It found two defects, fixed here: `read` crashed on a Windows
+  console or pipe that cannot print ✓ (cp1251), and a `read` that crashed had already marked the
+  entries as read.
 - **Not checked:** a real browser opened by an agent's `--open` on Windows and macOS (the tests use a
-  stub opener on Linux); two real machines on a real network, Windows at all, a router that drops
-  broadcasts, and the page's new card in a browser (its JavaScript was only parsed, with `node
-  --check`). The tests ran two installs with their boxes on 127.0.0.2 and 127.0.0.3 of one machine.
+  stub opener on Linux), macOS at all, a router that drops broadcasts, and the page's new card in a
+  browser (its JavaScript was only parsed, with `node --check`).
 
 **v3.44.0** — invitations found by themselves on one network, sent by WhatsApp across networks; a nickname for each friend
 

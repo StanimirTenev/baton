@@ -143,3 +143,19 @@ def test_a_lock_held_by_a_live_writer_is_waited_for_then_refused_loudly(tmp_path
     else:
         raise AssertionError("written without the lock")
     assert book.read_bytes() == before and lock.exists(), "nothing written, the other's lock kept"
+
+
+def test_a_crlf_logbook_takes_two_entries_and_comes_back_lf(tmp_path):
+    """Two-machine test, 24.11.2026: on Windows the first write turned the logbook into CRLF and
+    the second was refused as "the front matter broke". A CRLF logbook is read as LF and written
+    back as bytes, LF."""
+    book = tmp_path / "DNEVNIK.md"
+    book.write_bytes(b"---\r\nstate: active\r\nnext: test\r\n---\r\n\r\n# Test\r\n")
+    for n in (1, 2):
+        entry = tmp_path / f"e{n}.md"
+        entry.write_text("### What was asked\nx\n\n### Done\ny\n", encoding="utf-8")
+        out = subprocess.run([sys.executable, str(TOOL), str(book), str(entry), "--title", f"entry {n}"],
+                             capture_output=True, text=True, timeout=60)
+        assert out.returncode == 0, out.stderr
+    raw = book.read_bytes()
+    assert b"\r" not in raw and raw.count(b"\n## ") == 2

@@ -196,7 +196,10 @@ def _write_locked(file: Path, entry: str, next_line, old_line) -> tuple[float, s
     # matter broke". It is kept on the way back, never added.
     raw = file.read_bytes()
     bom = raw.startswith(b"\xef\xbb\xbf")
-    text = raw.decode("utf-8-sig")
+    # A CRLF logbook (an editor on Windows, or a Baton before 3.45.0 there) is read as LF and
+    # written back as LF: text-mode write_text turned every write into CRLF on Windows, and the next
+    # write was refused as "the front matter broke" (two-machine test, 24.11.2026).
+    text = raw.decode("utf-8-sig").replace("\r\n", "\n")
     header = text.startswith("---")
 
     # 🔴 Three defects from an external review of v2.14.0, all here:
@@ -258,7 +261,7 @@ def _write_locked(file: Path, entry: str, next_line, old_line) -> tuple[float, s
     # one (a shared `LOGBOOK.md.tmp` let one writer move the other's half-written text into place).
     tmp = file.with_name(f".{file.name}.{os.getpid()}.tmp")
     try:
-        tmp.write_text(text, encoding="utf-8-sig" if bom else "utf-8")
+        tmp.write_bytes(text.encode("utf-8-sig" if bom else "utf-8"))   # bytes: no CRLF on Windows
         _replace(tmp, file)         # atomic: never a half-written logbook
     finally:
         if tmp.exists():

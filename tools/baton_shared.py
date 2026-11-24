@@ -270,7 +270,7 @@ def _md(payload: dict, me: str, n: int) -> str:
     turn = f"; hands the turn to {_who(payload['turn'], me)}" if payload["turn"] else ""
     return (f"## {time.strftime('%Y-%m-%d %H:%M')} — shared entry {n}, by {who}\n\n"
             + (quoted + "\n\n" if quoted.strip(">\n ") else "")
-            + f"Signed by {payload['author']}, entry {payload['seq']} of theirs, signature checked{turn}.\n")
+            + f"Signed by {payload['author']}, entry {payload['seq']} by that author, signature checked{turn}.\n")
 
 
 class TaskLock:
@@ -768,7 +768,8 @@ def write(ref: str, text: str, title: str = "", turn: str = "", at: str = "") ->
 
 def entries(ref: str) -> tuple:
     """(what the task is, its entries), each entry {n, time, by, ok, title, text, turn}, as the
-    author wrote it; `ok` whether its signature and place in the chain checked. Marks them read."""
+    author wrote it; `ok` whether its signature and place in the chain checked. mark_read() after
+    they are shown."""
     part, task, rec = find(ref)
     P, me = page(), page().my_key()[0]
     if part == "own":
@@ -789,10 +790,16 @@ def entries(ref: str) -> tuple:
                      "by": _who(author, me) if P.ID_RE.fullmatch(author) else "?",
                      "title": P.clean(str(p.get("title", ""))), "text": plain(str(p.get("text", ""))),
                      "turn": _who(p["turn"], me) if ok and P.ID_RE.fullmatch(str(p.get("turn", ""))) else ""})
+    return {"task": task, "whose": whose, "title": P.clean(rec.get("title", ""))}, rows
+
+
+def mark_read(ref: str) -> None:
+    """Called only after the entries reached the terminal: a `read` that crashed while printing
+    must not leave the board saying nothing is new (two-machine test, 24.11.2026)."""
+    part, task, _ = find(ref)
     with Registry() as r:
         if task in r[part]:
             r[part][task]["unread"] = 0
-    return {"task": task, "whose": whose, "title": P.clean(rec.get("title", ""))}, rows
 
 
 def read(ref: str) -> str:
@@ -855,6 +862,13 @@ def list_text() -> str:
 
 
 def main(argv=None) -> int:
+    # Windows with a cp1251/cp1252 console or a pipe (how an agent runs it) cannot encode ✓ and
+    # crashed `read` (two-machine test, 24.11.2026).
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
     p = argparse.ArgumentParser(description="Shared tasks with a friend, on one network.")
     p.add_argument("--identity", help="the identity folder (default: BATON_IDENTITY, else ~/.claude/baton/identity)")
     sub = p.add_subparsers(dest="cmd")
@@ -899,6 +913,8 @@ def main(argv=None) -> int:
             return 1 if failed and args.who else 0
         elif args.cmd == "read":
             print(read(args.task))
+            sys.stdout.flush()
+            mark_read(args.task)
         elif args.cmd == "write":
             text = sys.stdin.read() if args.text == "-" else args.text
             print(write(args.task, text, args.title, args.turn, args.at))

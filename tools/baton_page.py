@@ -1218,7 +1218,10 @@ def _shared_pull(srv, data) -> dict:
 
 @_said
 def _shared_read(srv, data) -> dict:
-    return {"ok": True, "entries": shared().entries(str(data.get("task", "")))[1]}
+    task = str(data.get("task", ""))
+    rows = shared().entries(task)[1]
+    shared().mark_read(task)       # the answer goes to the page now
+    return {"ok": True, "entries": rows}
 
 
 def _nick(srv, data) -> dict:

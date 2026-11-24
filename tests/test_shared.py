@@ -65,6 +65,7 @@ class Install:
         self.box = (box_ip, self.port)
         self.env = {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "USERPROFILE": str(home),
                     "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+                    "PROGRAMDATA": os.environ.get("PROGRAMDATA", ""),   # ssh-keygen on Windows
                     "BATON_IDENTITY": str(self.dir / "identity"), "BATON_HOME": str(self.root),
                     "BATON_PAGE_IDLE": idle, "BATON_BOX": f"{box_ip}:{self.port}",
                     "BATON_BOX_UDP": str(udp), "BATON_SHARED_LISTEN": "12",
@@ -545,3 +546,41 @@ def test_the_page_starts_writes_pulls_and_reads(pair):
     assert [(e["by"], e["text"]) for e in got["entries"]][1] == (f"Ana ({_id(a)})", "answer")
     bad = b.api("shared_write", {"task": "zz", "text": "x"})
     assert bad["ok"] is False and "number" in bad["error"]
+
+
+def test_read_on_a_windows_console_that_cannot_encode_the_tick(pair):
+    """Two-machine test, 24.11.2026: on Windows (cp1251) `read` through a pipe crashed on ✓."""
+    a, b = pair
+    a.open_page()
+    task = _task(a.cli("create", "Ticks", "--with", "Bob").stdout)
+    _wait_box(a)
+    b.cli("pull")
+    b.cli("write", task, "from Bob")
+    env = dict(a.env, PYTHONIOENCODING="cp1251")
+    out = subprocess.run([sys.executable, str(TOOL), "read", task], capture_output=True, env=env,
+                         timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert "signature ✓" in out.stdout.decode("utf-8")
+
+
+def test_a_read_that_fails_while_printing_leaves_the_entries_new(pair):
+    """Two-machine test, 24.11.2026: the crashed `read` had already marked everything read."""
+    a, b = pair
+    a.open_page()
+    task = _task(a.cli("create", "Unread", "--with", "Bob").stdout)
+    _wait_box(a)
+    b.cli("pull")
+    b.cli("write", task, "one")
+    b.cli("write", task, "two")
+    assert "2 new" in a.cli("list").stdout
+    broken = ("import runpy, sys\n"
+              "class Bad:\n"
+              "    def write(self, s): raise OSError('the pipe is gone')\n"
+              "    def flush(self): pass\n"
+              f"sys.stdout = Bad()\nsys.argv = [{str(TOOL)!r}, 'read', {task!r}]\n"
+              f"runpy.run_path({str(TOOL)!r}, run_name='__main__')\n")
+    out = subprocess.run([sys.executable, "-c", broken], capture_output=True, env=a.env, timeout=120)
+    assert out.returncode != 0
+    assert "2 new" in a.cli("list").stdout
+    a.cli("read", task)
+    assert "0 new" in a.cli("list").stdout
