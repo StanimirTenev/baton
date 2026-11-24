@@ -46,6 +46,7 @@ HERE = Path(__file__).resolve().parent
 NS = "baton-shared"
 TASK_RE = re.compile(r"[0-9a-f]{32}")
 HASH_RE = re.compile(r"[0-9a-f]{64}")
+TIME_RE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d|Z)?")
 TITLE_MAX = 120
 TEXT_MAX = 4000            # characters; a Cyrillic one is 6 bytes once escaped, so a body is < 64 KiB
 BODY_MAX = 128 * 1024      # a request to the box's shared calls
@@ -222,7 +223,7 @@ def parse_entry(entry) -> dict:
             or payload["v"] != 1 or payload["kind"] != "shared-entry"
             or not TASK_RE.fullmatch(payload["task"]) or not ID.fullmatch(payload["author"])
             or payload["seq"] < 1 or not (payload["prev"] == "" or HASH_RE.fullmatch(payload["prev"]))
-            or not (payload["turn"] == "" or ID.fullmatch(payload["turn"])) or len(payload["time"]) > 40
+            or not (payload["turn"] == "" or ID.fullmatch(payload["turn"])) or not TIME_RE.fullmatch(payload["time"])
             or payload["title"] != page().clean(payload["title"]) or len(payload["title"]) > TITLE_MAX
             or payload["text"] != plain(payload["text"]) or len(payload["text"]) > TEXT_MAX
             or _canonical(payload).decode("ascii") != entry["m"]):
@@ -316,16 +317,19 @@ def _append_locked(task: str, rec: dict, entry: dict, payload: dict, from_friend
     entries = _read_entries(store)
     chain_check(entries, payload)
     n = len(entries) + 1
-    text = book.read_text("utf-8-sig")
-    head = text[:text.find("\n---", 3) + 4] if text.startswith("---") else ""
-    old = re.search(r"^turn: .*$", head, re.M)
-    new = f'turn: "{payload["turn"]}"' if payload["turn"] else None
-    moved = bool(old and new and new != old.group(0))
     try:
         book_lock = et._lock(book)
     except TimeoutError:
         raise SharedError("another writer holds the logbook; try again", "busy", 503)
     try:
+        raw = book.read_bytes()
+        if b"\r" in raw:     # written on Windows (text mode): the header check wants `---` lines
+            book.write_bytes(raw.replace(b"\r\n", b"\n"))
+        text = raw.decode("utf-8-sig").replace("\r\n", "\n")
+        head = text[:text.find("\n---", 3) + 4] if text.startswith("---") else ""
+        old = re.search(r"^turn: .*$", head, re.M)
+        new = f'turn: "{payload["turn"]}"' if payload["turn"] else None
+        moved = bool(old and new and new != old.group(0))
         et._write_locked(book, _md(payload, me, n), new if moved else None, old.group(0) if moved else None)
     except ValueError:
         raise SharedError("the logbook cannot take this entry as it is (a line like a logbook "
@@ -335,7 +339,7 @@ def _append_locked(task: str, rec: dict, entry: dict, payload: dict, from_friend
             book_lock.unlink()
         except OSError:
             pass
-    with open(store, "a", encoding="utf-8") as fh:
+    with open(store, "a", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(entry, sort_keys=True) + "\n")
     with Registry() as r:
         own = r["own"].get(task)
@@ -384,9 +388,10 @@ def create(title: str, who: str) -> dict:
     folder.mkdir(parents=True)
     task = secrets.token_hex(16)
     book = folder / name
-    book.write_text(f'---\nstate: active\nshared: "{task}"\nowner: "{me}"\nmember: "{friend}"\n'
-                    f'turn: "{me}"\n---\n\n# {title}\n\nShared with {nick(friend)}. Written to only '
-                    "with tools/baton_shared.py; entries from them are quoted.\n", "utf-8")
+    with open(book, "w", encoding="utf-8", newline="\n") as fh:       # `\n` on Windows too
+        fh.write(f'---\nstate: active\nshared: "{task}"\nowner: "{me}"\nmember: "{friend}"\n'
+                 f'turn: "{me}"\n---\n\n# {title}\n\nShared with {nick(friend)}. Written to only '
+                 "with tools/baton_shared.py; entries from them are quoted.\n")
     shared_dir().mkdir(parents=True, exist_ok=True)
     store = shared_dir() / f"{task}.jsonl"
     store.touch()

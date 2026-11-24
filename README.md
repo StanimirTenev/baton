@@ -305,7 +305,12 @@ The page has the same: **Shared tasks** lists them with their counts, and **Read
 - **There is no gate on what the agent does after reading.** Baton has no PreToolUse check that stops
   an agent that has read a friend's entry from running a command: the entry is shown as quoted data
   with a warning, and the rest is the agent's judgement and yours.
+- **What the agent repeats is kept.** The hooks never quote an entry, but if the agent repeats one in
+  its reply, the kept conversation (`.baton-chat/`) carries that reply into the next session start,
+  like any other reply.
 - A signature says who wrote an entry, not that it is true or safe.
+- **A shared task cannot be ended yet** in this version: once you have started one, your box opens
+  whenever your page's server runs.
 
 ## The ledger: an older entry edited is seen
 
