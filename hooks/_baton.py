@@ -605,8 +605,7 @@ def _lock(d: Path):
             return path
         except FileExistsError:
             try:
-                if time.time() - path.stat().st_mtime > 30:
-                    path.unlink()
+                if time.time() - path.stat().st_mtime > 30 and _break_stale(path, 30):
                     continue
             except OSError:
                 continue
@@ -621,6 +620,29 @@ def _unlock(path) -> None:
         path.unlink()
     except OSError:
         pass
+
+
+def _break_stale(path: Path, stale_s: float) -> bool:
+    """Remove a dead run's lock; True when it is gone. Row 170 a: two waiters that saw the same
+    stale lock both unlinked it, and the second removed the fresh lock the first had just taken.
+    So it is removed only while holding `<lock>.break` (O_EXCL), and looked at again under it. A
+    guard left by a run that died in these few lines is never broken: _lock gives up (None)."""
+    guard = path.with_name(path.name + ".break")
+    try:
+        os.close(os.open(str(guard), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+    except OSError:
+        return False
+    try:
+        if time.time() - path.stat().st_mtime <= stale_s:
+            return False
+        path.unlink()
+        return True
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    finally:
+        _unlock(guard)
 
 
 def ledger_git(d: Path, *args, timeout: float = 5):

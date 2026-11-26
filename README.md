@@ -378,7 +378,8 @@ there and asks nothing of Claude's memory or of any service.
 The hooks never write a logbook; the agent does, and you can read every entry. While
 `tools/baton_entry.py` writes one it holds `.<logbook>.lock` beside it and writes through a
 `.<logbook>.<pid>.tmp`; both are gone when it returns, unless it is killed while writing
-(a lock left so is taken over after 60 s).
+(a lock left so is taken over after 60 s, while `.<logbook>.lock.break` beside it keeps a
+second waiter from removing the lock the first has just taken).
 
 **Injects** into the agent's context, as hook output:
 

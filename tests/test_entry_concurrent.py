@@ -145,6 +145,84 @@ def test_a_lock_held_by_a_live_writer_is_waited_for_then_refused_loudly(tmp_path
     assert book.read_bytes() == before and lock.exists(), "nothing written, the other's lock kept"
 
 
+def _rival_after_stale_stat(monkeypatch, lock: Path, stale_s: float):
+    """ZA-OPRAVYANE row 170 a, the interleaving forced: the first stat of `lock` that reads it
+    stale returns, and at once another waiter -- which saw the same stale lock -- takes it over
+    (unlink, then its own fresh lock with its own content). Without threads: the stat call plays
+    the rival right after it returns."""
+    real, done = Path.stat, []
+
+    def stat(self, *a, **kw):
+        st = real(self, *a, **kw)
+        if not done and self == lock and time.time() - st.st_mtime > stale_s:
+            done.append(True)
+            os.unlink(lock)
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.write(fd, b"rival")
+            os.close(fd)
+        return st
+    monkeypatch.setattr(Path, "stat", stat)
+    return done
+
+
+def test_two_waiters_on_one_stale_lock_do_not_both_take_it(tmp_path, monkeypatch):
+    """Row 170 a: both saw the dead writer's lock; the other took it first. Unlinking what is
+    there now removes the other's fresh lock, and both would write at once."""
+    be = _load()
+    book = _logbook(tmp_path)
+    lock = book.with_name("." + book.name + ".lock")
+    lock.write_text("12345", "utf-8")
+    old = time.time() - be.LOCK_STALE_S - 5
+    os.utime(lock, (old, old))
+    monkeypatch.setattr(be, "LOCK_WAIT_S", 0.3)
+    done = _rival_after_stale_stat(monkeypatch, lock, be.LOCK_STALE_S)
+    try:
+        be._lock(book)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("took the lock the other waiter had just taken")
+    assert done, "the interleaving was not forced"
+    assert lock.read_text("utf-8") == "rival", "the other waiter's lock was removed"
+
+
+def test_a_stale_lock_another_waiter_is_removing_is_left_to_it(tmp_path, monkeypatch):
+    """The other half: the other waiter holds `<lock>.break` and is between its look and its
+    unlink. This one does not remove the lock under it; it waits."""
+    be = _load()
+    book = _logbook(tmp_path)
+    lock = book.with_name("." + book.name + ".lock")
+    lock.write_text("12345", "utf-8")
+    old = time.time() - be.LOCK_STALE_S - 5
+    os.utime(lock, (old, old))
+    guard = lock.with_name(lock.name + ".break")
+    guard.write_text("", "utf-8")
+    monkeypatch.setattr(be, "LOCK_WAIT_S", 0.3)
+    try:
+        be._lock(book)
+    except TimeoutError as exc:
+        assert str(guard) in str(exc), "the refusal names the guard to delete"
+    else:
+        raise AssertionError("took the lock another waiter was removing")
+    assert lock.read_text("utf-8") == "12345" and guard.exists()
+
+
+def test_the_tool_still_writes_over_a_stale_lock(tmp_path):
+    """As an agent runs it: a dead writer's lock is taken over, the entry is written."""
+    book = _logbook(tmp_path)
+    lock = book.with_name("." + book.name + ".lock")
+    lock.write_text("12345", "utf-8")
+    old = time.time() - 120
+    os.utime(lock, (old, old))
+    entry = tmp_path / "e.md"
+    entry.write_text("### Какво\nслед мъртъв писач\n", encoding="utf-8")
+    out = subprocess.run([sys.executable, str(TOOL), str(book), str(entry), "--title", "след"],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert "след мъртъв писач" in book.read_text("utf-8") and not lock.exists()
+    assert [p.name for p in book.parent.iterdir() if p.suffix in (".lock", ".tmp")] == []
+
+
 def test_a_crlf_logbook_takes_two_entries_and_comes_back_lf(tmp_path):
     """Two-machine test, 24.11.2026: on Windows the first write turned the logbook into CRLF and
     the second was refused as "the front matter broke". A CRLF logbook is read as LF and written

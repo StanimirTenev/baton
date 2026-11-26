@@ -370,6 +370,21 @@ def test_a_held_lock_makes_stop_wait_and_write_nothing_rather_than_break_the_cha
     assert len(w.records()) == 2 and not lock.exists()
 
 
+def test_two_waiters_on_one_stale_ledger_lock_do_not_both_take_it(tmp_path, monkeypatch):
+    """Row 170 a, the same race in the ledger's lock: forced as in test_entry_concurrent."""
+    from test_entry_concurrent import _rival_after_stale_stat
+    d = tmp_path / "ledger"
+    lock = d.with_name(d.name + ".lock")
+    lock.write_text("", "utf-8")
+    old = time.time() - 60
+    os.utime(lock, (old, old))
+    monkeypatch.setattr(core.time, "sleep", lambda s: None)
+    done = _rival_after_stale_stat(monkeypatch, lock, 30)
+    assert core._lock(d) is None, "took the lock the other waiter had just taken"
+    assert done, "the interleaving was not forced"
+    assert lock.read_text("utf-8") == "rival", "the other waiter's lock was removed"
+
+
 # --- verify finds what changed --------------------------------------------------------------
 
 @needs_git

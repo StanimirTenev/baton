@@ -93,21 +93,49 @@ def _lock(file: Path) -> Path:
             fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except (FileExistsError, PermissionError):   # Windows: a lock being deleted refuses an open
             try:
-                if time.time() - lock.stat().st_mtime > LOCK_STALE_S:
-                    lock.unlink()     # its writer died holding it
-                    continue
+                if time.time() - lock.stat().st_mtime > LOCK_STALE_S and _break_stale(lock):
+                    continue          # its writer died holding it
             except FileNotFoundError:
                 continue              # released between the two calls: try again
             except OSError:
                 pass                  # cannot be read or removed: wait for the deadline
             if time.monotonic() > deadline:
+                guard = lock.with_name(lock.name + ".break")
+                also = f" and {guard}" if guard.exists() else ""
                 raise TimeoutError(f"another writer holds {lock} (for over {LOCK_WAIT_S} s); "
-                                   f"nothing was written. If no writer is running, delete it.")
+                                   f"nothing was written. If no writer is running, delete "
+                                   f"it{also}.")
             time.sleep(0.02)
             continue
         with os.fdopen(fd, "w") as fh:
             fh.write(str(os.getpid()))
         return lock
+
+
+def _break_stale(lock: Path) -> bool:
+    """Remove a dead writer's lock; True when it is gone. Row 170 a: two waiters that saw the same
+    stale lock both unlinked it, and the second removed the fresh lock the first had just taken.
+    So it is removed only while holding `<lock>.break` (O_EXCL), and looked at again under it. A
+    guard left by a waiter that died in these few lines is never broken: the wait times out."""
+    guard = lock.with_name(lock.name + ".break")
+    try:
+        os.close(os.open(str(guard), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+    except OSError:
+        return False                  # another waiter is removing it
+    try:
+        if time.time() - lock.stat().st_mtime <= LOCK_STALE_S:
+            return False              # taken again since: a live writer's
+        lock.unlink()
+        return True
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            guard.unlink()
+        except OSError:
+            pass
 
 
 def _replace(tmp: Path, file: Path) -> None:
