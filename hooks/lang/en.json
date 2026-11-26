@@ -46,6 +46,14 @@
     "refuted": [
       "refuted"
     ],
+    "refuted_none": [
+      "nothing",
+      "none"
+    ],
+    "refuted_checked": [
+      "now\\s+(?:verified|checked|(?-i:[SL]))",
+      "→\\s*(?-i:[SL])"
+    ],
     "advocate_heading": [
       "devil'?s advocate",
       "advocate"

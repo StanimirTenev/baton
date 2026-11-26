@@ -1117,7 +1117,23 @@ _QUOTED_WORD = re.compile(r"[„“\"«']\s*\w+\s*[“”\"»']")
 _PAIR = re.compile(r"\w+(?:\s*/\s*\w+)+")
 _CLAIMS = re.compile(r"(?i)^###\s+(?:" + _words("claims_heading") + r")\s*:?\s*$")
 _REFUTED = re.compile(r"(?i)^\s*(?:[-*]\s+)?(?:" + _words("refuted") + r")\s*:")
+# Row 190 (20.11): two of the lines counted `caught` refuted nothing -- `refuted: нищо. Бележка: ...`
+# (the section said nothing fell) and `оборено: (А) „...“ — вече В.` (the claim was confirmed: a
+# status moved up, to П or В). Not a refutation: the marker followed by nothing, or by a word for
+# nothing standing alone (`refuted_none`), or a line that ends on a move to a checked status
+# (`refuted_checked`, at the end only, the letter in capitals: Bulgarian „в“ is "in"). "Confirmed"
+# is not a move: "the claim still waits for confirmation -- confirmed" is a claim that fell.
+_REFUTED_NONE = re.compile(r"(?i):\s*(?:(?:" + _words("refuted_none") + r")(?![\w-])"
+                           r"(?:\s*[.,;:!—–-].*)?)?\s*$")
+_REFUTED_CHECKED = re.compile(r"(?i)(?<![\w-])(?:" + _words("refuted_checked") + r")\s*[.!]?\s*$")
 _SEEN_CAP = 1000
+
+
+def refutes(line: str) -> bool:
+    """A `refuted:` line that refutes something: not `refuted: nothing`, not a move to П/В."""
+    m = _REFUTED.match(line)
+    return bool(m) and not _REFUTED_NONE.match(line, m.end() - 1) \
+        and not _REFUTED_CHECKED.search(line)
 
 
 def visibility_words(text: str) -> list[str]:
@@ -1485,7 +1501,7 @@ def refuted_claims(root: Path, name: str, since: float | None, now: datetime | N
         for lines in _claims(body):
             for line in lines:
                 key = f"{folder}|{heading}|{line.strip()}"
-                if _REFUTED.match(line) and key not in seen:
+                if refutes(line) and key not in seen:
                     seen.append(key)
                     ss.lesson_event(state, "L4" if tests_words(line) else "L3", "caught", now)
                     new += 1
@@ -1710,7 +1726,7 @@ def advocate_tally(root: Path, name: str, since: float | None, now: datetime | N
                 continue
             seen.append(key)
             new = True
-            refuted = [ln for lines in sections for ln in lines if _REFUTED.match(ln)]
+            refuted = [ln for lines in sections for ln in lines if refutes(ln)]
             for _ in refuted:
                 ss.lesson_event(state, "L5", "caught", now)
             if not refuted:

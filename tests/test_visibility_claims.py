@@ -205,6 +205,44 @@ def test_refuted_outside_a_claims_section_is_not_counted(tmp_path):
     assert bs.refuted_claims(tmp_path, "LOGBOOK.md", _since()) == 0
 
 
+# ZA-OPRAVYANE row 190 (Ayan Shaikh, 20.11: "of the 17 refuted, were most tagged as an agent's
+# word or as an inference?"). Sorting the L3 keys by hand found two lines counted as caught that
+# refute nothing: `- refuted: нищо. Бележка: ...` (prodazhbi-atestacia, 03.11) and
+# `- оборено: (А) „хешът ...“ — вече В.` (stokes-qer, 05.11: the claim was confirmed, now В).
+# The shapes of those two lines, not their text.
+
+def _l3_counts(tmp_path, line: str) -> int:
+    _folder(tmp_path, REFUTED.replace(
+        "- refuted: market-swarm is public -- gh repo view says PRIVATE", line) + "\n" + LISTED)
+    return bs.refuted_claims(tmp_path, "LOGBOOK.md", _since())
+
+
+def test_refuted_nothing_is_not_a_catch(tmp_path):
+    for i, line in enumerate(("- refuted: nothing. Note: the first time I took the newest file",
+                              "- оборено: нищо.", "- refuted: none", "- Оборено: Няма",
+                              "- refuted: nothing", "- refuted:")):
+        assert _l3_counts(tmp_path / str(i), line) == 0, line
+
+
+def test_a_claim_moved_to_checked_is_not_a_catch(tmp_path):
+    for i, line in enumerate(("- оборено: (А) „хешът 8de82ee0 е дума на друг“ — вече В.",
+                              "- оборено: (И) „версията е 3.2“ — вече П",
+                              "- оборено: (А) „версията е 3.2“ → В",
+                              "- refuted: (A) \"the hash is someone's word\" -- now L.",
+                              "- refuted: (A) \"the hash is someone's word\" -- now verified")):
+        assert _l3_counts(tmp_path / str(i), line) == 0, line
+
+
+def test_a_refutation_that_starts_with_nothing_or_ends_confirmed_still_counts(tmp_path):
+    """Controls: the word must stand alone, and "confirmed" is not a status move -- the shape of
+    github-zvezdi 20.11: the claim "still waits for confirmation" fell, because it was confirmed."""
+    for i, line in enumerate(("- refuted: nothing in the repo is public -- gh says it is",
+                              "- оборено: няма скенер у тях -- имат",
+                              "- оборено: „claim-ът още чака потвърждение“ (мой извод) — потвърден е",
+                              "- оборено: „файлът е вече в git“ -- не е, в git е само вече в")):
+        assert _l3_counts(tmp_path / str(i), line) == 1, line
+
+
 # -- through the hook, as the harness runs it ------------------------------------------------
 
 def _run(tmp_path, session):
@@ -252,6 +290,19 @@ def test_the_hook_counts_a_refuted_claim(tmp_path):
     assert _lessons()["L3"]["caught"] == 1
     _run(tmp_path, "s2")
     assert _lessons()["L3"]["caught"] == 1, "the same line is one catch"
+
+
+def test_the_hook_does_not_count_refuted_nothing_or_a_move_to_checked(tmp_path):
+    """Row 190, as the harness runs Stop: the two lines of the hand count, beside a real one."""
+    lines = ("- refuted: нищо. Бележка: първият път взех файла с най-нов час\n"
+             "- оборено: (А) „хешът 8de82ee0 е дума на друг“ — вече В.\n"
+             "- refuted: market-swarm is public -- gh repo view says PRIVATE")
+    _folder(tmp_path / "tasks", REFUTED.replace(
+        "- refuted: market-swarm is public -- gh repo view says PRIVATE", lines) + "\n" + LISTED)
+    _run(tmp_path, "s1")
+    assert _lessons()["L3"]["caught"] == 1
+    assert [k.rsplit("|", 1)[-1] for k in _lessons()["L3_refuted"]] == [
+        "- refuted: market-swarm is public -- gh repo view says PRIVATE"]
 
 
 # -- the public sphere is not a thing's visibility (v3.36.0, ZA-OPRAVYANE row 160) ----------

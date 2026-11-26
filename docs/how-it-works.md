@@ -755,7 +755,15 @@ the situation arose, `caught` when the mistake happened. The counters are in
   Each such line counts once. A claim re-read and found right is not a catch, nor is "refuted"
   written anywhere else -- a heading, the prose -- nor a refutation with no listed claim below
   it. The marker is not matched to the claim's text: the line says which claim, the human
-  reads it.
+  reads it. Since ZA-OPRAVYANE row 190, two lines with the marker are not a catch either:
+  `refuted: nothing` (`нищо`, `none`, `няма`, the word alone, then the end of the line or a
+  punctuation mark) and a line that ends on a move to a checked status (`-- now verified`,
+  `now L`, `→ В`, `— вече В`): the claim was confirmed, not refuted. On the 71 marker lines of
+  the author's logbooks (26 November 2026) these drop exactly the two such lines a hand count
+  found. The same holds for L5's advocate section, where such a section counts `nothing`. The
+  counter does not keep the status a refuted claim had (А, И): one of the 71 lines carries it
+  right after the marker, and the 13 with a status letter in brackets elsewhere on the line can
+  mean the refuter's source (`(А, проверител)`), not the claim's.
 - **L4 — a claim that tests pass is listed with the command that showed it** (Stop, since
   v3.20.0; ZA-OPRAVYANE row 38). The shape check passed an entry that said "did not run pytest …
   All tests pass." (Apurv Khare, 22 October 2026): it measures sections and length, not truth.

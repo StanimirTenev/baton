@@ -194,6 +194,19 @@ def test_a_section_with_nothing_refuted_counts_nothing(tmp_path):
     assert rec.get("nothing") == 1 and not rec.get("caught")
 
 
+def test_refuted_nothing_or_a_move_to_checked_is_a_section_with_nothing_refuted(tmp_path):
+    """Row 190, the same flaw as L3's: `оборено: нищо.` and `refuted: ... -- now L` refute
+    nothing, so the section is `nothing`, not `caught`."""
+    tasks, transcript, out = _run_fixture(tmp_path, "E1.jsonl")
+    assert "lesson L5" in out["reason"]
+    _answer(tasks, transcript, "### Адвокат\n- оборено: нищо. Бележка: проверено срещу снимката\n"
+                   "- refuted: (A) \"the scan finds both keys\" -- now L.\n")
+    _stop(tmp_path, tasks, transcript, again=True)
+    _stop(tmp_path, tasks, transcript, sid="s1")
+    rec = _l5()
+    assert rec.get("nothing") == 1 and not rec.get("caught"), rec
+
+
 def test_a_refuted_line_outside_the_section_is_not_l5():
     body = "### Claims to verify\n- refuted: the repo is public\n\n### Done\nx\n"
     assert bs.advocate_verdicts(body) == []

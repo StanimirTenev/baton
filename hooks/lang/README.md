@@ -39,6 +39,8 @@ longer form before a shorter one that starts it.
 | `sphere` | Stop | the public sphere, not visibility: "public information", "a public network", "the public", "a private person" |
 | `claims_heading` | Stop | the heading of the claims section, after `### ` |
 | `refuted` | Stop | the word that marks a claim as refuted, before `:` |
+| `refuted_none` | Stop | a word for nothing right after `refuted:` (`refuted: nothing.`): the line refutes nothing |
+| `refuted_checked` | Stop | the end of a `refuted:` line that moves a claim to a checked status (`-- now L`, `— вече В`): not a refutation |
 | `advocate_heading` | Stop | the heading of the devil's advocate section (L5), after `### ` |
 | `tests_pass` | Stop | a sentence claiming tests pass |
 | `task_word` | prompt | the word for "task" before a task number (`task 12`) |
