@@ -41,12 +41,10 @@ def _run(tmp_path, state=None):
 def test_after_an_update_the_agent_is_told_what_is_new(tmp_path):
     ctx = _run(tmp_path, {"seen_version": "3.11.0"})
     assert f"updated from v3.11.0 to v{NOW}" in ctx
-    assert "The page opens on request." in ctx   # a lead
-    for lead in ("A reply to an invitation comes in only while the page's server runs",
-                 "A shared task lives with whoever starts it.",
-                 "The friend reads and writes through your box.",
-                 "Your page must be open, or the write fails.",
-                 "What a friend wrote never reaches a hook.",
+    assert "Moving to a new computer" in ctx   # a lead
+    for lead in ("L3 and L5 no longer count `refuted: nothing` or a claim moved to checked.",
+                 "A stale lock is taken by one waiter only.",
+                 "`baton.bodies.json` is replaced whole",
                  "Not checked:"):
         assert lead in ctx, lead                    # each lead whole: a bold cut by a line break is lost
     assert f"releases/tag/v{NOW}" in ctx
@@ -71,6 +69,6 @@ def test_a_fresh_install_is_not_told_it_was_updated(tmp_path):
 
 def test_the_notes_come_from_the_changelog_section_of_this_version():
     leads = hook.release_leads(NOW)
-    assert leads and leads[0].startswith("The page opens on request")
+    assert leads and leads[0].startswith("Moving to a new computer")
     assert all(len(x) < 200 for x in leads)
     assert hook.release_leads("0.0.1") == []

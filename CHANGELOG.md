@@ -2,6 +2,39 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.46.0** — moving to a new computer; L3 and L5 stop counting refutations that refute nothing; safer locks
+
+- **Moving to a new computer: `tools/baton_move.py`.** `inventory` (read-only, on the old machine)
+  writes a manifest of what the agent's work depends on: the task files with size and SHA-256, Claude
+  Code's CLAUDE.md, settings, skills, memory folders and plugins, the repositories (`code:` headers and
+  `~/dev`) with their uncommitted, unpushed and stashed work, the paths logbooks mention outside the
+  tasks folder (listed, not included), crontab and user timers. Keys and logins go in by name, size
+  and hash only, never their content, and are carried on a line of their own, never through a cloud.
+  It prints the rsync lines and a "NOT covered" list with the command that would find each. `restore`
+  puts a copied tree in place under the new home, renames the memory folder when the home path
+  changed, never overwrites a different file without `--force`, and prints (does not run) the
+  crontab, `git clone` / `git worktree add` lines and plugin commands. `verify` checks, group by
+  group, that everything arrived and exits 1 naming what is missing or different; the old disk is
+  not to be wiped until it is clean. Take the inventory last, from a plain shell with no Claude
+  session running: `~/.claude.json` changes while a session runs.
+- **L3 and L5 no longer count `refuted: nothing` or a claim moved to checked.** A line `оборено: нищо`
+  / `refuted: nothing`, or one ending in `вече В` / `→ П` / `now verified`, was counted as a caught
+  wrong claim. Found from a reader's question ("of the refuted, which kind were they?"); over the
+  logbooks on the maintainer's machine exactly 2 of 71 such lines drop. The counts already stored are
+  not rewritten, so an L3 figure taken before this version includes them.
+- **A stale lock is taken by one waiter only.** Two waiters that saw the same stale lock could both
+  remove it, the second removing the first's fresh lock (`tools/baton_entry.py`, the ledger's lock).
+  A stale lock is now removed only under a second, exclusive `<lock>.break`, its age checked again.
+  Reproduced with a deterministic test before the fix.
+- **`baton.bodies.json` is replaced whole**, through a temp file and `os.replace`, so a Stop killed
+  half way cannot leave it truncated and read as lost memory next time.
+- **The "hollow entry" false alarm on files a shell call wrote** (reported 20.11) did not reproduce on
+  3.45.0: it was the walk limit, fixed in 3.40.0. Tests now pin it.
+- **Not checked:** `baton_move` on Windows or macOS (its tests are POSIX), a real move end to end
+  (it is to be used for one this week), and about 18 GB of `.batonignore`d data on the maintainer's
+  machine that restore places but verify cannot check. `tools/baton_page.py`'s `FileLock` has the same
+  stale-lock race and is not fixed here.
+
 **v3.45.0** — a task shared with a friend on one network; the page opens only when you ask for it
 
 From 3.43 to 3.44 the first session start of each version opened the page in the browser by itself.
