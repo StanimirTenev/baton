@@ -153,7 +153,7 @@ folder; Baton checks that the record is newer than the work.
 - [Gemini CLI](gemini/README.md) -- the same hooks as a Gemini CLI extension: setup, the doctor, what does not run there
 - [Languages](hooks/lang/README.md) -- the words the hooks recognise, one file per language
 
-Below: [The page and friends](#the-page-and-friends), [The ledger](#the-ledger-an-older-entry-edited-is-seen), [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](CHANGELOG.md).
+Below: [The page and friends](#the-page-and-friends), [The ledger](#the-ledger-an-older-entry-edited-is-seen), [Moving to a new computer](#moving-to-a-new-computer), [Uninstall](#uninstall), [What Baton reads, writes and injects](#what-baton-reads-writes-and-injects), [What Baton sends over the network](#what-baton-sends-over-the-network), [Versions](CHANGELOG.md).
 
 ## The page and friends
 
@@ -322,6 +322,34 @@ and `ack`. On by default; `"ledger": false` in `baton.local.json` turns it off. 
 it shows a careless edit, not a deliberate one**: the agent runs as you and can rewrite the
 ledger or run `ack` itself, unless a copy is pushed to a remote that refuses a rewritten history.
 All of it: [the ledger](docs/how-it-works.md#the-ledger-an-older-entry-edited-is-seen).
+
+## Moving to a new computer
+
+`tools/baton_move.py` lists what the agent's work depends on, helps carry it, and checks on the
+new machine that all of it arrived. The scope is the agent's world, not the whole home folder.
+
+```
+python3 tools/baton_move.py inventory --out manifest.json      # old machine, read-only
+python3 tools/baton_move.py restore --manifest manifest.json --from ~/baton-move [--dry-run]
+python3 tools/baton_move.py verify --manifest manifest.json     # new machine: exit 0 = clean
+```
+
+`inventory` lists the task folders file by file with SHA-256 (`--no-hash` for sizes only).
+It also lists Claude Code's `CLAUDE.md`, settings, skills and memory folders, and the installed
+plugins. Conversation transcripts are counted; `--transcripts` carries them. It lists the git
+repositories that logbook `code:` headers name, plus those under `~/dev`, each with uncommitted,
+unpushed and stashed work. It lists the paths outside the tasks folder that logbooks mention,
+which are listed but not carried, so you decide. It reads crontab and user timers. Keys and
+logins in `~/.ssh`, `~/.config` and a few known files are recorded by name, size and hash only,
+never their content. Carry those by hand, never through a cloud folder. The summary prints the
+rsync line for the rest, and a list of what the inventory did not look at, each item with the
+command that would find it.
+
+`restore` copies the tree into place. It never overwrites a different file without `--force`.
+When the home path changed it renames Claude's memory folder (`-home-old` to `-home-new`). It
+prints the crontab and the `git clone` lines instead of running them. `verify` compares every
+file, key, repository HEAD, the memory folder and the crontab with the manifest, and exits
+non-zero naming what is missing or different. **Wipe the old disk only after `verify` is clean.**
 
 ## Uninstall
 
