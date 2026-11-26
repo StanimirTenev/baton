@@ -239,3 +239,10 @@ there is no telemetry; if you would rather not answer, the question does not com
 | `"ledger"` in `baton.local.json` | where [the ledger](../README.md#the-ledger-an-older-entry-edited-is-seen) of logbook entries is kept, a folder that becomes a git repository (default `baton.ledger` in Baton's state folder; `BATON_LEDGER` moves it too). On by default; `"ledger": false` turns it off: nothing recorded, nothing said at session start |
 
 `BATON_HOME=~/work ./install.sh` bakes that path into the installed hooks.
+
+## Moving to a new computer
+
+Task folders are plain files, but the agent's work also lives in Claude's memory folder (named
+after the home path), the repositories, crontab and keys. `tools/baton_move.py` lists them
+(`inventory`), puts a copied tree in place (`restore`) and checks that everything arrived
+(`verify`): [Moving to a new computer](../README.md#moving-to-a-new-computer).
