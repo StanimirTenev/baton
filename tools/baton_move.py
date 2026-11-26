@@ -46,7 +46,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SKIP = {"node_modules", "__pycache__", ".venv", "venv", ".mypy_cache"}   # made anew, not carried
 BROWSERS = {"BraveSoftware", "chromium", "google-chrome", "google-chrome-for-testing",
-            "microsoft-edge", "opera", "vivaldi", "mozilla"}
+            "microsoft-edge", "opera", "vivaldi", "mozilla", "obsidian", "Code", "discord", "Slack"}
 SECRET_NAME = re.compile(r"(?i)(key(?!board|bind|map)|token|credential|secret|password|\.pem$|\.p12$|\.pfx$|"
                          r"^env$|\.env$|^rclone\.conf$|^hosts\.yml$)")
 SECRET_DIRS = (".ssh", ".secrets", ".gnupg")
@@ -328,7 +328,7 @@ def inventory(args) -> int:
     if config.is_dir():
         def skip_config(d):
             rel = d.relative_to(config).parts
-            return rel[0] in BROWSERS or len(rel) >= 3 or d.name.lower() in ("cache", "caches")
+            return rel[0] in BROWSERS or len(rel) >= 3 or "cache" in d.name.lower()
         # By name, or by mode: a file only its owner may read is most likely a login (mail
         # passwords sat in ~/.config/elkan-poshta/office, a name no pattern guesses).
         candidates += [f for f in walk_files(config, skip_config)[0] if "systemd" not in f.parts
@@ -410,8 +410,9 @@ def not_covered(man: dict, home: Path) -> list:
     out = [
         "the rest of the home folder: only the paths in this manifest were looked at -- "
         "`du -sh ~/* ~/.[!.]* | sort -h` shows what else is there",
-        "browser profiles (logged-in sites): not looked at -- `du -sh ~/.config/{BraveSoftware,"
-        "google-chrome,chromium} ~/.mozilla ~/.brave-* 2>/dev/null`",
+        f"browser and Electron app profiles (logged-in sites; {', '.join(sorted(BROWSERS))} in "
+        "~/.config): not looked at -- `du -sh ~/.config/{BraveSoftware,google-chrome,chromium,"
+        "obsidian} ~/.mozilla ~/.brave-* 2>/dev/null`",
         "system packages and programs (Claude Code, gh, rclone, ...): not listed -- "
         "`apt-mark showmanual > apt-manual.txt`, `snap list`, `pip list --user`",
         "logins that are bound to the machine or expire (gh auth, rclone, Claude Code): the files "
