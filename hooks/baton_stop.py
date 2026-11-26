@@ -601,10 +601,35 @@ def unrecorded(root: Path, name: str, since: float | None = None,
                     f"{folder.name}: the folder is gone (moved, renamed or deleted), with the "
                     f"{known} of its {name}")
     try:
-        path.write_text(json.dumps(bodies, ensure_ascii=False), "utf-8")
+        _save_bodies(path, bodies)
     except Exception:
         pass          # memory is a courtesy; without it the file time is used, as before
     return out
+
+
+REPLACE_TRIES = 10    # Windows: a reader holding the file open makes os.replace fail for a moment
+
+
+def _save_bodies(path: Path, bodies: dict) -> None:
+    """Replace the memory whole (row 170 b): written in place, a Stop killed half way, or two
+    Stops at once, left it half-written, and the next one read that as lost memory (FORGOT). The
+    temporary file is this process's own, beside it: one shared name was row 167's bug."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(bodies, ensure_ascii=False), "utf-8")
+        for attempt in range(REPLACE_TRIES):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == REPLACE_TRIES - 1:
+                    raise
+                time.sleep(0.05)
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass      # replaced: it is gone
 
 
 # A task worked in now whose header does not say when it is finished (2026-09-28: a
