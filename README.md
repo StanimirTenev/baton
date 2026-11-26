@@ -345,7 +345,12 @@ never their content. Carry those by hand, never through a cloud folder. The summ
 rsync line for the rest, and a list of what the inventory did not look at, each item with the
 command that would find it.
 
-`restore` copies the tree into place. It never overwrites a different file without `--force`.
+Take the inventory last, from a plain shell with no Claude session running: `~/.claude.json`
+and the logbooks change while a session runs, and `verify` would report them as different.
+
+`restore` copies the whole copied tree into place, including what the manifest does not list
+(`.batonignore`'d files, symlinks); it says how many of those it placed, since `verify` cannot
+check them. It never overwrites a different file without `--force`.
 When the home path changed it renames Claude's memory folder (`-home-old` to `-home-new`). It
 prints the crontab and the `git clone` lines instead of running them. `verify` compares every
 file, key, repository HEAD, the memory folder and the crontab with the manifest, and exits

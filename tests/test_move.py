@@ -74,6 +74,11 @@ def world(tmp_path):
     memory.mkdir(parents=True)
     (memory / "MEMORY.md").write_text("# Memory Index\n- [alpha](a.md)\n", "utf-8")
     (old / ".claude" / "CLAUDE.md").write_text("# rules\n", "utf-8")
+    skill = old / ".claude" / "skills" / "s"
+    (skill / "__pycache__").mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: s\n---\n", "utf-8")
+    (skill / "__pycache__" / "x.pyc").write_bytes(b"made anew")
+    (tasks / "alpha" / "latest").symlink_to("data.csv")
     (old / ".ssh").mkdir()
     (old / ".ssh" / "id_ed25519").write_text(KEY, "utf-8")
     (old / ".ssh" / "id_ed25519").chmod(0o600)
@@ -96,14 +101,20 @@ def _inventory(w, *extra):
 
 
 def _moved(w):
-    """Inventory, copy the tree the way the printed rsync line lays it out, into another user."""
-    manifest, _ = _inventory(w)
+    """Inventory, then run the two rsync lines it prints -- the copy a person makes -- with
+    NEWHOST:baton-move/ a local folder, and a new home for another user."""
+    if not shutil.which("rsync"):
+        pytest.skip("no rsync on this machine: the printed copy line cannot be run")
+    manifest, done = _inventory(w)
     copy = w["tmp"] / "copy"
-    man = json.loads(manifest.read_text("utf-8"))
-    for e in man["files"] + man["secrets"]:
-        dst = copy / e["path"]
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(w["old"] / e["path"], dst)
+    copy.mkdir()
+    lines = [ln.strip() for ln in done.stdout.splitlines() if ln.strip().startswith("rsync ")]
+    assert len(lines) == 2, done.stdout
+    for line in lines:
+        cmd = line.replace(" -aHAX ", " -aH ").replace("NEWHOST:baton-move/", f"{copy}/")
+        ran = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                             env=child_env(HOME=str(w["old"])))
+        assert ran.returncode == 0, ran.stderr
     new = w["tmp"] / "home" / "newuser"
     new.mkdir(parents=True)
     return manifest, copy, new
@@ -127,6 +138,8 @@ def test_inventory_lists_everything_and_never_the_key_content(world):
     assert all(len(e["sha256"]) == 64 for e in man["files"])
     # .batonignore and made-anew folders: not listed, but counted where a reader sees it.
     assert "tasks/alpha/live.log" not in paths and not any("node_modules" in p for p in paths)
+    assert not any("__pycache__" in p for p in paths)       # rsync leaves it out everywhere
+    assert ".claude/skills/s/SKILL.md" in paths
     assert man["tasks"]["skipped"]["files"] == 2
     assert any("node_modules" in line for line in man["not_covered"])
     repo = man["repos"][0]
@@ -148,17 +161,21 @@ def test_inventory_lists_everything_and_never_the_key_content(world):
 
 def test_a_dirty_repo_and_a_remote_with_a_login_are_said_not_stored(world):
     (world["repo"] / "b.py").write_text("new\n", "utf-8")
-    _git(world["repo"], "remote", "set-url", "origin", "ssh://bob:hunter2@gitbox/tool.git")
+    _git(world["repo"], "remote", "set-url", "origin", "ssh://git:hunter2@gitbox/tool.git")
     manifest, done = _inventory(world)
     repo = json.loads(manifest.read_text("utf-8"))["repos"][0]
     assert repo["dirty"] == 1 and "1 uncommitted" in done.stdout
-    assert "hunter2" not in manifest.read_text("utf-8") and repo["remote"] == "ssh://gitbox/tool.git"
+    assert "hunter2" not in manifest.read_text("utf-8") and repo["remote"] == "ssh://git@gitbox/tool.git"
 
 
 def test_restore_into_another_user_renames_memory_and_verify_is_clean(world):
     manifest, new, done = _restored(world)
     assert (new / ".claude" / "projects" / _encode(new) / "memory" / "MEMORY.md").is_file()
     assert not (new / ".claude" / "projects" / _encode(world["old"])).exists()
+    # Carried by the rsync line though not in the manifest: placed, not left in the copy.
+    assert (new / "tasks" / "alpha" / "live.log").is_file()
+    assert os.readlink(new / "tasks" / "alpha" / "latest") == "data.csv"
+    assert "not in the manifest" in done.stdout
     assert "memory folder" in done.stdout and _encode(new) in done.stdout
     assert CRON.strip() in done.stdout and "crontab crontab.txt" in done.stdout
     assert oct((new / ".ssh" / "id_ed25519").stat().st_mode & 0o777) == "0o600"

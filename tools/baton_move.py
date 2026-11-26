@@ -29,6 +29,7 @@ The tasks: BATON_HOME and BATON_LOGBOOK, else baton.local.json, as for every too
 from __future__ import annotations
 
 import argparse
+import filecmp
 import getpass
 import hashlib
 import importlib.util
@@ -48,9 +49,10 @@ BROWSERS = {"BraveSoftware", "chromium", "google-chrome", "google-chrome-for-tes
             "microsoft-edge", "opera", "vivaldi", "mozilla"}
 SECRET_NAME = re.compile(r"(?i)(key(?!board|bind|map)|token|credential|secret|password|\.pem$|\.p12$|\.pfx$|"
                          r"^env$|\.env$|^rclone\.conf$|^hosts\.yml$)")
+SECRET_DIRS = (".ssh", ".secrets", ".gnupg")
 SECRET_FILES = (".pypirc", ".claude.json", ".claude/.credentials.json", ".netrc", ".git-credentials")
 SYSTEM = ("/usr", "/bin", "/sbin", "/lib", "/etc", "/proc", "/sys", "/dev", "/run", "/var",
-          "/boot", "/snap", "/tmp")
+          "/boot", "/snap", "/tmp", "/root")
 PATH_IN_TEXT = re.compile(r"(?<![\w/.~:-])(~/[^\s`'\"()<>\[\]{},;|*]+|/[A-Za-z0-9_.-][^\s`'\"()<>\[\]{},;|*]*)")
 WALK_CAP = 200_000         # a mentioned folder is sized up to this many files, then "at least"
 LIST = 20                  # names printed per group; the manifest holds all of them
@@ -116,8 +118,13 @@ def run(*cmd, cwd=None) -> tuple:
 
 
 def no_userinfo(url: str) -> str:
-    """A remote URL without `user:password@` -- a login can sit inside one."""
-    return re.sub(r"(//)[^/@\s]+@", r"\1", url or "")
+    """A remote URL without a login in it: for http(s) the whole `user:pass@` goes (a token
+    sits there); for ssh only a `:password`, since `git@host` is how the clone logs in."""
+    m = re.match(r"^([a-z+]+://)([^/@\s]+)@(.*)$", url or "")
+    if not m:
+        return url or ""
+    scheme, user, rest = m.groups()
+    return scheme + rest if scheme.startswith("http") else f"{scheme}{user.split(':')[0]}@{rest}"
 
 
 # --- inventory ---------------------------------------------------------------------------------
@@ -131,7 +138,7 @@ def walk_files(top: Path, skip_dir=None):
             full = Path(dirpath, d)
             if full.is_symlink():
                 links.append(full)
-            elif not (skip_dir and skip_dir(full)):
+            elif not (skip_dir(full) if skip_dir else d in SKIP):
                 keep.append(d)
         dirnames[:] = sorted(keep)
         for f in sorted(filenames):
@@ -314,15 +321,18 @@ def inventory(args) -> int:
     # Keys and logins: name, size, hash. The content is read only by hashlib.
     secrets = []
     candidates = []
-    if (home / ".ssh").is_dir():
-        candidates += walk_files(home / ".ssh")[0]
+    for d in SECRET_DIRS:
+        if (home / d).is_dir():
+            candidates += walk_files(home / d)[0]
     config = home / ".config"
     if config.is_dir():
         def skip_config(d):
             rel = d.relative_to(config).parts
             return rel[0] in BROWSERS or len(rel) >= 3 or d.name.lower() in ("cache", "caches")
-        candidates += [f for f in walk_files(config, skip_config)[0]
-                       if SECRET_NAME.search(f.name) and "systemd" not in f.parts]
+        # By name, or by mode: a file only its owner may read is most likely a login (mail
+        # passwords sat in ~/.config/elkan-poshta/office, a name no pattern guesses).
+        candidates += [f for f in walk_files(config, skip_config)[0] if "systemd" not in f.parts
+                       and (SECRET_NAME.search(f.name) or not f.stat().st_mode & 0o077)]
     candidates += [home / s for s in SECRET_FILES if (home / s).is_file()]
     for f in candidates:
         try:
@@ -354,7 +364,9 @@ def inventory(args) -> int:
     man["repos"] = list(repos.values())
 
     # Paths the logbooks mention outside the task folder: listed, not carried.
-    covered = [root, claude, home / ".ssh"] + [Path(r) for r in repos] + [home / s["path"] for s in secrets]
+    covered = ([root, claude] + [home / d for d in SECRET_DIRS] + [Path(r) for r in repos]
+               + [home / s["path"] for s in secrets] + [home / f["path"] for f in files
+                                                        if f["group"] != "tasks"])
     mentioned = {}
     for task, text in texts.items():
         for m in PATH_IN_TEXT.finditer(text):
@@ -362,8 +374,10 @@ def inventory(args) -> int:
             p = Path(os.path.normpath(os.path.expanduser(raw)))
             s = str(p)
             system = home not in p.parents and any(s == x or s.startswith(x + "/") for x in SYSTEM)
+            # Neither inside what is carried, nor a folder holding it (`~/dev`, `~/.config`):
+            # those would swallow the specific paths beside the carried ones.
             if (s in ("/", ".") or system or p in home.parents or p == home
-                    or any(p == c or c in p.parents for c in covered)):
+                    or any(p == c or c in p.parents or p in c.parents for c in covered)):
                 continue
             try:
                 if not p.exists():
@@ -403,9 +417,10 @@ def not_covered(man: dict, home: Path) -> list:
         "logins that are bound to the machine or expire (gh auth, rclone, Claude Code): the files "
         "are listed, whether they still work is checked by logging in -- `gh auth status`, "
         "`rclone lsd <remote>:`",
-        "~/.gnupg, keyrings and password managers: not looked at -- `ls ~/.gnupg ~/.local/share/keyrings`",
-        f"keys and logins outside ~/.ssh, ~/.config (depth 3, browsers skipped) and {', '.join(SECRET_FILES)}: "
-        "not looked for -- `grep -rlI 'PRIVATE KEY' ~ 2>/dev/null`",
+        "desktop keyrings and password managers: not looked at -- `ls ~/.local/share/keyrings`",
+        f"keys and logins outside ~/{', ~/'.join(SECRET_DIRS)}, ~/.config (depth 3, browsers skipped; "
+        f"by name or owner-only mode) and {', '.join(SECRET_FILES)}: not looked for -- "
+        "`grep -rlI 'PRIVATE KEY' ~ 2>/dev/null`",
         "the rest of ~/.claude (plugins' files, history, file-history, sessions): not carried -- "
         "plugins are reinstalled from the list, the others are rebuilt",
         f"in the task folders, {sk['files']} files ({sk['bytes']} bytes) under made-anew folders "
@@ -514,6 +529,8 @@ def summary(man: dict, out: Path) -> None:
     print(f"  scp {out} NEWHOST:baton-move/")
     print("Keys and logins, separately -- USB stick or scp, never a cloud folder:")
     print(f"  rsync -aHAX -R {' '.join('~/./' + e['path'] for e in s)} NEWHOST:baton-move/" if s else "  (none found)")
+    print("Take this inventory last, from a plain shell with no Claude session running: ~/.claude.json "
+          "and the logbooks change while one runs, and verify would then report them as different.")
     print("\nNOT covered by this inventory (manifest: not_covered):")
     for line in man["not_covered"]:
         print(f"  - {line}")
@@ -535,28 +552,59 @@ def restore(args) -> int:
     man, src_root = load(args.manifest), Path(args.src).expanduser().resolve()
     home, old = Path(args.home).expanduser().resolve() if args.home else Path.home(), man["home"]
     act = "would" if args.dry_run else "did"
-    placed, same_n, conflicts, missing, by_hand = 0, 0, [], [], []
-    for entry in man["files"] + [dict(e, group="secrets") for e in man["secrets"]]:
-        src = src_root / entry["path"].lstrip("/")
-        dst = target(entry["path"], old, home)
-        if not src.is_file():
-            (by_hand if entry["group"] == "secrets" else missing).append(entry["path"])
-            continue
-        if dst.exists():
-            if src.resolve() == dst.resolve() or same(dst, entry):
-                same_n += 1
+    listed = {e["path"] for e in man["files"] + man["secrets"]}
+    manifest_file = Path(args.manifest).resolve()
+    placed, unlisted, same_n, conflicts = 0, 0, 0, []
+    # The whole copied tree, not only what the manifest lists: the rsync line also carries
+    # .batonignore'd files and symlinks, and a restore that left them in the copy would lose them.
+    for dirpath, dirnames, filenames in os.walk(src_root):
+        dirnames.sort()
+        links = [d for d in dirnames if os.path.islink(os.path.join(dirpath, d))]
+        for name in sorted(filenames) + links:
+            src = Path(dirpath, name)
+            if src.resolve() == manifest_file:
                 continue
-            if not args.force:
-                conflicts.append(rel_to(dst, home))
+            rel = src.relative_to(src_root).as_posix()
+            dst = target(rel, old, home)
+            if src.is_symlink():
+                if os.path.lexists(dst):
+                    if os.path.islink(dst) and os.readlink(dst) == os.readlink(src):
+                        same_n += 1
+                    elif args.force and not args.dry_run and os.path.islink(dst):
+                        os.unlink(dst)
+                        os.symlink(os.readlink(src), dst)
+                        placed += 1
+                    else:
+                        conflicts.append(rel_to(dst, home))
+                    continue
+                if not args.dry_run:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    os.symlink(os.readlink(src), dst)
+                placed, unlisted = placed + 1, unlisted + 1
                 continue
-        if not args.dry_run:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)           # copy2 keeps the mode: a key stays 0600
-        placed += 1
+            if dst.exists():
+                if dst.resolve() == src.resolve() or filecmp.cmp(src, dst, shallow=False):
+                    same_n += 1
+                    continue
+                if not args.force:
+                    conflicts.append(rel_to(dst, home))
+                    continue
+            if not args.dry_run:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)           # copy2 keeps the mode: a key stays 0600
+            placed += 1
+            unlisted += rel not in listed
+    secret_paths = {e["path"] for e in man["secrets"]}
+    absent = [p for p in sorted(listed) if not os.path.lexists(src_root / p.lstrip("/"))]
+    missing = [p for p in absent if p not in secret_paths]
+    by_hand = [p for p in absent if p in secret_paths]
     if not args.dry_run and (home / ".ssh").is_dir():
         os.chmod(home / ".ssh", 0o700)
     print(f"Baton move -- restore into {home} from {src_root}{' (dry run: nothing written)' if args.dry_run else ''}")
     print(f"  {act} place {placed} files; {same_n} already in place and the same")
+    if unlisted:
+        print(f"  {unlisted} of them are not in the manifest (.batonignore'd, symlinks, added since): "
+              f"placed, but verify cannot check them")
     if str(home) != old:
         names = [(n, renamed(n, old, str(home))) for n in man["claude"]["memory_folders"]]
         for a, b in names:
