@@ -341,3 +341,81 @@ def test_the_end_of_a_path_one_file_has_is_that_file(tmp_path):
                          "Changed windows-t0/pusni.log and registar/t0/pusni.log")
     assert bs.claimed_untouched(folder, "LOGBOOK.md", top_entry_of(folder), _since()) \
         == ["pravila-test/registar/windows-t0/pusni.log"]
+
+
+# ZA-OPRAVYANE row 191 (20.11 08:25, linkedin-postove): the entry named
+# `2026-11-20/izvestia/msg-2.png`; Stop tied it to the old `2026-11-16/proverka/msg-2.png` by its
+# name and said no file in the folder was saved this session, while the four files of
+# `2026-11-20/izvestia/` were from 08:23-08:24, written by a Python script run through Bash, not
+# by Write or Edit. Not reproduced on 3.45.0: a file counts as saved this session by its own time
+# (touched_since), whoever wrote it, so the shell half did not hold. What made the alarm was the
+# walk cap with the name: the folder is over WALK_CAP, the walk never reached the shots, and the
+# base name matched the old file -- row 183's fix (3.40.0) closed both. These pin it.
+SHOTS = ("2026-11-20/izvestia/msg-1.png", "2026-11-20/izvestia/msg-2.png",
+         "2026-11-20/izvestia/msg-3.png", "2026-11-20/izvestia/notif-1.png")
+
+
+def _shots_by_bash(tmp_path, old_files=("2026-11-16/proverka/msg-2.png", "posts.md"),
+                   shots_age: float = 0) -> dict:
+    """The linkedin-postove case: old files two days old, the four shots written now by a Python
+    script through a Bash call, the entry (Edit) naming one of them by its path. Stop's reason."""
+    now = datetime.now()
+    entry = GOOD.replace("2026-10-01 10:00", f"{now:%Y-%m-%d %H:%M}") \
+                .replace("Wrote report-draft.md",
+                         "Wrote 2026-11-20/izvestia/msg-2.png, the screenshot of the new messages")
+    folder = _old_folder(tmp_path, old_files, "x")
+    (folder / "LOGBOOK.md").write_text("---\nstate: active\n---\n\n" + entry, "utf-8")
+    script = ("import pathlib,sys\nfor rel in sys.argv[1:]:\n"
+              "    p = pathlib.Path(rel); p.parent.mkdir(parents=True, exist_ok=True)\n"
+              "    p.write_bytes(b'png')\n")
+    subprocess.run([sys.executable, "-c", script, *SHOTS], cwd=folder, check=True)
+    for rel in SHOTS if shots_age else ():
+        os.utime(folder / rel, (time.time() - shots_age,) * 2)
+    tr = tmp_path / "t.jsonl"
+    started = datetime.fromtimestamp(time.time() - 3600, timezone.utc).isoformat()
+    at = datetime.now().astimezone().isoformat()
+    command = f'cd "{folder}" && python3 cdp.py shots 2026-11-20/izvestia'
+    lines = [{"timestamp": started},
+             {"type": "assistant", "timestamp": at, "cwd": str(folder), "message": {"content": [
+                 {"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": command}}]}},
+             {"type": "user", "timestamp": at, "message": {"content": [
+                 {"type": "tool_result", "tool_use_id": "b1", "content": "4 shots"}]}},
+             {"type": "assistant", "timestamp": at, "cwd": str(folder), "message": {"content": [
+                 {"type": "tool_use", "id": "e1", "name": "Edit",
+                  "input": {"file_path": str(folder / "LOGBOOK.md")}}]}}]
+    tr.write_text("".join(json.dumps(x) + "\n" for x in lines), "utf-8")
+    env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "SYSTEMROOT", "LANG")}
+    env.update(BATON_HOME=str(tmp_path / "tasks"), BATON_LOGBOOK="LOGBOOK.md",
+               BATON_STATE_DIR=str(tmp_path / "state"), BATON_BODY_STATE=str(tmp_path / "b.json"),
+               BATON_LESSONS_STATE=str(tmp_path / "l.json"),
+               BATON_SESSION_STATE=str(tmp_path / "s.json"))
+    out = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True, env=env,
+                         input=json.dumps({"session_id": "s", "transcript_path": str(tr)}))
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout) if out.stdout.strip() else {}
+
+
+def test_shots_a_shell_call_wrote_are_saved_this_session(tmp_path):
+    reason = _shots_by_bash(tmp_path).get("reason", "")
+    assert "hollow" not in reason and "no file in this folder" not in reason, reason
+
+
+def test_the_same_shots_two_days_old_are_asked(tmp_path):
+    """The control: the fixture reaches the check -- shots not saved this session are asked."""
+    reason = _shots_by_bash(tmp_path, shots_age=2 * 86400).get("reason", "")
+    assert "says it changed 2026-11-20/izvestia/msg-2.png" in reason, reason
+    assert "no file in this folder was saved this session" in reason, reason
+
+
+def test_shots_a_shell_call_wrote_past_the_walk_cap_are_saved_this_session(tmp_path):
+    """linkedin-postove holds 80,938 files: over WALK_CAP, and the walk stopped before the shots
+    (read-only run of the real 20.11 entry: 2,380 files saved that day seen, none of
+    `2026-11-20/izvestia/`). Here the folder's root holds exactly WALK_CAP old files, the old
+    namesake `msg-2.png` among them; the walk reads a folder's own files before its subfolders,
+    so it reads all of them and stops at the first shot, every time. On v3.39.0 this said "says
+    it changed msg-2.png, and no file in this folder was saved this session"."""
+    old = tuple(f"raw-{i}.txt" for i in range(bs.WALK_CAP - 2)) + ("posts.md", "msg-2.png")
+    out = _shots_by_bash(tmp_path, old)
+    assert "not read to the end" in out.get("systemMessage", ""), out
+    reason = out.get("reason", "")
+    assert "hollow" not in reason and "no file in this folder" not in reason, reason
