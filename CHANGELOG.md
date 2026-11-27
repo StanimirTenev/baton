@@ -2,6 +2,34 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.47.0** — a delivered result waits for your acceptance on its own; open questions for you on the board; agents without hooks
+
+All of it optional: a header without the new fields, and a task folder without a questions file,
+give the same board as 3.46.0.
+
+- **A delivered result waits in a group of its own.** A header with `awaiting: <path>` (the result
+  delivered) puts the task under `📥 Waiting for YOUR acceptance`, above "Waiting on YOU": asking
+  the human to decide and asking them to accept a finished result were one group. Finished and
+  frozen tasks stay where they were; the terminal line counts `N to accept`. Nothing blocks
+  `state: finished` without acceptance; the docs ask for the human's word in the last entry.
+- **Open questions for you are counted.** Each `- [ ] ` line in a task's `QUESTIONS.md` (or
+  `VAPROSI.md`, the name `/baton-plan` uses) is an open question for the human; the task's line
+  ends with `(2 open questions for you in QUESTIONS.md)`, never the text. Only the checkbox
+  counts, so free-form question files written before this version add nothing.
+- **`asked:` and `model:` in the header.** The human's request verbatim, and the model for
+  subagents on this task. Kept, not acted on: no hook reads them. `/baton-task` writes `asked:`.
+- **At a checkpoint, ask and wait; never decide for the human** — now one sentence in
+  `/baton-task` and `/baton-plan`.
+- **Agents without hooks.** A README section with a six-line block to paste into `AGENTS.md`
+  for Cursor, OpenCode, Copilot, or Codex and Gemini before their hooks are set up, saying plainly
+  that nothing is enforced there; and `npx skills add StanimirTenev/baton -s baton-task -s baton-plan`
+  for the skills (third-party CLI; checked with `skills` 1.9.1 that it finds the five skills and
+  copies them for Codex, not that any agent loads them).
+- **`AGENTS.md` for an agent working on Baton's own code**, and a dated News list in the README.
+- **Not checked:** a live Cursor, OpenCode or Copilot session with the block; the tests on
+  Windows or macOS; `tools/baton_board.py` (the HTML board) does not show `awaiting:` or the
+  questions yet.
+
 **v3.46.0** — moving to a new computer; L3 and L5 stop counting refutations that refute nothing; safer locks
 
 - **Moving to a new computer: `tools/baton_move.py`.** `inventory` (read-only, on the old machine)
