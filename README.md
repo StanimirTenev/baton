@@ -76,6 +76,16 @@ folder exists, the agent's first reply opens with the board of your tasks. No li
 `/baton-doctor` (`/baton:baton-doctor` as a plugin): it shows when each hook last finished,
 or that it crashed.
 
+## News
+
+- **2026-11-27, v3.47.0** -- a delivered result waits in a group of its own on the board (`awaiting:`), open questions for you are counted from `QUESTIONS.md`, optional `asked:` and `model:` in the header, a block for agents without hooks.
+- **2026-11-26, v3.46.0** -- moving to a new computer (`tools/baton_move.py`); L3 and L5 stop counting refutations that refute nothing; safer locks.
+- **2026-11-24, v3.45.0** -- a task shared with a friend on one network; the page opens only when you ask for it.
+- **2026-11-21, v3.44.0** -- invitations found on one network, sent by WhatsApp across networks; a nickname for each friend.
+- **2026-11-21, v3.43.0** -- a page in the browser: your ID, what is new, "Update Baton", friend invitations.
+
+Every version, with what was not checked: [CHANGELOG.md](CHANGELOG.md).
+
 ## Measured
 
 **What it does not do**, measured on my own machine, 22–29 October 2026: the Stop hook handed
@@ -94,6 +104,7 @@ answers the hand-back with no entry is handed back once more, and then let throu
 | Cowork | loads hooks, but Baton is untested there |
 | OpenAI Codex CLI | yes, since v3.34.0 -- four of the six hooks, set up by hand: [codex/README.md](codex/README.md) |
 | Google Gemini CLI | extension; live headless session proven 17.11 (v3.38.0), interactive not yet: [gemini/README.md](gemini/README.md) |
+| Cursor, OpenCode, GitHub Copilot | **no hooks** -- only the rule, pasted by hand, nothing enforced: [agents without hooks](#agents-without-hooks) |
 
 **A host, not a model.** Baton works in a *host*: an agent runtime that runs hooks when a session
 starts and when a turn ends -- Claude Code, Codex CLI, Gemini CLI. The hooks read what the host
@@ -107,6 +118,39 @@ claude.ai, ChatGPT or Gemini on the web get no board, no hand-back and no logboo
 **In a claude.ai chat nothing warns you:** the plugin looks installed and the skills load,
 but no hook runs ([platform support](https://claude.com/docs/plugins/platform-support)).
 A plugin added from the directory on claude.ai reaches Claude Code at its next session start.
+
+### Agents without hooks
+
+In Cursor, OpenCode, GitHub Copilot, or Codex CLI and Gemini CLI before their hooks are set up,
+Baton's hooks do not run. **Nothing is enforced there**: no board, no hand-back, no check that an
+entry was written. What is left is the rule, which the agent may follow or skip. To give it the
+rule, paste this into the project's `AGENTS.md` (or the agent's own rules file):
+
+```markdown
+## Task logbooks (Baton)
+- Every task is a folder in ~/tasks/ with a LOGBOOK.md; the newest entry is on top.
+- Before working on a task, read its LOGBOOK.md: the header (state, turn, next) and the entries on this topic.
+- After the work, add an entry at the top: `## YYYY-MM-DD HH:mm — <title>`, the time read from `date`,
+  then what was asked, what was done, the result, and what is still open.
+- A new task is a new folder with its own LOGBOOK.md; its files live in that folder.
+- At a checkpoint, ask the human and wait; never decide for them. Never write a secret into an entry.
+```
+
+Cursor, OpenCode and Copilot are untested with it. The full rules, the text the installer puts in
+`CLAUDE.md`, are [codex/AGENTS.md.snippet](codex/AGENTS.md.snippet); they describe the hooks too,
+so use them where the hooks run.
+
+The skills can be copied into such an agent with the third-party `skills` CLI (skills.sh), which
+has install telemetry of its own:
+
+```bash
+npx skills add StanimirTenev/baton -s baton-task -s baton-plan -a codex
+```
+
+Checked on 27.11.2026 with `skills` 1.9.1: it finds Baton's five skills and copies the two named
+into `.agents/skills/` for Codex. Whether a given agent then loads and follows them was not
+checked. The other three skills (`baton-doctor`, `baton-inventory`, `baton-key`) run Baton's hooks'
+state or its tools, which the CLI does not copy, so they are left out.
 
 ## For offices and companies
 
@@ -378,7 +422,8 @@ Baton changes what Claude Code knows at the start of a session: that is what it 
 you install it for that. Everything it hands over comes from files on your disk that you can
 open, edit or delete; nothing is hidden or encoded. Checked against the code of v3.43.0.
 
-**Reads**, on this machine only: your task folders and their logbooks; `.batonignore` and
+**Reads**, on this machine only: your task folders and their logbooks (since v3.47.0 also a
+`QUESTIONS.md` or `VAPROSI.md` beside a logbook, for the count of its open `- [ ]` questions); `.batonignore` and
 Baton's own settings; the session's transcript file that Claude Code writes, for the times,
 the size of the context, and the messages you typed and the agent's text replies since the
 last logbook entry; at session start, the previous session's transcript in the same project
@@ -416,7 +461,8 @@ second waiter from removing the lock the first has just taken).
 
 **Injects** into the agent's context, as hook output:
 
-- at session start: the board (your task names and the header lines of their logbooks), the
+- at session start: the board (your task names, the header lines of their logbooks, and how many
+  open questions a task's `QUESTIONS.md` holds, never their text), the
   last 2,500 characters of the kept conversation with the path to the rest, notices about
   Baton itself, and, when the ledger differs from the logbooks, the folders and headings of the
   entries that did; as a plugin also Baton's rules, the text of `templates/CLAUDE.md` shipped with it (with the task root, the logbook name and the path of `tools/baton_entry.py` filled in);

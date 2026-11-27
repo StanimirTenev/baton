@@ -46,6 +46,22 @@ The groups mean overdue (a deadline within 3 days), on us, recurring, waiting on
 else, frozen and done. A task with no header falls back to the v1 line: its name, the date
 of its last entry, and that entry's title.
 
+Since v3.47.0 a task whose header has `awaiting:` (see below) is in a group of its own above
+"Waiting on YOU": `📥 Waiting for YOUR acceptance`, with the path of the delivered result. Asking
+the human to decide something and asking them to accept a finished result are different asks;
+the second used to hide among the first. A finished or frozen task stays where it was, whatever
+`awaiting:` says, and an empty `awaiting:` is no `awaiting:`. The one line in the terminal counts
+these as `N to accept`.
+
+**Open questions for the human.** A task folder may hold `QUESTIONS.md` (or `VAPROSI.md`, the name
+`/baton-plan` uses). Each unchecked `- [ ] ` line in it is an open question for the human; tick it
+(`- [x]`) with the answer and its date when it is answered. The task's line on the board then ends
+with `(2 open questions for you in QUESTIONS.md)`: the count and the file, never the text. Only
+the checkbox counts -- questions for research are written as plain lines, and a file without a
+checkbox (every `VAPROSI.md` written before v3.47.0) adds nothing to the board. Decisions taken are
+dated in the logbook entry that records them (`2026-11-27 — the human: keep the old export`) and,
+for a task where they pile up, in a `DECISIONS.md` beside it; no hook reads that file.
+
 The number before each task is its own: the human can say "12 is finished" or "go to 12", and
 the UserPromptSubmit hook brings that task's record as if it had been named. The numbers live in
 `.baton-ids.json` at the tasks root, not in the headers. SessionStart numbers a new task max + 1
@@ -219,8 +235,20 @@ true_as_of: 2026-03-14       # optional: when this header was last true
 review_after: 30d            # optional: how long that is expected to hold (30d, 6m)
 deadline: 2026-04-01         # optional: a deadline on its own line, if you prefer it there
 code: ~/dev/thing@v1.2.0     # optional: the code this record rests on (path@commit-or-tag)
+asked: "migrate billing before the March run, keep the old export"   # optional: the human's request, verbatim
+model: sonnet                # optional: the model for subagents on this task, as the human said it
+awaiting: out/report-v2.pdf  # optional: a delivered result waiting for the human's acceptance
 ---
 ```
+
+`asked:`, `model:` and `awaiting:` are optional, since v3.47.0, and a header without them reads as
+before. `asked:` keeps the human's words so the goal is not retold until it drifts; it is one line,
+in double quotes (a value is read to its last quote, so a colon, a `#` or a quote inside is kept;
+unquoted, a ` #` starts a comment). `model:` is read by the agent when it starts a subagent for
+this task; no hook acts on it. `awaiting:` moves the task to `📥 Waiting for YOUR acceptance`.
+When the human says yes, the entry records their word and `awaiting:` is removed; when they ask
+for a fix, the same. Nothing enforces either: a task marked `finished` should carry, in its
+last entry, the human's word that the result was accepted -- that is a convention, not a check.
 
 `deadline:` and `timing: srok:YYYY-MM-DD` are the same deadline written two ways — the hook
 reads either, so a folder can keep the date where it reads best.

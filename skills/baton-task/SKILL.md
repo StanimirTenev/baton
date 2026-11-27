@@ -57,13 +57,21 @@ Write, in the human's words wherever possible:
 
 | field | what goes in |
 |---|---|
+| `asked` | the human's request **verbatim**, one line in double quotes — not your retelling of it |
 | `goal` | the goal in one sentence — what is different when it is done |
 | `done_when` | one sentence a person could check: a number, a page that exists, a yes from someone |
 | `turn` | who holds the next move: `us`, the human, or a named outsider |
 | `next` | one sentence: the next move, not a summary |
 | `aliases` | the words people will use for it, **in every alphabet they write in** — the prompt hook matches on these |
 
+Optional, when they apply: `model` (the model the human wants for subagents on this task, in
+their words) and, once a result is delivered, `awaiting: <path>` — the board then shows the task
+as waiting for the human's acceptance. Remove `awaiting` when the human answers, and record their
+word in the entry; mark the task finished only with that word. Questions only the human can
+answer go into `QUESTIONS.md` as `- [ ] ` lines; the board counts them.
+
 And in the first logbook entry: what is known — checked against a source or on the spot — and what is not: an agent's word, or an inference.
+At a checkpoint, ask and wait; never decide for the human.
 If the criterion is not known, **ask**. The Stop hook asks once per session when a task
 worked on has none; an invented criterion is worse than a missing one, because it is
 then trusted.

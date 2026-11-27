@@ -1473,6 +1473,33 @@ def prio(fm: dict) -> int:
     return PRIORITY_RANK.get(str(fm.get("priority", "")).strip().lower(), 3)
 
 
+# Open questions for the human (v3.47.0, ZA-OPRAVYANE row 201): an unchecked `- [ ] ` line in
+# QUESTIONS.md, or VAPROSI.md -- the name /baton-plan already uses. Only the checkbox counts: the
+# VAPROSI.md files written before it are free text (struck-through, ✅, numbered), and a reader
+# that guessed at them would put answered questions on the board. Count and file, never the text.
+QUESTION_FILES = ("QUESTIONS.md", "VAPROSI.md")
+OPEN_QUESTION = re.compile(r"^\s*[-*] \[ \] \S", re.M)
+
+
+def open_questions(folder: Path) -> tuple[str, int] | None:
+    for fname in QUESTION_FILES:
+        try:
+            text = (folder / fname).read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        n = len(OPEN_QUESTION.findall(text))
+        if n:
+            return fname, n
+    return None
+
+
+def questions_tail(found: tuple[str, int] | None) -> str:
+    if not found:
+        return ""
+    fname, n = found
+    return f"  ({n} open question{'' if n == 1 else 's'} for you in {fname})"
+
+
 # Task numbers, so the human can say "12 is finished" instead of a folder name. One registry at
 # the root, never the headers: writing a header moves its logbook's mtime, and that has set off
 # Stop before. A number is never changed or reused -- a finished task, or a folder that is gone,
@@ -2346,7 +2373,8 @@ def shared_notice() -> str | None:
 
 
 def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
-               root: Path | None = None, twice: bool = False, plain: int = 0) -> str:
+               root: Path | None = None, twice: bool = False, plain: int = 0,
+               to_accept: int = 0) -> str:
     """The one line the human sees in the terminal at session start. English, because the hook
     cannot know the human's language; the agent shows the board itself in that language.
     Without it, a session where the agent did not show the board looked like a session without
@@ -2357,7 +2385,8 @@ def start_line(on_move: int = 0, ongoing: int = 0, outside: int = 0,
     if root is not None:
         return (f"🧭 Baton is on -- no task folders yet in {root}. Write anything and the "
                 "agent will help you start one.")
-    parts = [f"{n} {label}" for n, label in ((on_move, "on your move"), (ongoing, "ongoing"),
+    parts = [f"{n} {label}" for n, label in ((to_accept, "to accept"), (on_move, "on your move"),
+                                             (ongoing, "ongoing"),
                                              (outside, "waiting on others"),
                                              (plain, "without a header")) if n]
     return ("🧭 Baton: " + (", ".join(parts) or "nothing waiting") +
@@ -2604,6 +2633,7 @@ def main() -> int:
                              start_line(root=root))
 
     overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
+    to_accept: list[dict] = []
     stale: list[str] = []
     unfinished: list[str] = []
     today = date.today()
@@ -2683,8 +2713,13 @@ def main() -> int:
             stale.append(f"- {f.name} — a constraint marked as **retired** whose text "
                          f"is still there: {', '.join(alive)}")
         dl = deadline(fm)
-        rec = {"name": f.name, "fm": fm, "dl": dl}
-        if not is_us(fm) or sast == "waiting":
+        rec = {"name": f.name, "fm": fm, "dl": dl, "q": open_questions(f)}
+        if str(fm.get("awaiting") or "").strip():
+            # A result is delivered and waits for the human's yes (v3.47.0, rows 195/204): not
+            # the same ask as a decision, so not in "waiting on you" -- and not outside either,
+            # whatever `turn` says, because the next word is the human's.
+            to_accept.append(rec)
+        elif not is_us(fm) or sast == "waiting":
             # someone/something else is on the hook — a person OR a condition
             # (a disk to arrive). Never in "we can progress now", even with a deadline.
             external.append(rec)
@@ -2695,29 +2730,39 @@ def main() -> int:
         else:
             on_us.append(rec)
 
-    for bucket in (overdue, on_us, recurring, external):
+    for bucket in (overdue, to_accept, on_us, recurring, external):
         bucket.sort(key=lambda r: (prio(r["fm"]), r["dl"] or date.max))
     plain.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     # In the board's order, so the first numbers go to the tasks shown first.
-    ids_assign(root, [r["name"] for r in overdue + on_us + recurring + external]
+    ids_assign(root, [r["name"] for r in overdue + to_accept + on_us + recurring + external]
                + [f.name for f in plain] + sorted(frozen) + sorted(finished))
 
     blocks = []
     if overdue:
         blocks.append("⏰ DEADLINE due / passed:\n" + "\n".join(
-            line_for(r["name"], r["fm"], f"  (deadline {r['dl']})") for r in overdue))
+            line_for(r["name"], r["fm"], f"  (deadline {r['dl']})" + questions_tail(r["q"]))
+            for r in overdue))
+    if to_accept:
+        def accept_tail(r):
+            bits = [f"to accept: {str(r['fm'].get('awaiting')).strip()}"]
+            if r["dl"]:
+                bits.append(f"deadline {r['dl']}")
+            return f"  ({', '.join(bits)})" + questions_tail(r["q"])
+        blocks.append("📥 Waiting for YOUR acceptance (a result is delivered; say yes, or what "
+                      "to fix):\n" + "\n".join(
+                          line_for(r["name"], r["fm"], accept_tail(r)) for r in to_accept))
     if on_us:
         blocks.append("⏳ Waiting on YOU / can continue now:\n" + "\n".join(
-            line_for(r["name"], r["fm"]) for r in on_us))
+            line_for(r["name"], r["fm"], questions_tail(r["q"])) for r in on_us))
     if recurring:
         blocks.append("🔁 Ongoing:\n" + "\n".join(
-            line_for(r["name"], r["fm"]) for r in recurring))
+            line_for(r["name"], r["fm"], questions_tail(r["q"])) for r in recurring))
     if external:
         def ext_tail(r):
             bits = [] if is_us(r["fm"]) else [f"waiting on: {r['fm'].get('turn')}"]
             if r["dl"]:
                 bits.append(f"deadline {r['dl']}")
-            return f"  ({', '.join(bits)})" if bits else ""
+            return (f"  ({', '.join(bits)})" if bits else "") + questions_tail(r["q"])
         blocks.append("⛔ Waiting on someone OUTSIDE / blocked (for information):\n" + "\n".join(
             line_for(r["name"], r["fm"], ext_tail(r)) for r in external))
     if plain:
@@ -2796,7 +2841,7 @@ def main() -> int:
     # No systemMessage: that one reaches the human as it is, in English. The agent knows the
     # human's language and the hook does not, so the agent shows the board -- translated.
     return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external),
-                                     plain=len(plain)))
+                                     plain=len(plain), to_accept=len(to_accept)))
 
 
 def _load_baton():

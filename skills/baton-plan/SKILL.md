@@ -62,7 +62,8 @@ answer to that, the round will not produce a fact — it will produce a longer f
    - `PLAN.md` **v0**, drafted from what memory already says and labelled *"draft from
      memory, before research"*. It is the yardstick: did research change it?
    - `VAPROSI.md` (open questions), split into **for research** and **for the human to
-     decide**. A decision is never sent to an agent.
+     decide**. A decision is never sent to an agent. Write each question for the human as a
+     `- [ ] ` line and tick it (`- [x]`) with the answer and its date: the board counts the open ones.
    - `.batonignore` containing `razuznavane/*`. Raw agent output is written while a
      round runs; the round is logged when it starts and when it is consolidated.
 4. **List the tasks that already exist** and serve this goal. Link them in PLAN.md as
@@ -198,7 +199,8 @@ In the human's language, briefly:
 - the decisions needed now, numbered
 - the candidates for the next round
 
-Then wait. Record every decision in `VAPROSI.md` and the logbook. A decision that
+Then wait: at a checkpoint, ask and wait; never decide for the human. Record every decision,
+dated, in `VAPROSI.md` and the logbook. A decision that
 overturns an older rule goes into memory too, marked "changed on <date>, because …",
 with the old rule kept as a warning.
 
