@@ -93,7 +93,7 @@ def test_an_open_plan_is_a_tag_on_its_task_line_and_the_legend_says_it_every_ses
     board = _board(tmp_path, root)
     assert "⚠plan" in _line(board, "billing")
     assert "⚠" not in _line(board, "clean")
-    legend = next(ln for ln in board.splitlines() if ln.startswith("⚠ The tags"))
+    legend = next(ln for ln in board.splitlines() if ln.startswith("⚠ Tags"))
     assert "⚠plan (1)" in legend and "NOT done" in legend and "--details" in legend
     assert "UNCLOSED PLANS" not in board and "shelf life" not in board   # the long sections left
 
@@ -131,7 +131,7 @@ def _whole_lines(board: str, whole: str) -> None:
     shortened (ends in …), or a collapsed group or count, or the note."""
     full = whole.splitlines()
     for ln in board.splitlines():
-        if ln in full or ln.startswith("✂️ Shortened") or "listed in the whole board" in ln:
+        if ln in full or ln.startswith("✂️ Shortened") or "in the full board file" in ln:
             continue
         if ln.endswith("…"):
             assert any(f.startswith(ln[:-1].rstrip()) for f in full), ln
@@ -148,7 +148,7 @@ def test_a_hundred_long_tasks_fit_under_the_budget_and_the_whole_board_is_kept(t
     board = _board(tmp_path, root)
     assert len(board) <= hook.BOARD_BUDGET, len(board)
     note = next(ln for ln in board.splitlines() if ln.startswith("✂️ Shortened"))
-    whole_path = Path(re.search(r"the whole board is in (\S+) --", note).group(1))
+    whole_path = Path(re.search(r"the full board file is (\S+) --", note).group(1))
     assert whole_path == tmp_path / "data" / "baton.board.full.txt"
     whole = whole_path.read_text("utf-8")
     assert len(whole) > hook.BOARD_BUDGET
@@ -185,7 +185,7 @@ def test_collapse_starts_at_the_bottom(tmp_path):
     for i in range(400):
         _task(root, f"done-{i:03d}-a-finished-task", "state: finished\nresult: x\n")
     board = _board(tmp_path, root)
-    assert "✅ Finished (not touched): 400 -- listed in the whole board" in board
+    assert "✅ Finished (not touched): 400 -- in the full board file" in board
     assert "short move 7" in _line(board, "ours-07")
     assert "as far as: finished;" in board
 
@@ -318,3 +318,85 @@ def test_only_far_reminders_leave_one_count_line(tmp_path):
     far = (date.today() + timedelta(days=40)).isoformat()
     _task(root, "a", US + f'next: "x"\nremind: ["{far}: later"]\n')
     assert "⏰ Reminders (within 14 days, or past); 1 later: none now." in _board(tmp_path, root)
+
+
+# -- the collapse ladder, step by step -------------------------------------------------------
+
+def test_each_collapse_step_in_its_order(tmp_path, monkeypatch):
+    """One board, the budget lowered step by step, the hook run in-process: every one of the
+    eleven steps is reached, in its order, and each does what it says -- and below the last,
+    whole lines of the notices go while the reminder stays."""
+    root = tmp_path / "tasks"
+    long_next = "a next move written out at some length, well past sixty characters, number "
+    for i in range(6):
+        _task(root, f"us-{i}", US + f'next: "{long_next}{i}"\n')
+        _task(root, f"on-{i}", f'state: ongoing\nturn: us\nnext: "{long_next}{i}"\n')
+        _task(root, f"out-{i}", OUT + f'next: "{long_next}{i}"\n')
+    for i in range(20):
+        _task(root, f"frozen-{i:02d}-a-parked-task", "state: frozen\n")
+        _task(root, f"done-{i:02d}-a-finished-task", "state: finished\nresult: x\n")
+    for i in range(8):
+        (root / f"plain-{i}").mkdir()
+        (root / f"plain-{i}" / "LOGBOOK.md").write_text(f"## {_day(1)} 10:00 — plain {i}\n", "utf-8")
+    soon = (date.today() + timedelta(days=2)).isoformat()
+    _task(root, "certs", f'state: finished\nresult: x\nremind: ["{soon}: the cert expires"]\n')
+    env = _env(tmp_path, root)
+    for k in [k for k in os.environ if k.startswith(("BATON_", "CLAUDE_PLUGIN"))]:
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    import io
+    said = {}
+    monkeypatch.setattr(hook, "_write", lambda out: said.update(out))
+
+    def run(budget: int) -> str:
+        monkeypatch.setattr(hook, "BOARD_BUDGET", budget)
+        (tmp_path / "s.json").write_text(json.dumps({"seen_version": "3.11.0"}), "utf-8")
+        monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b'{"source": "resume"}')))
+        said.clear()
+        hook.main()
+        return said["hookSpecificOutput"]["additionalContext"]
+
+    full = run(10 ** 6)
+    assert "✂️" not in full and "⬆️ Baton was updated" in full
+    seen: dict = {}
+    floor = []                                  # every board at the last step
+    for budget in range(len(full), 600, -15):
+        board = run(budget)
+        m = re.search(r"as far as: (.+?); ", board)
+        if m:
+            if m.group(1) not in seen:
+                seen[m.group(1)] = (budget, board)
+            if m.group(1) == "every group as numbers":
+                floor.append(board)
+            else:
+                assert len(board) <= budget, (budget, len(board), m.group(1))
+    names = ["finished", "frozen", "no header", "`next` of ongoing/outside shortened",
+             "every `next` shortened", "`next` of ongoing/outside dropped",
+             "every `next` dropped", "ongoing/outside as names", "every group as names",
+             "ongoing/outside as numbers", "every group as numbers"]
+    assert list(seen) == names, list(seen)
+    b = {n: seen[n][1] for n in names}
+    assert "✅ Finished (not touched): 21 -- in the full board file" in b["finished"]
+    assert "❄️ Frozen (not offered): 1 · " in b["finished"] or "frozen-00" in b["finished"]
+    assert "❄️ Frozen (not offered): 20 -- in the full board file" in b["frozen"]
+    assert "📋 No header (most recently touched)" in b["frozen"]
+    assert "📋 No header: 8 -- in the full board file" in b["no header"]
+    assert _line(b["`next` of ongoing/outside shortened"], "on-0").endswith("…")
+    assert _line(b["`next` of ongoing/outside shortened"], "out-0").split("  (")[0].endswith("…")
+    assert long_next.strip() in _line(b["`next` of ongoing/outside shortened"], "us-0")
+    assert _line(b["every `next` shortened"], "us-0").endswith("…")
+    assert " — " not in _line(b["`next` of ongoing/outside dropped"], "on-0")
+    assert _line(b["`next` of ongoing/outside dropped"], "us-0").endswith("…")
+    assert " — " not in _line(b["every `next` dropped"], "us-0")
+    names_line = re.compile(r"^🔁 Ongoing: 6 -- \d+ · on-")
+    assert any(names_line.match(ln) for ln in b["ongoing/outside as names"].splitlines())
+    assert "⏳ Waiting on YOU / can continue now:\n- " in b["ongoing/outside as names"]
+    assert re.search(r"^⏳ Waiting on YOU / can continue now: 6 -- \d+ · us-", b["every group as names"], re.M)
+    assert re.search(r"^🔁 Ongoing: 6 -- \d+, \d+", b["ongoing/outside as numbers"], re.M)
+    assert re.search(r"^⏳ Waiting on YOU / can continue now: 6 -- \d+ · ", b["ongoing/outside as numbers"], re.M)
+    assert re.search(r"^⏳ Waiting on YOU / can continue now: 6 -- \d+, \d+", b["every group as numbers"], re.M)
+    # Below the last step: the notices lose whole lines from the bottom; the reminder stays.
+    assert any("⬆️ Baton was updated" in x for x in floor), "the step before the notices go"
+    assert "⬆️ Baton was updated" not in floor[-1]
+    assert all("the cert expires" in x for x in floor)

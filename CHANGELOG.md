@@ -22,7 +22,7 @@ shelf life, the ledger -- never reached the agent that morning.
   `additionalContext`, with the ID line and, in plugin mode, the rules. Over it, the board is
   shortened from the bottom up until it fits -- finished, frozen and header-less lists become
   counts, then `next` is shortened (`…`) and dropped, outside and ongoing first, then the groups
-  become numbers, last the notices lose whole lines -- and the whole board is written to
+  become numbers, last the notices lose whole lines -- and the full board is written to
   `baton.board.full.txt` in Baton's data folder, with one line saying so. Never mid-line; a tag,
   a reminder or a warning line never goes. If those alone are over, the field is over.
 - **`parent:` in the header: sub-tasks.** The child stays a task (number, logbook, Stop, prompt
@@ -41,7 +41,14 @@ shelf life, the ledger -- never reached the agent that morning.
 - **An open plan in a finished or frozen task** is one line, "close them: ...", instead of a
   sentence each.
 - **Measured (В), on a copy of the maintainer's task root** (symlinks to the 68 real folders, a
-  copy of the numbers and of the data folder, so nothing real was written): the first session after the update (what is new and the update question in it) 8,324 characters, the next one 8,257, against 18,423 before; the whole board 16,197, written to its file. To fit, the board drops the `next` of ongoing and outside tasks and shortens the rest to 60 characters: 68 tasks are more than 9,000 characters with every `next` whole. `--details` printed 6,626 characters, 50 lines of checks. Nothing in the real root changed (`find -newer` on a marker: empty); the copy of the numbers gained one, for a folder made that morning.
+  copy of the numbers and of the data folder, so nothing real was written; plugin mode, the page
+  block on, the ledger read for the real root): the first session after the update 8,983
+  characters, the next one 8,050, against 18,423 before; the full board 12,726, in its file. To
+  fit, both drop every `next`: the lines keep the number, name, priority, tags and whom it waits
+  on. 68 tasks with the ledger (939), the lessons (763) and the legend do not fit with `next`
+  shown. `--details` printed 6,626 characters, 50 lines of checks. Nothing in the real root was
+  written by these runs (`find -newer` on a marker before each batch); the copy of the numbers
+  gained one, for a folder made that morning.
 - **Not checked:** a real Claude Code session receiving the new board (only the hook run as the
   harness runs it); Windows and macOS; the HTML board (`tools/baton_board.py`) knows nothing of
   tags, `parent:` or `remind:`; the prompt hook does not read `remind:` (by design).

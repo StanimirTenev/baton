@@ -14,3 +14,4 @@ hooks/baton.turns/
 hooks/baton.ledger/
 hooks/baton.ledger.seen.json
 hooks/baton.ledger.lock
+hooks/baton.board.full.txt

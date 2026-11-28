@@ -1617,17 +1617,17 @@ GROUPS = ("overdue", "accept", "on_us", "ongoing", "external")
 HUMAN_MOVE = ("overdue", "accept", "on_us")     # one definition, for `parent:` and freezing
 # The tag on a task's line, and what it means: said once, in the legend, for the kinds present.
 CHECKS = {
-    "plan": "an open PLAN*.md: the task counts as NOT done until the plan says `state: done` or "
+    "plan": "an open PLAN*.md: the task is NOT done until the plan says `state: done` or "
             "`abandoned`, with `result:`",
-    "I/A": "unverified claims (status I or A) older than 30 days: a debt -- checked, or dropped",
-    "undated": "unverified claims with no date, which cannot age: give each a date cell",
-    "code": "the repository moved past the commit in `code:`",
-    "skill": "a skill the header asks for is missing, or older than the logbook",
-    "ref": "`next` names a file older than the logbook: part of it may be done already",
-    "review": "the state review is due (`true_as_of` + `review_after`)",
-    "next": "`next` is over 240 characters: state belongs in the logbook",
-    "retired": "a constraint marked retired whose text is still there",
-    "parent": "`parent:` names no task it can be folded under, so it is shown on its own",
+    "I/A": "unverified claims (I/A) over 30 days old: a debt, checked or dropped",
+    "undated": "unverified claims with no date, so they cannot age",
+    "code": "the repository moved past `code:`",
+    "skill": "a skill asked for is missing or older than the logbook",
+    "ref": "`next` names a file older than the logbook",
+    "review": "the state review is due",
+    "next": "`next` over 240 characters",
+    "retired": "a retired constraint whose text is still there",
+    "parent": "`parent:` cannot fold it, so it stands alone",
 }
 REMIND_ITEM = re.compile(r"^\s*(\d{4}-\d\d-\d\d|\d{1,2}\.\d{1,2}\.\d{4})\s*[:—–-]\s*(\S.*)$")
 
@@ -3047,7 +3047,7 @@ def main() -> int:
         if not plain:
             return None
         if collapsed:
-            return f"📋 No header: {len(plain)} -- listed in the whole board"
+            return f"📋 No header: {len(plain)} -- in the full board file"
         shown = plain[:MAX_PLAIN]
         rows = []
         for f in shown:
@@ -3075,7 +3075,7 @@ def main() -> int:
         for kind, _ in r["tags"]:
             counted[kind] = counted.get(kind, 0) + 1
     if counted:
-        fixed.append("⚠ The tags on task lines (how many tasks): " + "; ".join(
+        fixed.append("⚠ Tags on the task lines (tasks): " + "; ".join(
             f"⚠{k} ({counted[k]}) {CHECKS[k]}" for k in CHECKS if k in counted)
             + f". The full text of each: `{details_command(root, name)}`")
     closed_task = [r for r in recs if r["unfinished"] and r["group"] in ("finished", "frozen")]
@@ -3125,12 +3125,12 @@ def main() -> int:
             blocks.append(b)
         blocks += fixed
         if frozen:
-            blocks.append(f"❄️ Frozen (not offered): {len(frozen)} -- listed in the whole board"
+            blocks.append(f"❄️ Frozen (not offered): {len(frozen)} -- in the full board file"
                           if level >= 2 else
                           f"❄️ Frozen (not offered): {', '.join(numbered(n) for n in frozen)}")
         if finished:
-            blocks.append(f"✅ Finished (not touched): {len(finished)} -- listed in the whole "
-                          "board" if level >= 1 else
+            blocks.append(f"✅ Finished (not touched): {len(finished)} -- in the full board "
+                          "file" if level >= 1 else
                           f"✅ Finished (not touched): {', '.join(numbered(n) for n in finished)}")
         if keep is None:
             blocks += notices
@@ -3153,17 +3153,17 @@ def main() -> int:
         whole = _local_file("baton.board.full.txt")
         try:
             whole.write_text(_field(context), "utf-8")
-            where = f"the whole board is in {whole}"
+            where = f"the full board file is {whole}"
         except OSError:
-            where = "the whole board could not be written to a file"
+            where = "the full board could not be written to a file"
         names = ["finished", "frozen", "no header", "`next` of ongoing/outside shortened",
                  "every `next` shortened", "`next` of ongoing/outside dropped",
                  "every `next` dropped", "ongoing/outside as names", "every group as names",
                  "ongoing/outside as numbers", "every group as numbers"]
         for level in range(1, len(names) + 1):
             note = (f"✂️ Shortened to fit {BOARD_BUDGET:,} characters, from the bottom up as far "
-                    f"as: {names[level - 1]}; {where} -- read it before saying a task is not on "
-                    "the board.")
+                    f"as: {names[level - 1]}; {where} -- read it when a task the human names is not "
+                    "here; do not show it whole.")
             context = render(level, note)
             if len(context) + over <= BOARD_BUDGET:
                 break

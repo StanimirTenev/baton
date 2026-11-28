@@ -38,7 +38,7 @@ Baton — the tasks in /home/you/tasks, by whose move it is, then priority:
 ⛔ Waiting on someone OUTSIDE / blocked (for information):
 - 3 · broken-disk 🟡 [medium] — zpool replace  (waiting on: new disk (delivery))
 
-⚠ The tags on task lines (how many tasks): ⚠plan (1) an open PLAN*.md: the task counts as NOT done until the plan says `state: done` or `abandoned`, with `result:`. The full text of each: `BATON_HOME="/home/you/tasks" BATON_LOGBOOK="LOGBOOK.md" python3 ".../hooks/baton_session_start.py" --details`
+⚠ Tags on the task lines (tasks): ⚠plan (1) an open PLAN*.md: the task is NOT done until the plan says `state: done` or `abandoned`, with `result:`. The full text of each: `BATON_HOME="/home/you/tasks" BATON_LOGBOOK="LOGBOOK.md" python3 ".../hooks/baton_session_start.py" --details`
 
 ❄️ Frozen (not offered): 4 · old-scraper
 
@@ -335,7 +335,7 @@ until it fits: the finished list becomes a count, then frozen, then the tasks wi
 then `next` is shortened (marked `…`) for ongoing and outside tasks, then for all; then dropped,
 in the same order; then the groups become numbers and names, then numbers alone; last, whole
 lines of the notices at the bottom go. A line is never cut in the middle, and a tag, a reminder
-or a warning line never goes. When anything was shortened, the whole board is written to
+or a warning line never goes. When anything was shortened, the full board is written to
 `baton.board.full.txt` in Baton's data folder (`${CLAUDE_PLUGIN_DATA}`, or beside the hooks) and
 one line says so and where. If the reminders and the warning lines alone are over the budget,
 they are kept and the field is over: what must be said wins over the number.
