@@ -204,7 +204,7 @@ def config() -> tuple[Path, str]:
     return _baton.config(_local_file)
 
 
-BATON_VERSION = "3.47.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
+BATON_VERSION = "3.48.0"   # bumped with every release; a test holds it to CHANGELOG.md's top version
 RELEASES = "https://api.github.com/repos/StanimirTenev/baton/releases/latest"
 
 
@@ -564,20 +564,19 @@ def lessons_notice(now: datetime | None = None) -> str | None:
         fired = [d for d in rec.get("fired_dates", []) if d >= recent]
         if len(caught) >= RECUR_MIN and lid in CAUGHT_IS_USE:
             lines.append(f"- {lid} caught {len(caught)} wrong claims in {RECUR_DAYS} days "
-                         f"(asked {len(fired)} times): the claims section is doing its work. "
-                         "Nothing to change; tell the human the two numbers if they ask.")
+                         f"(asked {len(fired)} times): the section is doing its work. Nothing to "
+                         "change; the two numbers only if the human asks.")
         elif len(caught) >= RECUR_MIN and lid == "L1":
             # Row 132 (09.11): the generic line below proposed "a check ... or a tool" -- both
             # exist for L1. What is left above them is not Baton's to choose.
             lines.append(f"- L1 recurred {len(caught)} times in {RECUR_DAYS} days "
-                         f"({len(fired)} times the situation arose): \"{text}\" -- it is not "
-                         "holding, and its rungs are all in place: the tool (tools/baton_entry.py "
-                         "--title), the note before the write: "
-                         f"{rec.get('surfaced_before', 0)}, Stop's hand-back after it (corrected "
-                         f"after the hand-back: {rec.get('fixed_after', 0)}). The next rung is the "
-                         "human's decision -- a hook that refuses such a write, or Stop correcting "
-                         "the hour itself. Tell the human the numbers; do not propose the tool, it "
-                         "exists.")
+                         f"({len(fired)} times the situation arose): an entry's hour typed, not "
+                         "stamped. Not holding, with every rung in place: tools/baton_entry.py "
+                         f"--title, the note before the write: {rec.get('surfaced_before', 0)}, "
+                         "Stop's hand-back after it (corrected after the hand-back: "
+                         f"{rec.get('fixed_after', 0)}). The next rung is the human's decision (a "
+                         "hook that refuses such a write, or Stop correcting the hour): tell them "
+                         "the numbers; do not propose the tool, it exists.")
         elif len(caught) >= RECUR_MIN:
             lines.append(f"- {lid} recurred {len(caught)} times in {RECUR_DAYS} days "
                          f"({len(fired)} times the situation arose): \"{text}\" -- it is not "
@@ -589,7 +588,7 @@ def lessons_notice(now: datetime | None = None) -> str | None:
                          "hooks/baton_session_start.py with the date and the reason.")
     if not lines:
         return None
-    return "Baton -- lessons (each counted by the hook that watches for it):\n" + "\n".join(lines)
+    return "Baton -- lessons (counted by the hooks):\n" + "\n".join(lines)
 
 
 def _version(tag: str) -> tuple:
@@ -932,6 +931,20 @@ def parse_frontmatter(text: str) -> dict:
     return _canonical(_parse_raw(text))
 
 
+_LIST_ITEM = re.compile(r"\s*\"[^\"]*\"\s*|\s*'[^']*'\s*|[^,]+")
+
+
+def _scalar(val: str) -> str:
+    """One value as `_parse_raw` reads it: quoted to the last quote, or cut at ` #`."""
+    val = val.strip()
+    if val[:1] in ('"', "'"):
+        end = val.rfind(val[0])
+        if end > 0:
+            return val[1:end]
+    cut = val.find(" #")
+    return (val[:cut] if cut != -1 else val).strip().strip("\"'")
+
+
 def _parse_raw(text: str) -> dict:
     """A deliberately small parser: `key: value` lines between a leading pair of
     `---` fences. Scalars, quoted strings, `[a, b]` lists, and trailing ` #` comments.
@@ -940,18 +953,29 @@ def _parse_raw(text: str) -> dict:
     if not lines or lines[0].strip() != "---":
         return {}
     fm = {}
+    listing = None          # the key of an empty `key:` line, whose `- item` lines follow (v3.48.0)
     for line in lines[1:]:
         if line.strip() == "---":
             return fm
         s = line.strip()
+        if listing is not None and s.startswith("- "):
+            # A block list, as `remind:` is written: only right after an empty `key:`, so a
+            # `- x: y` line anywhere else is read as it always was.
+            fm[listing] = (fm[listing] if isinstance(fm[listing], list) else []) + [_scalar(s[2:])]
+            continue
+        if s and not s.startswith("#"):
+            listing = None
         if not s or s.startswith("#") or ":" not in line:
             continue
         key, _, val = line.partition(":")
         key, val = key.strip(), val.strip()
         if val.startswith("[") and val.endswith("]"):
-            inner = val[1:-1].strip()
-            fm[key] = [x.strip().strip("\"'") for x in inner.split(",") if x.strip()]
+            # Quote-aware: `["2026-12-09: renew, then tell Ivan"]` is one item, not two.
+            fm[key] = [x.strip().strip("\"'") for x in _LIST_ITEM.findall(val[1:-1])
+                       if x.strip().strip("\"'")]
             continue
+        if not val:
+            listing = key
         # A quoted value runs to the LAST quote on the line, and a `#` inside it
         # is text. Two truncations were found this way, both silent, because a
         # cut pointer reads exactly like a whole one: `... GitHub issue #1 ...`
@@ -1557,18 +1581,312 @@ def numbered(name: str) -> str:
     return f"{IDS[name]} · {name}" if name in IDS else name
 
 
-def line_for(name: str, fm: dict, tail: str = "") -> str:
+def line_for(name: str, fm: dict, tail: str = "", tags: str = "",
+             cut: int | None = None) -> str:
+    """One task's line. `tags` (v3.48.0) go before `next`, so a shortened `next` never takes a
+    warning with it; `cut` shortens `next` to that many characters, marked `…`, and 0 drops it."""
     name = numbered(name)
     p = str(fm.get("priority", "")).strip()
     dot = PRIORITY_DOT.get(p.lower())
     badge = (f" {dot} [{p}]" if dot else f" [{p}]") if p else ""
-    nxt = fm.get("next") or fm.get("done_when") or ""
+    badge += f" {tags}" if tags else ""
+    nxt = str(fm.get("next") or fm.get("done_when") or "")
+    if cut is not None and len(nxt) > cut:
+        nxt = nxt[:cut].rstrip() + "…" if cut else ""
     body = f" — {nxt}" if nxt else ""
     # Named, not loaded. The agent reads this and invokes what it needs; the hook
     # never reaches into the session to load anything on its behalf.
     skill_names = skills_for(fm)
     skills = f"  ⟨skills: {', '.join(skill_names)}⟩" if skill_names else ""
     return f"- {name}{badge}{body}{tail}{skills}"
+
+
+# -- v3.48.0: a board that reaches the agent whole ---------------------------------------------
+#
+# Claude Code keeps 10,000 characters of a hook's context field; past it the agent gets a path and
+# the first 2,000 (CHANGELOG v3.12.0). On the maintainer's machine the board was 18,423 characters
+# on 28.11.2026, and the preview ended at the fourth task: every warning below it -- unclosed
+# plans, shelf life, the ledger -- never reached the agent. So each check is now a short tag on
+# its task's own line, the full text of every check is one command away (`--details`), and the
+# whole field is held under BOARD_BUDGET by collapsing from the bottom up.
+BOARD_BUDGET = 9000           # characters of the whole additionalContext field, rules included
+REMIND_DAYS = 14              # a reminder is shown this many days before its date, and after it
+FREEZE_AFTER_DAYS = 30        # no entry for longer, and not on the human's move: freeze it?
+NEXT_SHORT = 60               # `next` cut to this when the board must shrink
+GROUPS = ("overdue", "accept", "on_us", "ongoing", "external")
+HUMAN_MOVE = ("overdue", "accept", "on_us")     # one definition, for `parent:` and freezing
+# The tag on a task's line, and what it means: said once, in the legend, for the kinds present.
+CHECKS = {
+    "plan": "an open PLAN*.md: the task counts as NOT done until the plan says `state: done` or "
+            "`abandoned`, with `result:`",
+    "I/A": "unverified claims (status I or A) older than 30 days: a debt -- checked, or dropped",
+    "undated": "unverified claims with no date, which cannot age: give each a date cell",
+    "code": "the repository moved past the commit in `code:`",
+    "skill": "a skill the header asks for is missing, or older than the logbook",
+    "ref": "`next` names a file older than the logbook: part of it may be done already",
+    "review": "the state review is due (`true_as_of` + `review_after`)",
+    "next": "`next` is over 240 characters: state belongs in the logbook",
+    "retired": "a constraint marked retired whose text is still there",
+    "parent": "`parent:` names no task it can be folded under, so it is shown on its own",
+}
+REMIND_ITEM = re.compile(r"^\s*(\d{4}-\d\d-\d\d|\d{1,2}\.\d{1,2}\.\d{4})\s*[:—–-]\s*(\S.*)$")
+
+
+def reminders(fm: dict) -> list:
+    """`remind:` items as (date or None, text): a block list, a `[...]` list or one value. An
+    item without a leading date is kept with None, so it is shown, never dropped in silence."""
+    raw = fm.get("remind")
+    items = raw if isinstance(raw, list) else ([raw] if str(raw or "").strip() else [])
+    out = []
+    for item in items:
+        m = REMIND_ITEM.match(str(item))
+        day = _as_date(m.group(1)) if m else None
+        out.append((day, m.group(2).strip()) if day else (None, str(item).strip()))
+    return out
+
+
+def last_entry(text: str, logbook: Path) -> date | None:
+    """The newest dated entry heading; the file's time when there is none."""
+    days = []
+    for m in _ENTRY_HEADING.finditer(text):
+        day = _as_date(m.group(1))
+        if day:
+            days.append(day)
+    if days:
+        return max(days)
+    try:
+        return date.fromtimestamp(logbook.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def scan(folders: list, name: str, today: date) -> list:
+    """Every task folder, read once and checked, with no side effect: the board and `--details`
+    read the same records. Each check leaves a tag for the task's line and its full sentence,
+    worded as the board said it before v3.48.0, for `--details`."""
+    recs = []
+    for f in folders:
+        lb = f / name
+        text = read_head(lb) if lb.is_file() else ""
+        fm = parse_frontmatter(text) if text else {}
+        r = {"name": f.name, "folder": f, "fm": fm, "group": "plain", "tags": [], "stale": [],
+             "unfinished": None, "children": [], "under": None, "dl": None, "q": None,
+             "remind": reminders(fm), "last": None}
+        recs.append(r)
+        if not fm:   # no header → original behaviour, sorted by mtime later
+            continue
+        sast = str(fm.get("state", "")).strip().lower()
+        # 🔴 An open plan is checked BEFORE the status branch, not after it. A finished
+        # header used to `continue` seventeen lines before `open_plan` was called, so a
+        # logbook and a plan could say opposite things about whether the work was done
+        # and only one of them was ever shown. Found by an external review of v2.14.0.
+        #
+        # Finishing the task in the header does not close the plan. Saying it does is
+        # the tick that satisfies a check without the thing behind it being true --
+        # which is the same reason `rezultat:` is required to close one.
+        plan_now = open_plan(f)
+        if plan_now:
+            r["unfinished"] = (f"- {f.name} — {plan_now}"
+                               + (" ⚠️ and the header says finished" if sast in FINISHED else ""))
+        if sast in FINISHED:
+            r["group"] = "finished"
+            continue
+        if sast == "frozen":
+            # parked on purpose: shown for the record, never offered as work
+            r["group"] = "frozen"
+            continue
+        tags, stale = r["tags"], r["stale"]
+        if plan_now:
+            tags.append(("plan", "⚠plan"))
+        # Shelf life. A frozen or finished task is skipped above on purpose: a
+        # snapshot nobody is working from cannot mislead anybody.
+        due = review_due(fm, today)
+        if due:
+            _, late = due
+            tags.append(("review", "⚠review"))
+            stale.append(f"- {f.name} — the state review was due {late} "
+                         f"{'day' if late == 1 else 'days'} ago (`true_as_of` + `review_after`)")
+        debt = unverified_debt(f, today)
+        if debt:
+            count, age = debt
+            tags.append(("I/A", f"⚠I/A {count}"))
+            stale.append(f"- {f.name} — {count} unverified claims (status I/A), "
+                         f"the oldest {age} days old")
+        undated = undated_claims(f)
+        if undated:
+            tags.append(("undated", f"⚠undated {undated}"))
+            stale.append(f"- {f.name} — {undated} unverified "
+                         f"{'claim' if undated == 1 else 'claims'} (status I/A) with no date of "
+                         f"its own and none above it: it cannot age, so give it a date cell")
+        moved = kod_drift(fm)
+        if moved:
+            tags.append(("code", "⚠code"))
+            stale.append(f"- {f.name} — {moved}")
+        drift = pointer_drift(fm)
+        if drift:
+            tags.append(("next", "⚠next"))
+            stale.append(f"- {f.name} — `next` is {drift} characters: a pointer that has started "
+                         f"carrying state. State lives in the logbook; this field holds the next move")
+        bad_skills = skill_trouble(skills_for(fm), f, name)
+        if bad_skills:
+            tags.append(("skill", "⚠skill"))
+            stale.append(f"- {f.name} — skills the header asks for: "
+                         + "; ".join(bad_skills)
+                         + ". A missing skill does not load; a stale one is read with confidence")
+        behind = stale_reference(f, name, fm)
+        if behind:
+            tags.append(("ref", "⚠ref"))
+            stale.append(f"- {f.name} — `next` points at {', '.join(behind)}. "
+                         f"Work has happened since that file was last read — check whether "
+                         f"part of what it asks for is already done (possibly in another folder)")
+        alive = retired_but_present(f)
+        if alive:
+            tags.append(("retired", "⚠retired"))
+            stale.append(f"- {f.name} — a constraint marked as **retired** whose text "
+                         f"is still there: {', '.join(alive)}")
+        dl = deadline(fm)
+        r.update(dl=dl, q=open_questions(f), last=last_entry(text, lb))
+        if str(fm.get("awaiting") or "").strip():
+            # A result is delivered and waits for the human's yes (v3.47.0, rows 195/204): not
+            # the same ask as a decision, so not in "waiting on you" -- and not outside either,
+            # whatever `turn` says, because the next word is the human's.
+            r["group"] = "accept"
+        elif not is_us(fm) or sast == "waiting":
+            # someone/something else is on the hook — a person OR a condition
+            # (a disk to arrive). Never in "we can progress now", even with a deadline.
+            r["group"] = "external"
+        elif sast == "ongoing" or str(fm.get("timing", "")).lower() == "recurring":
+            r["group"] = "ongoing"
+        elif dl is not None and (dl - today).days <= SOON_DAYS:
+            r["group"] = "overdue"
+        else:
+            r["group"] = "on_us"
+    fold(recs)
+    return recs
+
+
+def fold(recs: list) -> None:
+    """`parent: <folder>` (v3.48.0): a sub-task is a task like any other -- its own number,
+    logbook, Stop and ledger -- but on the board it is folded into its parent's line. One level
+    only. A parent that is not a task with a header here, is finished or frozen, is the task
+    itself, or has a parent of its own, folds nothing: the child is shown on its own, tagged."""
+    by_name = {r["name"]: r for r in recs}
+    for r in recs:
+        if r["group"] not in GROUPS:
+            continue                      # a finished or frozen child stays in its list
+        want = str(r["fm"].get("parent") or "").strip().rstrip("/\\")
+        if not want:
+            continue
+        par = by_name.get(want)
+        if par is None or par is r:
+            why = "is not a task folder here"
+        elif not par["fm"]:
+            why = "has no header"
+        elif par["group"] not in GROUPS:
+            why = f"is {par['group']}"
+        elif str(par["fm"].get("parent") or "").strip():
+            why = "has a parent of its own (one level only)"
+        else:
+            r["under"] = want
+            par["children"].append(r)
+            continue
+        r["tags"].append(("parent", "⚠parent"))
+        r["stale"].append(f"- {r['name']} — `parent: {want}` {why}, so it is shown as a task "
+                          "of its own")
+
+
+def details_text(recs: list, drift: list, unlogged: list, today: date) -> str:
+    """What the board said in full before v3.48.0: the unclosed plans, the shelf life and the
+    work newer than its logbook, word for word; and every reminder, near or far."""
+    unfinished = sorted(r["unfinished"] for r in recs if r["unfinished"])
+    stale = sorted(drift + [s for r in recs for s in r["stale"]])
+    blocks = []
+    if unfinished:
+        blocks.append(
+            "⛔ UNCLOSED PLANS — the task counts as not done:\n"
+            + "\n".join(unfinished)
+            + "\n(Close it with `state: done` OR `abandoned`, AND `result:` in PLAN.md — "
+              "what came of it. An abandoned plan is closed the same way.)")
+    if stale:
+        blocks.append(
+            "⏳ Past its shelf life — read this before relying on it:\n"
+            + "\n".join(stale)
+            + "\n(A claim with status I or A is not a fact — it is a debt. Either it gets checked, "
+              "or it is dropped.)")
+    if unlogged:
+        blocks.append(
+            "📝 Work newer than its logbook, from before this session:\n"
+            + "\n".join(f"- {u}" for u in unlogged)
+            + "\n(Write the entry it is missing. A .batonignore line is for a file that changes on "
+              "its own, and is the human's to add.)")
+    every = [(d, t, r["name"]) for r in recs for d, t in r["remind"]]
+    if every:
+        blocks.append("⏰ Every reminder (`remind:`):\n" + "\n".join(
+            f"- {d.isoformat() if d else '(no date)'} — {t}  ({n})"
+            for d, t, n in sorted(every, key=lambda x: (x[0] or date.min, x[2]))))
+    return "\n\n".join(blocks)
+
+
+def reminder_block(recs: list, today: date) -> str | None:
+    """⏰ at the top of the board: due within REMIND_DAYS, or past (marked overdue), with the
+    task's number -- finished and frozen tasks too, since the thing does not wait for the task.
+    An item that cannot be read is shown as that. Never collapsed by the budget."""
+    near, later = [], 0
+    for r in recs:
+        for day, text in r["remind"]:
+            if day is None:
+                near.append((date.min, f"- ⚠remind {numbered(r['name'])}: cannot read "
+                                       f"\"{text}\" -- write it as \"YYYY-MM-DD: what\""))
+                continue
+            left = (day - today).days
+            if left > REMIND_DAYS:
+                later += 1
+                continue
+            when = ("OVERDUE by " + (f"{-left} day" if left == -1 else f"{-left} days")
+                    if left < 0 else "today" if left == 0 else
+                    "tomorrow" if left == 1 else f"in {left} days")
+            near.append((day, f"- {day.isoformat()}, {when} — {text}  ({numbered(r['name'])})"))
+    if not near and not later:
+        return None
+    head = f"⏰ Reminders (within {REMIND_DAYS} days, or past)"
+    head += f"; {later} later" if later else ""
+    if not near:
+        return head + ": none now."
+    return head + ":\n" + "\n".join(t for _, t in sorted(near, key=lambda x: x[0]))
+
+
+def details_command(root: Path, name: str) -> str:
+    """The command that prints the full text of every check. It runs in the agent's shell, where
+    the plugin's data folder is not set: the root, the logbook name and that folder go with it."""
+    env = [f"BATON_HOME=\"{root}\"", f"BATON_LOGBOOK=\"{name}\""]
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if data:
+        env.append(f"CLAUDE_PLUGIN_DATA=\"{data}\"")
+    py = "python" if os.name == "nt" else "python3"
+    return " ".join(env) + f" {py} \"{Path(__file__).resolve()}\" --details"
+
+
+def details() -> int:
+    """`baton_session_start.py --details`: the full text of every check, for the agent to read
+    when a tag on the board needs its sentence. Reads; writes nothing (no task numbers, no
+    memory of the logbooks), so it can be run any number of times."""
+    root, name = config()
+    folders = task_folders(root) if root.is_dir() else []
+    today = date.today()
+    recs = scan(folders, name, today)
+    drift = []
+    drifted = install_drift()
+    if drifted:
+        drift.append("- 🔴 THE RUNNING HOOKS ARE NOT FROM THE SOURCE: " + ", ".join(drifted)
+                     + " — a fix that is not installed does not work, however tagged it is")
+    as_plugin = plugin_drift()
+    if as_plugin:
+        drift.append(as_plugin)
+    text = details_text(recs, drift, unlogged_work(root, name, save=False) if folders else [],
+                        today)
+    out = text or f"Baton: no check has anything to say about the tasks in {root}."
+    sys.stdout.buffer.write((out + "\n").encode("utf-8"))
+    return 0
 
 
 def _own_session() -> dict:
@@ -1969,11 +2287,11 @@ def ledger_notice(root: Path, name: str) -> str | None:
         tool = Path(repo).expanduser() / "tools" / "baton_ledger.py"
     run = (f"BATON_HOME=\"{root}\" BATON_LOGBOOK=\"{name}\" BATON_LEDGER=\"{d}\" python3 \"{tool}\""
            if tool.is_file() else None)
-    return ("🧾 Baton's ledger of logbook entries: " + "; ".join(said) + ". A logbook entry is a "
-            "record and is not edited; this may be a mistake, a correction made in a later turn, "
-            "or something worse -- the human decides, Baton changes nothing. Tell the human."
-            + (f" To see it: `{run} verify`; an edit the human accepts: `{run} ack --reason "
-               "\"<why>\"` (adds a line to the ledger, edits none)." if run else
+    return ("🧾 Baton's ledger of logbook entries: " + "; ".join(said) + ". An entry is a record, "
+            "not edited: a mistake, a later correction or worse -- the human decides, Baton "
+            "changes nothing. Tell the human."
+            + (f" `{run} verify` shows it; `ack --reason \"<why>\"` in place of `verify` accepts "
+               "an edit (adds a ledger line, edits none)." if run else
                f" The ledger is in {d}."))
 
 
@@ -2148,12 +2466,11 @@ def feedback_notice(today: date) -> str | None:
 
 
 SHOW_BOARD = (
-    "The human has not seen this board -- only one line saying Baton is on. Whatever the "
-    "human's first message is -- a greeting, a question or a task -- the first thing in your "
-    "first reply is the WHOLE board, translated into the human's language; then answer them. "
-    "Show every group and every line, nothing shortened or left out -- no summary, no merged lines, "
-    "no \"...and the rest\", and the notes in parentheses too. Task names, file names, "
-    "commands, fields in backticks and identifiers stay as they are."
+    "The human has not seen this board, only a one-line notice. Whatever the human's first "
+    "message (a greeting, a question, a task), your first reply opens with the WHOLE board, "
+    "translated into the human's language, then answers it: every group and every line, the "
+    "notes in parentheses too -- no summary, nothing merged or left out. Task names, files, "
+    "commands, `fields` and identifiers stay as they are."
 )
 
 
@@ -2272,10 +2589,9 @@ def page_route() -> str | None:
     if tool is None:
         return None
     py = "python" if os.name == "nt" else "python3"
-    return (f"📄 Baton page (this install's ID, what is new, Update Baton, friends, shared tasks): it "
-            f"never opens by itself. Only when the human asks for it (\"open the Baton page\"), run "
-            f"`{py} {tool} --open` (it prints no link). Shared tasks with a friend, when the human "
-            f"asks (\"start a shared task X with <nick>\", \"what is new in the shared task\"): "
+    return (f"📄 Baton page (ID, what is new, Update Baton, friends): it never opens by itself, "
+            f"only when the human asks (\"open the Baton page\"), run `{py} {tool} --open` (it "
+            f"prints no link). A task shared with a friend, when asked: "
             f"`{py} {tool.with_name('baton_shared.py')} --help`.")
 
 
@@ -2438,21 +2754,30 @@ def _marked(block: str, text: str | None) -> str | None:
     return f"[baton:{block} v{BATON_VERSION}]\n{text}" if text else None
 
 
+ID_NOTE = "(Show this line first, exactly as it is: the human's own Baton number, for people they trust.)"
+
+
+def _field(context: str | None, block: str = "board") -> str:
+    """The additionalContext field exactly as it goes out: the ID line above the board, the
+    block's marker, and in plugin mode the rules -- the whole of what Claude Code measures."""
+    if block == "board" and context:
+        ident = id_line()
+        if ident:
+            context = ident + "\n" + ID_NOTE + "\n\n" + context
+    return "\n\n".join(t for t in (_marked(block, context), _marked("rules", plugin_rules()))
+                       if t)
+
+
 def _emit(context: str | None, line: str | None = None, block: str = "board") -> int:
     """The one way out: the agent's context (plus the rules in plugin mode) and the one line
     the human sees."""
     if block == "board" and (context or line):
         ident = id_line()
         if ident:
-            if context:
-                context = (ident + "\n(Show this line first, above the board, exactly as it is: "
-                           "the human's own Baton number, given only to people they trust.)\n\n"
-                           + context)
             line = ident + (" · " + line if line else "")
     if block == "board" and PAGE_LINE:
         line = " · ".join(([line] if line else []) + PAGE_LINE)   # the human's line only
-    text = "\n\n".join(t for t in (_marked(block, context), _marked("rules", plugin_rules()))
-                       if t)
+    text = _field(context, block)
     out: dict = {}
     if line:
         out["systemMessage"] = line
@@ -2479,13 +2804,10 @@ def _notices_only(notices: list[str], line: str | None = None) -> int:
 
 COMPACT_LINE = "🧭 Baton: context compacted -- the agent writes the logbook before going on."
 
-CLEARED = ("Baton: the human typed /clear to continue with a fresh context -- the previous "
-           "conversation is gone from it, but for what Baton kept of it after the last logbook entry "
-           "(💬 below, when there is any), and Baton asked for the logbooks to be written just "
-           "before. Do not ask what was being done: the board below and each task's logbook "
-           "hold it. Show the board as usual; the tasks touched most recently are the ones "
-           "they were working on, so read the top entry of those logbooks before the human's "
-           "next request.")
+CLEARED = ("Baton: the human typed /clear for a fresh context. The logbooks were asked for just "
+           "before, and what was said after the last entry is under 💬 below, when there is any. "
+           "Do not ask what was being done: show the board as usual, and read the top entry of "
+           "the most recently touched tasks before the human's next request.")
 
 
 def compacted(own: dict) -> str:
@@ -2533,10 +2855,11 @@ UNREAD: list = []     # the note for folders the walk did not read to the end (r
 LOST: list = []       # the note for history gone without an entry saying so (row 37)
 
 
-def unlogged_work(root: Path, name: str) -> list[str]:
+def unlogged_work(root: Path, name: str, save: bool = True) -> list[str]:
     """Folders holding work newer than their logbook -- the Stop hook's own check, without its
     session limit. Never a reason to lose the board. Folders over the Stop hook's WALK_CAP
-    leave their note in UNREAD."""
+    leave their note in UNREAD. `save=False` (`--details`): the memory of the logbooks is read,
+    not written, so a look does not use up what the board says once."""
     UNREAD.clear()
     LOST.clear()
     try:
@@ -2544,9 +2867,13 @@ def unlogged_work(root: Path, name: str) -> list[str]:
             "baton_stop", Path(__file__).with_name("baton_stop.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        if not save:
+            mod._save_bodies = lambda *a, **k: None
         found = mod.unrecorded(root, name)
         if mod.TRUNCATED:
-            UNREAD.append(mod.unread_note(mod.TRUNCATED))
+            UNREAD.append(f"Baton: not read to the end (over {mod.WALK_CAP:,} files), so newer work "
+                          f"further in is not seen: {', '.join(mod.TRUNCATED)} -- name their data "
+                          "folders in each one's .batonignore (`cache/`).")
         if mod.LOST or mod.FORGOT:
             LOST.append(mod.lost_note(mod.LOST, mod.FORGOT))
         return found
@@ -2632,140 +2959,95 @@ def main() -> int:
                                                                      own),) if n],
                              start_line(root=root))
 
-    overdue, recurring, on_us, external, plain, finished, frozen = [], [], [], [], [], [], []
-    to_accept: list[dict] = []
-    stale: list[str] = []
-    unfinished: list[str] = []
     today = date.today()
-
+    recs = scan(folders, name, today)
+    drift: list[str] = []          # not about a task: a line of their own, kept as it was
     drifted = install_drift()
     if drifted:
-        stale.append("- 🔴 THE RUNNING HOOKS ARE NOT FROM THE SOURCE: " + ", ".join(drifted)
+        drift.append("- 🔴 THE RUNNING HOOKS ARE NOT FROM THE SOURCE: " + ", ".join(drifted)
                      + " — a fix that is not installed does not work, however tagged it is")
     as_plugin = plugin_drift()
     if as_plugin:
-        stale.append(as_plugin)
+        drift.append(as_plugin)
 
-    for f in folders:
-        lb = f / name
-        text = read_head(lb) if lb.is_file() else ""
-        fm = parse_frontmatter(text) if text else {}
-        if not fm:  # no header → original behaviour, sorted by mtime later
-            plain.append(f)
-            continue
-        sast = str(fm.get("state", "")).strip().lower()
-        # 🔴 An open plan is checked BEFORE the status branch, not after it. A finished
-        # header used to `continue` seventeen lines before `open_plan` was called, so a
-        # logbook and a plan could say opposite things about whether the work was done
-        # and only one of them was ever shown. Found by an external review of v2.14.0.
-        #
-        # Finishing the task in the header does not close the plan. Saying it does is
-        # the tick that satisfies a check without the thing behind it being true --
-        # which is the same reason `rezultat:` is required to close one.
-        plan_now = open_plan(f)
-        if plan_now:
-            unfinished.append(f"- {f.name} — {plan_now}"
-                              + (" ⚠️ and the header says finished" if sast in FINISHED else ""))
-        if sast in FINISHED:
-            finished.append(f.name)
-            continue
-        if sast == "frozen":
-            # parked on purpose: shown for the record, never offered as work
-            frozen.append(f.name)
-            continue
+    rank = {g: i for i, g in enumerate(GROUPS)}
 
-        # Shelf life. A frozen or finished task is skipped above on purpose: a
-        # snapshot nobody is working from cannot mislead anybody.
-        due = review_due(fm, today)
-        if due:
-            _, late = due
-            stale.append(f"- {f.name} — the state review was due {late} "
-                         f"{'day' if late == 1 else 'days'} ago (`true_as_of` + `review_after`)")
-        debt = unverified_debt(f, today)
-        if debt:
-            count, age = debt
-            stale.append(f"- {f.name} — {count} unverified claims (status I/A), "
-                         f"the oldest {age} days old")
-        undated = undated_claims(f)
-        if undated:
-            stale.append(f"- {f.name} — {undated} unverified "
-                         f"{'claim' if undated == 1 else 'claims'} (status I/A) with no date of "
-                         f"its own and none above it: it cannot age, so give it a date cell")
-        moved = kod_drift(fm)
-        if moved:
-            stale.append(f"- {f.name} — {moved}")
-        drift = pointer_drift(fm)
-        if drift:
-            stale.append(f"- {f.name} — `next` is {drift} characters: a pointer that has started "
-                         f"carrying state. State lives in the logbook; this field holds the next move")
-        bad_skills = skill_trouble(skills_for(fm), f, name)
-        if bad_skills:
-            stale.append(f"- {f.name} — skills the header asks for: "
-                         + "; ".join(bad_skills)
-                         + ". A missing skill does not load; a stale one is read with confidence")
-        behind = stale_reference(f, name, fm)
-        if behind:
-            stale.append(f"- {f.name} — `next` points at {', '.join(behind)}. "
-                         f"Work has happened since that file was last read — check whether "
-                         f"part of what it asks for is already done (possibly in another folder)")
-        alive = retired_but_present(f)
-        if alive:
-            stale.append(f"- {f.name} — a constraint marked as **retired** whose text "
-                         f"is still there: {', '.join(alive)}")
-        dl = deadline(fm)
-        rec = {"name": f.name, "fm": fm, "dl": dl, "q": open_questions(f)}
-        if str(fm.get("awaiting") or "").strip():
-            # A result is delivered and waits for the human's yes (v3.47.0, rows 195/204): not
-            # the same ask as a decision, so not in "waiting on you" -- and not outside either,
-            # whatever `turn` says, because the next word is the human's.
-            to_accept.append(rec)
-        elif not is_us(fm) or sast == "waiting":
-            # someone/something else is on the hook — a person OR a condition
-            # (a disk to arrive). Never in "we can progress now", even with a deadline.
-            external.append(rec)
-        elif sast == "ongoing" or str(fm.get("timing", "")).lower() == "recurring":
-            recurring.append(rec)
-        elif dl is not None and (dl - today).days <= SOON_DAYS:
-            overdue.append(rec)
-        else:
-            on_us.append(rec)
+    def shown_in(r: dict) -> str:
+        """A parent is lifted into the highest group of a child on the human's move."""
+        up = [c["group"] for c in r["children"] if c["group"] in HUMAN_MOVE]
+        return min([r["group"]] + up, key=rank.get)
 
-    for bucket in (overdue, to_accept, on_us, recurring, external):
+    groups: dict = {g: [] for g in GROUPS}
+    for r in recs:
+        if r["group"] in GROUPS and not r["under"]:
+            groups[shown_in(r)].append(r)
+    for bucket in groups.values():
         bucket.sort(key=lambda r: (prio(r["fm"]), r["dl"] or date.max))
-    plain.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    # In the board's order, so the first numbers go to the tasks shown first.
-    ids_assign(root, [r["name"] for r in overdue + to_accept + on_us + recurring + external]
-               + [f.name for f in plain] + sorted(frozen) + sorted(finished))
+    for r in recs:
+        r["children"].sort(key=lambda c: (rank[c["group"]], prio(c["fm"]), c["dl"] or date.max))
+    plain = sorted((r["folder"] for r in recs if r["group"] == "plain"),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    frozen = sorted(r["name"] for r in recs if r["group"] == "frozen")
+    finished = sorted(r["name"] for r in recs if r["group"] == "finished")
+    active = [r for r in recs if r["group"] in GROUPS]
+    # In the board's order, so the first numbers go to the tasks shown first; a sub-task right
+    # after its parent.
+    ids_assign(root, [n for g in GROUPS for r in groups[g]
+                      for n in [r["name"]] + [c["name"] for c in r["children"]]]
+               + [f.name for f in plain] + frozen + finished)
 
-    blocks = []
-    if overdue:
-        blocks.append("⏰ DEADLINE due / passed:\n" + "\n".join(
-            line_for(r["name"], r["fm"], f"  (deadline {r['dl']})" + questions_tail(r["q"]))
-            for r in overdue))
-    if to_accept:
-        def accept_tail(r):
-            bits = [f"to accept: {str(r['fm'].get('awaiting')).strip()}"]
-            if r["dl"]:
-                bits.append(f"deadline {r['dl']}")
-            return f"  ({', '.join(bits)})" + questions_tail(r["q"])
-        blocks.append("📥 Waiting for YOUR acceptance (a result is delivered; say yes, or what "
-                      "to fix):\n" + "\n".join(
-                          line_for(r["name"], r["fm"], accept_tail(r)) for r in to_accept))
-    if on_us:
-        blocks.append("⏳ Waiting on YOU / can continue now:\n" + "\n".join(
-            line_for(r["name"], r["fm"], questions_tail(r["q"])) for r in on_us))
-    if recurring:
-        blocks.append("🔁 Ongoing:\n" + "\n".join(
-            line_for(r["name"], r["fm"], questions_tail(r["q"])) for r in recurring))
-    if external:
-        def ext_tail(r):
-            bits = [] if is_us(r["fm"]) else [f"waiting on: {r['fm'].get('turn')}"]
-            if r["dl"]:
-                bits.append(f"deadline {r['dl']}")
-            return (f"  ({', '.join(bits)})" if bits else "") + questions_tail(r["q"])
-        blocks.append("⛔ Waiting on someone OUTSIDE / blocked (for information):\n" + "\n".join(
-            line_for(r["name"], r["fm"], ext_tail(r)) for r in external))
-    if plain:
+    def tags_of(r: dict) -> str:
+        return " ".join(t for _, t in r["tags"])
+
+    def tail_of(r: dict, g: str) -> str:
+        fm, bits = r["fm"], []
+        if g == "accept":
+            bits.append(f"to accept: {str(fm.get('awaiting')).strip()}")
+        elif g == "external" and not is_us(fm):
+            bits.append(f"waiting on: {fm.get('turn')}")
+        if r["dl"] and g in ("overdue", "accept", "external"):
+            bits.append(f"deadline {r['dl']}")
+        out = f"  ({', '.join(bits)})" if bits else ""
+        if r["children"]:
+            subs = ", ".join(numbered(c["name"]).split(" · ")[0]
+                             + (" " + tags_of(c) if tags_of(c) else "") for c in r["children"])
+            n = len(r["children"])
+            out += f"  (+{n} sub-task{'' if n == 1 else 's'}: {subs})"
+        return out + questions_tail(r["q"])
+
+    HEADS = {
+        "overdue": "⏰ DEADLINE due / passed:",
+        "accept": "📥 Waiting for YOUR acceptance (a result is delivered; say yes, or what to fix):",
+        "on_us": "⏳ Waiting on YOU / can continue now:",
+        "ongoing": "🔁 Ongoing:",
+        "external": "⛔ Waiting on someone OUTSIDE / blocked (for information):",
+    }
+
+    def group_block(g: str, cut, numbers_only: int) -> str | None:
+        """numbers_only: 1 the numbers and names, 2 the numbers alone."""
+        rows = groups[g]
+        if not rows:
+            return None
+        if numbers_only:
+            label = (numbered if numbers_only == 1 else
+                     lambda n: numbered(n).split(" · ")[0])
+            return (f"{HEADS[g]} {len(rows)} -- "
+                    + ", ".join(label(r["name"]) + (f" (+{len(r['children'])})"
+                                                    if r["children"] else "") for r in rows))
+        lines = []
+        for r in rows:
+            lines.append(line_for(r["name"], r["fm"], tail_of(r, g), tags_of(r), cut))
+            for c in r["children"]:
+                if c["group"] in HUMAN_MOVE:      # the human's move is never folded away
+                    lines.append("  " + line_for(c["name"], c["fm"], tail_of(c, c["group"]),
+                                                 tags_of(c), cut))
+        return HEADS[g] + "\n" + "\n".join(lines)
+
+    def plain_block(collapsed: bool) -> str | None:
+        if not plain:
+            return None
+        if collapsed:
+            return f"📋 No header: {len(plain)} -- listed in the whole board"
         shown = plain[:MAX_PLAIN]
         rows = []
         for f in shown:
@@ -2780,68 +3062,125 @@ def main() -> int:
         block = "📋 No header (most recently touched):\n" + "\n".join(rows)
         if more > 0:
             block += f"\n- ...and {more} more"
-        blocks.append(block)
+        return block
 
     unlogged = unlogged_work(root, name)
-    if (not blocks and not frozen and not finished and not stale and not unlogged and not UNREAD
-            and not UNREADABLE
-            and not LOST):
+    if not recs and not unlogged and not UNREAD and not UNREADABLE and not LOST:
         return _notices_only(notices, start_line())
 
-    if unfinished:
-        # Its own block, above the shelf-life notes: an unclosed plan is not a
-        # note about ageing, it is work that was never finished.
-        blocks.append(
-            "⛔ UNCLOSED PLANS — the task counts as not done:\n"
-            + "\n".join(sorted(unfinished))
-            + "\n(Close it with `state: done` OR `abandoned`, AND `result:` in PLAN.md — "
-              "what came of it. An abandoned plan is closed the same way.)")
-    if stale:
-        blocks.append(
-            "⏳ Past its shelf life — read this before relying on it:\n"
-            + "\n".join(sorted(stale))
-            + "\n(A claim with status I or A is not a fact — it is a debt. Either it gets checked, "
-              "or it is dropped.)")
+    # The fixed lines: never collapsed, each as short as it can be and still say what to do.
+    fixed = []
+    counted: dict = {}
+    for r in active:
+        for kind, _ in r["tags"]:
+            counted[kind] = counted.get(kind, 0) + 1
+    if counted:
+        fixed.append("⚠ The tags on task lines (how many tasks): " + "; ".join(
+            f"⚠{k} ({counted[k]}) {CHECKS[k]}" for k in CHECKS if k in counted)
+            + f". The full text of each: `{details_command(root, name)}`")
+    closed_task = [r for r in recs if r["unfinished"] and r["group"] in ("finished", "frozen")]
+    if closed_task:
+        fixed.append("⛔ An open plan in a finished or frozen task -- close them (`state: done` or "
+                     "`abandoned`, with `result:`, in the plan): "
+                     + ", ".join(numbered(r["name"]) for r in closed_task)
+                     + ("" if counted else f" (the full text: `{details_command(root, name)}`)"))
+    sleepy = [r for r in active if r["group"] not in HUMAN_MOVE and r["last"]
+              and (today - r["last"]).days > FREEZE_AFTER_DAYS]
+    if sleepy:
+        fixed.append(f"💤 {len(sleepy)} without an entry for {FREEZE_AFTER_DAYS}+ days: "
+                     + ", ".join(numbered(r["name"]) for r in sleepy)
+                     + " -- freeze? (`state: frozen`; the human decides, Baton changes nothing)")
+    fixed += drift
     if unlogged:
         # Stop asks only about this session's work (v3.10.1); the older debt is shown here.
-        blocks.append(
-            "📝 Work newer than its logbook, from before this session:\n"
-            + "\n".join(f"- {u}" for u in unlogged)
-            + "\n(Write the entry it is missing. A .batonignore line is for a file that changes on "
-              "its own, and is the human's to add.)")
+        fixed.append("📝 Work newer than its logbook, from before this session: "
+                     + ", ".join(numbered(u.split(" (")[0]) for u in unlogged)
+                     + " -- write the entry each is missing (its files: the command above"
+                     + ("" if counted or closed_task else f", `{details_command(root, name)}`")
+                     + "). A .batonignore line is the human's to add.")
     if UNREAD:
-        blocks.append("✂️ " + UNREAD[0])
+        fixed.append("✂️ " + UNREAD[0])
     if UNREADABLE:
-        blocks.append("🔒 " + unreadable_note(UNREADABLE))
+        fixed.append("🔒 " + unreadable_note(UNREADABLE))
     if LOST:
-        blocks.append("🕳️ " + LOST[0] + " (Said once; tell the human.)")
+        fixed.append("🕳️ " + LOST[0] + " (Said once; tell the human.)")
     if IDS_PROBLEM:
-        blocks.append("🔢 " + IDS_PROBLEM[0])
-    if frozen:
-        blocks.append(f"❄️ Frozen (not offered): {', '.join(numbered(n) for n in sorted(frozen))}")
-    if finished:
-        blocks.append(f"✅ Finished (not touched): "
-                      f"{', '.join(numbered(n) for n in sorted(finished))}")
+        fixed.append("🔢 " + IDS_PROBLEM[0])
+    remind = reminder_block(recs, today)
 
-    summary = (
-        f"Baton — the tasks in {root}, ordered by whose move it is and by priority:\n\n"
-        + "\n\n".join(blocks + notices)
-        + ("\n\n(The number before a task is its own and stays: name a task by it -- "
-           "\"12 is finished\", \"go to 12\".)" if IDS else "")
-    )
-    context = (
-        (CLEARED + "\n\n" if cleared else "")
-        + SHOW_BOARD
-        + "\n\n" + summary
-        + f"\n\nBefore working on one, read its {name} (the record of earlier sessions; "
-        f"the front-matter header on top carries the current state). After working, add a new entry "
-        f"at the top and update the header if the state has changed."
-    )
+    def render(level: int, note: str = "", keep: int | None = None) -> str:
+        """The board at a collapse level: 0 is whole; each level shrinks one more thing, from
+        the bottom of the board up. Reminders, tags and the fixed lines are never collapsed."""
+        blocks = [remind] if remind else []
+        for g in GROUPS:
+            far = g in ("ongoing", "external")
+            cut = (0 if level >= (6 if far else 7) else
+                   NEXT_SHORT if level >= (4 if far else 5) else None)
+            b = group_block(g, cut, 2 if level >= (10 if far else 11) else
+                            1 if level >= (8 if far else 9) else 0)
+            if b:
+                blocks.append(b)
+        b = plain_block(level >= 3)
+        if b:
+            blocks.append(b)
+        blocks += fixed
+        if frozen:
+            blocks.append(f"❄️ Frozen (not offered): {len(frozen)} -- listed in the whole board"
+                          if level >= 2 else
+                          f"❄️ Frozen (not offered): {', '.join(numbered(n) for n in frozen)}")
+        if finished:
+            blocks.append(f"✅ Finished (not touched): {len(finished)} -- listed in the whole "
+                          "board" if level >= 1 else
+                          f"✅ Finished (not touched): {', '.join(numbered(n) for n in finished)}")
+        if keep is None:
+            blocks += notices
+        elif keep:
+            blocks.append("\n".join("\n\n".join(notices).split("\n")[:keep]).strip("\n"))
+        if note:
+            blocks.append(note)
+        summary = (f"Baton — the tasks in {root}, by whose move it is, then priority:\n\n"
+                   + "\n\n".join(blocks)
+                   + ("\n\n(A task's number is its own and stays: name a task by it -- "
+                      "\"12 is finished\", \"go to 12\".)" if IDS else ""))
+        return ((CLEARED + "\n\n" if cleared else "") + SHOW_BOARD + "\n\n" + summary
+                + f"\n\nBefore working on a task, read its {name} (the header on top is its "
+                  "current state); after, add an entry at the top and update the header if the "
+                  "state changed.")
+
+    context = render(0)
+    over = len(_field("\0")) - 1           # the ID line, the marker, the rules in plugin mode
+    if len(context) + over > BOARD_BUDGET:
+        whole = _local_file("baton.board.full.txt")
+        try:
+            whole.write_text(_field(context), "utf-8")
+            where = f"the whole board is in {whole}"
+        except OSError:
+            where = "the whole board could not be written to a file"
+        names = ["finished", "frozen", "no header", "`next` of ongoing/outside shortened",
+                 "every `next` shortened", "`next` of ongoing/outside dropped",
+                 "every `next` dropped", "ongoing/outside as names", "every group as names",
+                 "ongoing/outside as numbers", "every group as numbers"]
+        for level in range(1, len(names) + 1):
+            note = (f"✂️ Shortened to fit {BOARD_BUDGET:,} characters, from the bottom up as far "
+                    f"as: {names[level - 1]}; {where} -- read it before saying a task is not on "
+                    "the board.")
+            context = render(level, note)
+            if len(context) + over <= BOARD_BUDGET:
+                break
+        else:
+            # Still over: whole lines of the notices go, from the bottom; never a reminder, a
+            # tag or a fixed line. What is left over that is over, and said so in the note.
+            keep = len("\n\n".join(notices).split("\n")) if notices else 0
+            while keep > 0 and len(context) + over > BOARD_BUDGET:
+                keep -= 1
+                context = render(len(names), note, keep)
 
     # No systemMessage: that one reaches the human as it is, in English. The agent knows the
     # human's language and the hook does not, so the agent shows the board -- translated.
-    return _emit(context, start_line(len(overdue) + len(on_us), len(recurring), len(external),
-                                     plain=len(plain), to_accept=len(to_accept)))
+    own_count = lambda *gs: sum(1 for r in active if r["group"] in gs)   # noqa: E731
+    return _emit(context, start_line(own_count("overdue", "on_us"), own_count("ongoing"),
+                                     own_count("external"), plain=len(plain),
+                                     to_accept=own_count("accept")))
 
 
 def _load_baton():
@@ -2896,6 +3235,9 @@ if __name__ == "__main__":
         print(f"Baton: {Path(__file__).name} could not load _baton.py beside it; "
               "the hook did not run.", file=sys.stderr)
         sys.exit(1)
+    if sys.argv[1:] == ["--details"]:
+        # By hand, from the board's own line; not a hook run: no stdin, no heartbeat.
+        sys.exit(details())
     _start()
     try:
         code = main()

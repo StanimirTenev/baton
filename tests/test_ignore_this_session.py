@@ -95,5 +95,9 @@ def test_the_board_no_longer_offers_the_ignore_file_as_the_way_out(tmp_path):
                HOME=str(tmp_path / "home"))
     out = subprocess.run([sys.executable, str(ROOT / "hooks" / "baton_session_start.py")],
                          input=b"{}", capture_output=True, env=env)
-    ctx = out.stdout.decode("utf-8")
-    assert "contract-v2.md" in ctx and "or add the file to the folder's .batonignore" not in ctx
+    ctx = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
+    # v3.48.0: the board names the folder; its files are in the command the board names.
+    from conftest import board_details
+    full = board_details(ctx, env)
+    assert "contract-v2.md" in full
+    assert "or add the file to the folder's .batonignore" not in ctx + full

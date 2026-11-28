@@ -174,7 +174,11 @@ def test_a_finished_task_still_reports_an_open_plan(tmp_path, monkeypatch):
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     message = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
-    assert "otvoren-plan" in message
-    assert "PLAN.md" in message, (
+    # v3.48.0: a finished task has no line for a tag, so it is named in one line of its own.
+    close = [ln for ln in message.splitlines() if ln.startswith("⛔ An open plan")]
+    assert close and "otvoren-plan" in close[0], (
         "a finished task with an open plan must show BOTH facts, not only the header: "
         f"{message[-400:]!r}")
+    from conftest import board_details
+    full = board_details(message)
+    assert "otvoren-plan — PLAN.md is `open`" in full and "the header says finished" in full

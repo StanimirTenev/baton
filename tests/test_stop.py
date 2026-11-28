@@ -299,7 +299,11 @@ def test_the_older_debt_is_on_the_board(tmp_path):
     out = subprocess.run([sys.executable, str(start)], input="{}", capture_output=True,
                          text=True, env=env)
     assert out.returncode == 0, out.stderr
-    assert "from before this session" in out.stdout and "old (newest: draft.md)" in out.stdout
+    ctx = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
+    line = next(ln for ln in ctx.splitlines() if ln.startswith("📝"))
+    assert "from before this session" in line and "old" in line
+    from conftest import board_details
+    assert "old (newest: draft.md)" in board_details(ctx, env)
 
 
 # --- an older entry rewritten is not the work recorded ---------------------------------

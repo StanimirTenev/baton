@@ -40,6 +40,11 @@ def _run(root: Path) -> dict:
     return json.loads(done.stdout) if done.stdout.strip() else {}
 
 
+def _line(board: str, name: str) -> str:
+    """The task's own line on the board."""
+    return next(ln for ln in board.splitlines() if ln.startswith("- ") and f" · {name} " in ln)
+
+
 def _task(root: Path, name: str, pointer: str) -> Path:
     folder = root / name
     folder.mkdir(parents=True)
@@ -62,13 +67,17 @@ def test_a_stale_reference_reaches_the_report(tmp_path):
     old = time.time() - 4 * 86400
     os.utime(darvo, (old, old))
     report = _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
-    assert "DARVO.md" in report
-    assert "shelf life" in report
+    # v3.48.0: a tag on the task's line, and the sentence from the command the board names.
+    from conftest import board_details
+    assert "⚠ref" in _line(report, "zadacha"), report
+    full = board_details(report)
+    assert "DARVO.md" in full and "shelf life" in full
 
 
 def test_a_bloated_pointer_reaches_the_report(tmp_path):
     _task(tmp_path, "zadacha", "x" * 400)
-    assert "`next`" in _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
+    report = _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
+    assert "⚠next" in _line(report, "zadacha"), report     # on the task's own line
 
 
 def test_an_empty_root_says_only_that_baton_is_on(tmp_path):
@@ -108,5 +117,8 @@ def test_a_stale_reference_under_a_subfolder_reaches_the_report(tmp_path):
     os.utime(arch, (old, old))
     os.utime(out / "OUT.md", (old, old))
     report = _run(tmp_path)["hookSpecificOutput"]["additionalContext"]
-    assert "docs/ARCHITECTURE.md (last touched" in report, report
-    assert "OUT.md (last touched" not in report
+    assert "⚠ref" in _line(report, "zadacha"), report
+    from conftest import board_details
+    full = board_details(report)
+    assert "docs/ARCHITECTURE.md (last touched" in full, full
+    assert "OUT.md (last touched" not in full

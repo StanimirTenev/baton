@@ -2,6 +2,50 @@
 
 What changed in each version of [Baton](README.md), newest first. The notes of a version are also its GitHub release notes.
 
+**v3.48.0** — the board reaches the agent whole: checks as tags on the task's line, a 9,000-character budget, sub-tasks, reminders
+
+Claude Code keeps 10,000 characters of a hook's context field and gives the agent a path and the
+first 2,000 of the rest. On the maintainer's machine the board was 18,423 characters on
+28 November: the preview ended at the fourth task, and every warning under it -- unclosed plans,
+shelf life, the ledger -- never reached the agent that morning.
+
+- **A check is a tag on its task's line.** `⚠plan`, `⚠I/A 27`, `⚠code`, `⚠skill`, `⚠ref`,
+  `⚠review`, `⚠next`, `⚠undated N`, `⚠retired`, `⚠parent`, before the `next` text so shortening
+  never takes one. The sections "UNCLOSED PLANS" and "Past its shelf life" are gone from the
+  board; one line counts each kind, says what it means, and names the command that prints every
+  full sentence as the board said it before: `hooks/baton_session_start.py --details` (it writes
+  nothing). Unclosed plans are still said every session (v2.6.0): the tag and the count.
+- **Shorter fixed texts**: the opening instruction (still: the WHOLE board, translated, first),
+  the ID note, /clear, the ledger, the page, the lessons, the work newer than its logbook
+  (names only; the files in `--details`), the closing lines.
+- **The field never passes 9,000 characters**, measured as Claude Code measures it: the whole
+  `additionalContext`, with the ID line and, in plugin mode, the rules. Over it, the board is
+  shortened from the bottom up until it fits -- finished, frozen and header-less lists become
+  counts, then `next` is shortened (`…`) and dropped, outside and ongoing first, then the groups
+  become numbers, last the notices lose whole lines -- and the whole board is written to
+  `baton.board.full.txt` in Baton's data folder, with one line saying so. Never mid-line; a tag,
+  a reminder or a warning line never goes. If those alone are over, the field is over.
+- **`parent:` in the header: sub-tasks.** The child stays a task (number, logbook, Stop, prompt
+  hook, ledger unchanged) but folds into its parent's line, `(+2 sub-tasks: 12, 14 ⚠plan)`. A
+  child on the human's move is shown indented under the parent and lifts it into that group. One
+  level; a parent that cannot hold it (unknown, no header, finished, frozen, itself, or a
+  sub-task) leaves the child on its own line with `⚠parent`.
+- **`remind:` in the header: things that happen whatever we do.** `"YYYY-MM-DD: what"` items,
+  in any task, finished and frozen too. `⏰ Reminders` opens the board with each item due within
+  14 days or past (`OVERDUE by 3 days`), with the task's number; later ones are counted. An item
+  without a date is shown as `⚠remind`. The budget never shortens it. The header parser now
+  reads a block list (`- item` lines under an empty `key:`) and keeps commas inside a quoted item
+  of `[...]`; `skills:` and `aliases:` read as before.
+- **Freeze?** One line names the tasks not on the human's move, not finished or frozen, whose
+  newest dated entry is over 30 days old. Baton changes no state.
+- **An open plan in a finished or frozen task** is one line, "close them: ...", instead of a
+  sentence each.
+- **Measured (В), on a copy of the maintainer's task root** (symlinks to the 68 real folders, a
+  copy of the numbers and of the data folder, so nothing real was written): the first session after the update (what is new and the update question in it) 8,324 characters, the next one 8,257, against 18,423 before; the whole board 16,197, written to its file. To fit, the board drops the `next` of ongoing and outside tasks and shortens the rest to 60 characters: 68 tasks are more than 9,000 characters with every `next` whole. `--details` printed 6,626 characters, 50 lines of checks. Nothing in the real root changed (`find -newer` on a marker: empty); the copy of the numbers gained one, for a folder made that morning.
+- **Not checked:** a real Claude Code session receiving the new board (only the hook run as the
+  harness runs it); Windows and macOS; the HTML board (`tools/baton_board.py`) knows nothing of
+  tags, `parent:` or `remind:`; the prompt hook does not read `remind:` (by design).
+
 **v3.47.0** — a delivered result waits for your acceptance on its own; open questions for you on the board; agents without hooks
 
 All of it optional: a header without the new fields, and a task folder without a questions file,

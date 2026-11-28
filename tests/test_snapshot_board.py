@@ -110,7 +110,8 @@ def _run(hook: str, env: dict, payload: dict) -> str:
 
 def _normalise(text: str, root: Path) -> str:
     """The parts that differ by day or machine become placeholders; nothing else is touched."""
-    text = text.replace(str(root), "<ROOT>").replace(_VERSION, "<VERSION>")
+    text = (text.replace(str(root), "<ROOT>").replace(str(root.parent), "<TMP>")
+            .replace(str(ROOT), "<REPO>").replace(_VERSION, "<VERSION>"))
     today = date.today()
 
     def stamp(m: re.Match) -> str:
@@ -140,6 +141,30 @@ def test_the_session_start_board(tmp_path):
     raw = _run("baton_session_start.py", _env(tmp_path, root), {"source": "startup"})
     context = json.loads(raw)["hookSpecificOutput"]["additionalContext"]
     _compare("session_start_board.txt", _normalise(context, root))
+
+
+def test_the_details_command_prints_what_the_board_said_before(tmp_path):
+    """v3.48.0: the long sections left the board for a tag on each task's line, and the command
+    the board names prints them. Its golden file is the pre-3.48.0 board's own three sections,
+    cut out of session_start_board.txt before that was regenerated -- word for word."""
+    root = _tasks(tmp_path / "tasks")
+    env = _env(tmp_path, root)
+    board = json.loads(_run("baton_session_start.py", env, {"source": "startup"})
+                       )["hookSpecificOutput"]["additionalContext"]
+    cmd = re.search(r"The full text of each: `(.+?)`$", board, re.M).group(1)
+    # Run as the agent's shell runs it: the board's command, nothing else from the hook's env.
+    shell = {k: v for k, v in env.items() if k not in ("BATON_HOME", "BATON_LOGBOOK",
+                                                       "CLAUDE_PLUGIN_DATA")}
+    state = sorted(tmp_path.rglob("*"))
+    before = {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in state if p.is_file()}
+    out = subprocess.run(cmd, shell=True, env=shell, capture_output=True, timeout=60)
+    assert out.returncode == 0 and not out.stderr, out.stderr.decode("utf-8", "replace")
+    after = {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in sorted(tmp_path.rglob("*"))
+             if p.is_file()}
+    assert after == before, "--details writes nothing: no numbers, no memory of the logbooks"
+    _compare("session_start_details.txt", _normalise(out.stdout.decode("utf-8"), root))
+    again = subprocess.run(cmd, shell=True, env=shell, capture_output=True, timeout=60)
+    assert again.stdout == out.stdout, "a look uses nothing up: the second run says the same"
 
 
 def test_the_prompt_naming_the_cyrillic_task(tmp_path):

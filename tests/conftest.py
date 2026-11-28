@@ -100,3 +100,20 @@ def child_env(**extra) -> dict:
     env = {k: os.environ[k] for k in CHILD_ENV if k in os.environ}
     env.update(extra)
     return env
+
+
+def board_details(context: str, env: dict | None = None) -> str:
+    """v3.48.0: the full sentence of every check, printed by the `--details` command the board
+    itself names, run as the agent's shell runs it -- without the hook's BATON_HOME, logbook name
+    or plugin data folder, which the command has to carry."""
+    import os
+    import re
+    import subprocess
+    m = re.search(r"`([^`]*--details)`", context)
+    assert m, "the board names no --details command"
+    base = dict(os.environ if env is None else env)
+    for k in ("BATON_HOME", "BATON_LOGBOOK", "CLAUDE_PLUGIN_DATA"):
+        base.pop(k, None)
+    out = subprocess.run(m.group(1), shell=True, env=base, capture_output=True, timeout=60)
+    assert out.returncode == 0, out.stderr.decode("utf-8", "replace")
+    return out.stdout.decode("utf-8")

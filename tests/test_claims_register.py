@@ -170,4 +170,9 @@ def test_the_board_names_undated_claims(tmp_path):
                HOME=str(tmp_path / "home"))
     out = subprocess.run([sys.executable, str(HOOK)], input=json.dumps({"source": "startup"}),
                          capture_output=True, text=True, env=env, timeout=30)
-    assert "1 unverified claim (status I/A) with no date of its own" in out.stdout, out.stdout[-3000:]
+    # v3.48.0: a tag on the task's own line; the sentence comes from the command the board names.
+    from conftest import board_details
+    ctx = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "- 1 · t ⚠undated 1 — x" in ctx, ctx[-3000:]
+    assert ("1 unverified claim (status I/A) with no date of its own"
+            in board_details(ctx, env)), ctx[-3000:]

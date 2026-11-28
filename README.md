@@ -78,6 +78,7 @@ or that it crashed.
 
 ## News
 
+- **2026-11-28, v3.48.0** -- the board reaches the agent whole: each check a tag on its task's line, never over 9,000 characters, sub-tasks (`parent:`), reminders (`remind:`), a freeze suggestion.
 - **2026-11-27, v3.47.0** -- a delivered result waits in a group of its own on the board (`awaiting:`), open questions for you are counted from `QUESTIONS.md`, optional `asked:` and `model:` in the header, a block for agents without hooks.
 - **2026-11-26, v3.46.0** -- moving to a new computer (`tools/baton_move.py`); L3 and L5 stop counting refutations that refute nothing; safer locks.
 - **2026-11-24, v3.45.0** -- a task shared with a friend on one network; the page opens only when you ask for it.

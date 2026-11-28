@@ -23,11 +23,14 @@ into your language, every group and every line. The hook does not know your lang
 What the agent gets:
 
 ```
-[baton:board v3.43.0]
-Baton — the tasks in /home/you/tasks, ordered by whose move it is and by priority:
+[baton:board v3.48.0]
+Baton — the tasks in /home/you/tasks, by whose move it is, then priority:
+
+⏰ Reminders (within 14 days, or past):
+- 2026-12-09, in 5 days — TLS certificate of example.com expires  (3 · broken-disk)
 
 ⏳ Waiting on YOU / can continue now:
-- 1 · migrate-billing 🔴 [high] — decide tax_region before the run
+- 1 · migrate-billing 🔴 [high] ⚠plan — decide tax_region before the run
 
 🔁 Ongoing:
 - 2 · weekly-report 🟢 [low] — Monday export
@@ -35,11 +38,13 @@ Baton — the tasks in /home/you/tasks, ordered by whose move it is and by prior
 ⛔ Waiting on someone OUTSIDE / blocked (for information):
 - 3 · broken-disk 🟡 [medium] — zpool replace  (waiting on: new disk (delivery))
 
+⚠ The tags on task lines (how many tasks): ⚠plan (1) an open PLAN*.md: the task counts as NOT done until the plan says `state: done` or `abandoned`, with `result:`. The full text of each: `BATON_HOME="/home/you/tasks" BATON_LOGBOOK="LOGBOOK.md" python3 ".../hooks/baton_session_start.py" --details`
+
 ❄️ Frozen (not offered): 4 · old-scraper
 
 ✅ Finished (not touched): 5 · schema-audit
 
-(The number before a task is its own and stays: name a task by it -- "12 is finished", "go to 12".)
+(A task's number is its own and stays: "12 is finished", "go to 12".)
 ```
 
 The groups mean overdue (a deadline within 3 days), on us, recurring, waiting on someone
@@ -238,6 +243,9 @@ code: ~/dev/thing@v1.2.0     # optional: the code this record rests on (path@com
 asked: "migrate billing before the March run, keep the old export"   # optional: the human's request, verbatim
 model: sonnet                # optional: the model for subagents on this task, as the human said it
 awaiting: out/report-v2.pdf  # optional: a delivered result waiting for the human's acceptance
+parent: billing              # optional: the task folder this one is a sub-task of (one level)
+remind:                      # optional: dated things that happen whatever we do
+  - "2026-12-09: TLS certificate of example.com expires"
 ---
 ```
 
@@ -290,7 +298,69 @@ The three hooks that read the header (SessionStart, Stop, UserPromptSubmit) shar
 of their own, and one of them would have asked an English header for a criterion it already had.
 
 The parser is deliberately small: `key: value` lines, quoted strings, `[a, b]` lists and
-trailing ` #` comments. It is not full YAML, so Baton needs no dependencies.
+trailing ` #` comments. It is not full YAML, so Baton needs no dependencies. Since v3.48.0 a list
+may also be written as `- item` lines right under an empty `key:` (as `remind:` above), and a
+quoted item in `[...]` keeps its commas: `["2026-12-09: renew, then tell Ivan"]` is one item.
+A `- ` line anywhere else is read as it always was.
+
+## A board that reaches the agent whole
+
+Claude Code keeps 10,000 characters of a hook's context field; past that the agent gets a path
+and the first 2,000. On the maintainer's machine the board was 18,423 characters on 28.11.2026,
+and the preview ended at the fourth task: the warnings below it never reached the agent. Since
+v3.48.0:
+
+**A check is a tag on its task's line.** Not a section of sentences under the groups, but
+`- 7 · pricing 🔴 [high] ⚠plan ⚠I/A 27 — next move`. The tags: `⚠plan` (an open plan, below),
+`⚠I/A N` (unverified claims older than 30 days), `⚠undated N`, `⚠code` (the repository moved
+past `code:`), `⚠skill`, `⚠ref` (`next` names a file older than the logbook), `⚠review`
+(shelf life), `⚠next` (a pointer over 240 characters), `⚠retired`, `⚠parent`. One line under
+the groups counts each kind present, says what it means, and gives the command that prints every
+check's full sentence, as the board said it before:
+
+```bash
+BATON_HOME=~/tasks BATON_LOGBOOK=LOGBOOK.md python3 hooks/baton_session_start.py --details
+```
+
+It reads and writes nothing else (no task numbers, no memory of the logbooks), so it can be run
+any number of times. Warnings that are not about one task (the running hooks differ from the
+release, the ledger, a folder not read to the end) keep a line of their own, made short. An open
+plan in a finished or frozen task has no line to carry a tag, so those are named in one line,
+`⛔ An open plan in a finished or frozen task -- close them: ...`.
+
+**The field never passes 9,000 characters** (`BOARD_BUDGET`), measured as Claude Code measures
+it: the whole `additionalContext`, with the ID line and, in plugin mode, the rules (about 5,500
+characters) in it. Over that, the board is shortened from the bottom up, one step at a time
+until it fits: the finished list becomes a count, then frozen, then the tasks without a header;
+then `next` is shortened (marked `…`) for ongoing and outside tasks, then for all; then dropped,
+in the same order; then the groups become numbers and names, then numbers alone; last, whole
+lines of the notices at the bottom go. A line is never cut in the middle, and a tag, a reminder
+or a warning line never goes. When anything was shortened, the whole board is written to
+`baton.board.full.txt` in Baton's data folder (`${CLAUDE_PLUGIN_DATA}`, or beside the hooks) and
+one line says so and where. If the reminders and the warning lines alone are over the budget,
+they are kept and the field is over: what must be said wins over the number.
+
+**Sub-tasks: `parent:`.** A task folder can name another as its parent: `parent: billing`. The
+child stays a task like any other -- its number, its logbook, Stop, the prompt hook, the ledger
+are unchanged -- but it is not a line of its own on the board: the parent's line ends with
+`(+2 sub-tasks: 12, 14 ⚠plan)`, the children's numbers and their tags. A child on the human's
+move (overdue, waiting for acceptance, or `turn: us`) is shown indented under its parent, and
+lifts the parent into that group: a decision is never folded away. One level only. A child whose
+`parent:` names no task folder here, a folder without a header, a finished or frozen task,
+itself, or a task that has a parent of its own, is shown as a task of its own with `⚠parent`. A
+finished or frozen child stays in its list.
+
+**Reminders: `remind:`.** Things that happen whatever we do -- a certificate expiring, someone
+else's deadline -- as `"YYYY-MM-DD: what"` items (block or `[...]` form, as above), in any task's
+header, finished and frozen ones too. `⏰ Reminders` opens the board, above the groups: each item
+due within 14 days, or past (`OVERDUE by 3 days`), with its task's number; further ones are only
+counted (`2 later`). An item without a leading date is shown as `⚠remind`, never dropped. Only
+the board reads `remind:`; the budget never shortens it.
+
+**Freeze?** Tasks that are not on the human's move (ongoing, or waiting outside), not finished or
+frozen, and whose newest dated entry is more than 30 days old are named in one line:
+`💤 3 without an entry for 30+ days: ... -- freeze? (state: frozen)`. Baton never changes a
+state itself; the human decides.
 
 ## Skills a task needs
 
@@ -325,7 +395,8 @@ Two things are reported, and the second is the dangerous one:
 ## A plan that was never closed leaves the task unfinished
 
 A task holding a `PLAN.md` that does not say it is closed is reported **every session**, with no
-grace period. Unlike a stale skill this is not a guess about whether something went out of date:
+grace period: since v3.48.0 as `⚠plan` on the task's line and a count in the line that explains
+the tags (the full sentence: `--details`, above). Unlike a stale skill this is not a guess about whether something went out of date:
 the plan either says it is finished or it does not.
 
 ```markdown
@@ -411,7 +482,8 @@ None of the three was a wrong fact. Each was a fact that had stopped being one.
 
 **Two optional header fields.** `vyarno_kum` is the date the header was last true;
 `pregled_sled` is how long that is expected to hold (`30d`, `6m`). When the period has passed,
-the task appears at session start under **Past its shelf life**, with how late it is. Neither
+the task's line at session start carries `⚠review`, and `--details` says how late it is
+(before v3.48.0, a section **Past its shelf life**). Neither
 field is required, and a task without them behaves exactly as it did before.
 
 **An unverified claim is a debt.** If a task keeps a claims register — `TVARDENIYA.md`,

@@ -1,0 +1,11 @@
+⛔ UNCLOSED PLANS — the task counts as not done:
+- проба-диск — PLAN.md is `open`, last touched 3 days ago
+(Close it with `state: done` OR `abandoned`, AND `result:` in PLAN.md — what came of it. An abandoned plan is closed the same way.)
+
+⏳ Past its shelf life — read this before relying on it:
+- alpha-web — 1 unverified claims (status I/A), the oldest 45 days old
+(A claim with status I or A is not a fact — it is a debt. Either it gets checked, or it is dropped.)
+
+📝 Work newer than its logbook, from before this session:
+- zeta-work (newest: draft.md)
+(Write the entry it is missing. A .batonignore line is for a file that changes on its own, and is the human's to add.)
