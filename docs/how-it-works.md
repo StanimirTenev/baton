@@ -307,7 +307,7 @@ A `- ` line anywhere else is read as it always was.
 
 Claude Code keeps 10,000 characters of a hook's context field; past that the agent gets a path
 and the first 2,000. On the maintainer's machine the board was 18,423 characters on 28.11.2026,
-and the preview ended at the fourth task: the warnings below it never reached the agent. Since
+and the preview ended at the fourth task: the warnings below it reached the agent only if it opened the saved file. Since
 v3.48.0:
 
 **A check is a tag on its task's line.** Not a section of sentences under the groups, but

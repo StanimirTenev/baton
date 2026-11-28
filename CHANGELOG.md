@@ -7,7 +7,7 @@ What changed in each version of [Baton](README.md), newest first. The notes of a
 Claude Code keeps 10,000 characters of a hook's context field and gives the agent a path and the
 first 2,000 of the rest. On the maintainer's machine the board was 18,423 characters on
 28 November: the preview ended at the fourth task, and every warning under it -- unclosed plans,
-shelf life, the ledger -- never reached the agent that morning.
+shelf life, the ledger -- reached the agent that morning only because it opened the saved file.
 
 - **A check is a tag on its task's line.** `⚠plan`, `⚠I/A 27`, `⚠code`, `⚠skill`, `⚠ref`,
   `⚠review`, `⚠next`, `⚠undated N`, `⚠retired`, `⚠parent`, before the `next` text so shortening
