@@ -324,14 +324,19 @@ def test_only_far_reminders_leave_one_count_line(tmp_path):
 
 def test_each_collapse_step_in_its_order(tmp_path, monkeypatch):
     """One board, the budget lowered step by step, the hook run in-process: every one of the
-    eleven steps is reached, in its order, and each does what it says -- and below the last,
-    whole lines of the notices go while the reminder stays."""
+    eighteen steps is reached, in its order, and each does what it says. The order is the
+    human's (28.11): the lessons, the ledger, the page and the tag legend shrink before any task
+    loses its `next`, and `next` goes outside first, then ongoing, then the human's own. Below the
+    last step, whole lines of the notices go while the reminder stays."""
     root = tmp_path / "tasks"
-    long_next = "a next move written out at some length, well past sixty characters, number "
+    long_next = ("a next move written out at some length, well past ninety characters, so that "
+                 "a cut shows, number ")
     for i in range(6):
         _task(root, f"us-{i}", US + f'next: "{long_next}{i}"\n')
         _task(root, f"on-{i}", f'state: ongoing\nturn: us\nnext: "{long_next}{i}"\n')
-        _task(root, f"out-{i}", OUT + f'next: "{long_next}{i}"\n')
+        f = _task(root, f"out-{i}", OUT + f'next: "{long_next}{i}"\n')
+        if i == 0:
+            (f / "PLAN.md").write_text("---\nstate: open\n---\n", "utf-8")
     for i in range(20):
         _task(root, f"frozen-{i:02d}-a-parked-task", "state: frozen\n")
         _task(root, f"done-{i:02d}-a-finished-task", "state: finished\nresult: x\n")
@@ -341,10 +346,27 @@ def test_each_collapse_step_in_its_order(tmp_path, monkeypatch):
     soon = (date.today() + timedelta(days=2)).isoformat()
     _task(root, "certs", f'state: finished\nresult: x\nremind: ["{soon}: the cert expires"]\n')
     env = _env(tmp_path, root)
+    env["BATON_PAGE"] = ""                          # the page block is one of the steps
     for k in [k for k in os.environ if k.startswith(("BATON_", "CLAUDE_PLUGIN"))]:
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
+    now = __import__("datetime").datetime.now()
+    state: dict = {}
+    for lid in ("L1", "L3"):
+        for d in (3, 1):
+            hook.lesson_event(state, lid, "fired", now - timedelta(days=d))
+            hook.lesson_event(state, lid, "caught", now - timedelta(days=d))
+    (tmp_path / "lessons.json").write_text(json.dumps(state), "utf-8")
+
+    def fake_ledger(root_, name_):                   # a ledger with one entry changed
+        full = ("🧾 Baton's ledger of logbook entries: 1 recorded entry changed after Baton recorded "
+                "it -- us-0: \"2026-11-01 10:00 — a long title of an entry that was edited later, "
+                "long enough that one line of counts is shorter than the whole notice by far\". "
+                "An entry is a record, not edited. Tell the human. `verify` shows it.")
+        hook.NOTICE_FORMS[full] = {"one": "🧾 Baton's ledger: recorded logbook entries 1 changed"}
+        return full
+    monkeypatch.setattr(hook, "ledger_notice", fake_ledger)
     import io
     said = {}
     monkeypatch.setattr(hook, "_write", lambda out: said.update(out))
@@ -359,9 +381,10 @@ def test_each_collapse_step_in_its_order(tmp_path, monkeypatch):
 
     full = run(10 ** 6)
     assert "✂️" not in full and "⬆️ Baton was updated" in full
+    assert "L1 recurred 2 times" in full and "📄 Baton page (ID" in full and "a long title" in full
     seen: dict = {}
     floor = []                                  # every board at the last step
-    for budget in range(len(full), 600, -15):
+    for budget in range(len(full), 600, -6):
         board = run(budget)
         m = re.search(r"as far as: (.+?); ", board)
         if m:
@@ -371,23 +394,51 @@ def test_each_collapse_step_in_its_order(tmp_path, monkeypatch):
                 floor.append(board)
             else:
                 assert len(board) <= budget, (budget, len(board), m.group(1))
-    names = ["finished", "frozen", "no header", "`next` of ongoing/outside shortened",
-             "every `next` shortened", "`next` of ongoing/outside dropped",
-             "every `next` dropped", "ongoing/outside as names", "every group as names",
+    names = ["finished", "frozen", "no header", "lessons shortened", "lessons in one line",
+             "ledger in one line", "page in one line", "tag legend shortened",
+             "`next` of outside shortened", "`next` of ongoing shortened",
+             "every `next` shortened", "`next` of outside dropped",
+             "`next` of ongoing dropped", "every `next` dropped",
+             "ongoing/outside as names", "every group as names",
              "ongoing/outside as numbers", "every group as numbers"]
     assert list(seen) == names, list(seen)
     b = {n: seen[n][1] for n in names}
+    whole = long_next.strip()
     assert "✅ Finished (not touched): 21 -- in the full board file" in b["finished"]
-    assert "❄️ Frozen (not offered): 1 · " in b["finished"] or "frozen-00" in b["finished"]
+    assert "frozen-00" in b["finished"]
     assert "❄️ Frozen (not offered): 20 -- in the full board file" in b["frozen"]
     assert "📋 No header (most recently touched)" in b["frozen"]
     assert "📋 No header: 8 -- in the full board file" in b["no header"]
-    assert _line(b["`next` of ongoing/outside shortened"], "on-0").endswith("…")
-    assert _line(b["`next` of ongoing/outside shortened"], "out-0").split("  (")[0].endswith("…")
-    assert long_next.strip() in _line(b["`next` of ongoing/outside shortened"], "us-0")
+    # 4-8: the notices and the legend shrink while every `next` is whole.
+    assert "L1 recurred 2 times in 14 days: not holding" in b["lessons shortened"]
+    assert "(1048" not in b["lessons shortened"] and "rung in place" in b["lessons shortened"]
+    assert re.search(r"^Baton -- lessons: L1 not holding \(2/14d\), L3 doing its work \(2/14d\) "
+                     r"\(the full text: `--details`, the command above\)$", b["lessons in one line"],
+                     re.M)
+    assert "a long title" in b["lessons in one line"]
+    assert "a long title" not in b["ledger in one line"]
+    assert "🧾 Baton's ledger: recorded logbook entries 1 changed" in b["ledger in one line"]
+    assert "📄 Baton page (ID" in b["ledger in one line"]
+    assert re.search(r"^📄 Baton page, only when the human asks: `\S+ \S+baton_page.py --open`\.$",
+                     b["page in one line"], re.M)
+    assert "⚠ Tags on the task lines" in b["page in one line"]
+    assert "⚠ Tags (tasks): ⚠plan 1 open plan: task not done" in b["tag legend shortened"]
+    assert "--details`" in b["tag legend shortened"]
+    for n in names[3:8]:
+        for t in ("us-0", "on-0", "out-0"):
+            assert whole in _line(b[n], t), (n, t)
+    # 9-14: `next` shortened, then dropped -- outside, ongoing, the human's own.
+    cut = lambda board, t: _line(board, t).split("  (")[0]   # noqa: E731
+    assert cut(b["`next` of outside shortened"], "out-0").endswith("…")
+    assert whole in _line(b["`next` of outside shortened"], "on-0")
+    assert _line(b["`next` of ongoing shortened"], "on-0").endswith("…")
+    assert whole in _line(b["`next` of ongoing shortened"], "us-0")
     assert _line(b["every `next` shortened"], "us-0").endswith("…")
-    assert " — " not in _line(b["`next` of ongoing/outside dropped"], "on-0")
-    assert _line(b["`next` of ongoing/outside dropped"], "us-0").endswith("…")
+    assert len(_line(b["every `next` shortened"], "us-0").split(" — ")[1]) <= hook.NEXT_SHORT + 1
+    assert " — " not in _line(b["`next` of outside dropped"], "out-0")
+    assert _line(b["`next` of outside dropped"], "on-0").endswith("…")
+    assert " — " not in _line(b["`next` of ongoing dropped"], "on-0")
+    assert _line(b["`next` of ongoing dropped"], "us-0").endswith("…")
     assert " — " not in _line(b["every `next` dropped"], "us-0")
     names_line = re.compile(r"^🔁 Ongoing: 6 -- \d+ · on-")
     assert any(names_line.match(ln) for ln in b["ongoing/outside as names"].splitlines())
@@ -400,3 +451,28 @@ def test_each_collapse_step_in_its_order(tmp_path, monkeypatch):
     assert any("⬆️ Baton was updated" in x for x in floor), "the step before the notices go"
     assert "⬆️ Baton was updated" not in floor[-1]
     assert all("the cert expires" in x for x in floor)
+
+
+def test_details_prints_whole_what_the_board_shortens(tmp_path):
+    """Nothing is lost: the lessons, the page and the tag legend the board may shorten come out
+    whole from `--details`."""
+    root = tmp_path / "tasks"
+    f = _task(root, "billing", US + 'next: "x"\n')
+    (f / "PLAN.md").write_text("---\nstate: open\n---\n", "utf-8")
+    now = __import__("datetime").datetime.now()
+    state: dict = {}
+    for d in (3, 1):
+        hook.lesson_event(state, "L1", "fired", now - timedelta(days=d))
+        hook.lesson_event(state, "L1", "caught", now - timedelta(days=d))
+    (tmp_path / "lessons.json").write_text(json.dumps(state), "utf-8")
+    env = _env(tmp_path, root)
+    env["BATON_PAGE"] = ""
+    out = subprocess.run([sys.executable, str(HOOK)], input=b'{"source":"startup"}', env=env,
+                         capture_output=True, timeout=60)
+    ctx = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
+    from conftest import board_details
+    full = board_details(ctx, env)
+    tail = full.split("Shortened on the board when it must fit, here whole:", 1)[1]
+    assert "L1 recurred 2 times" in tail and "do not propose the tool" in tail
+    assert "📄 Baton page (ID" in tail and "--open" in tail
+    assert "⚠ Tags on the task lines (tasks): ⚠plan (1)" in tail

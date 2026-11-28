@@ -162,7 +162,11 @@ def test_the_details_command_prints_what_the_board_said_before(tmp_path):
     after = {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in sorted(tmp_path.rglob("*"))
              if p.is_file()}
     assert after == before, "--details writes nothing: no numbers, no memory of the logbooks"
-    _compare("session_start_details.txt", _normalise(out.stdout.decode("utf-8"), root))
+    said = _normalise(out.stdout.decode("utf-8"), root)
+    old, sep, rest = said.partition("\n\nShortened on the board when it must fit, here whole:\n\n")
+    assert sep, said
+    _compare("session_start_details.txt", old + "\n")          # the pre-3.48.0 sections, unchanged
+    _compare("session_start_details_whole.txt", rest)           # what the board may shorten
     again = subprocess.run(cmd, shell=True, env=shell, capture_output=True, timeout=60)
     assert again.stdout == out.stdout, "a look uses nothing up: the second run says the same"
 

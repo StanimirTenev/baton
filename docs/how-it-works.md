@@ -331,10 +331,13 @@ plan in a finished or frozen task has no line to carry a tag, so those are named
 **The field never passes 9,000 characters** (`BOARD_BUDGET`), measured as Claude Code measures
 it: the whole `additionalContext`, with the ID line and, in plugin mode, the rules (about 5,500
 characters) in it. Over that, the board is shortened from the bottom up, one step at a time
-until it fits: the finished list becomes a count, then frozen, then the tasks without a header;
-then `next` is shortened (marked `…`) for ongoing and outside tasks, then for all; then dropped,
-in the same order; then the groups become numbers and names, then numbers alone; last, whole
-lines of the notices at the bottom go. A line is never cut in the middle, and a tag, a reminder
+until it fits, and `next` goes last: the finished list becomes a count, then frozen, then the
+tasks without a header; then the lessons (a short line each, then one line), the ledger (its
+counts and the verify command), the page and the tag legend become one short line each; then
+`next` is cut to 90 characters (marked `…`) for outside tasks, then ongoing, then the rest; then
+dropped, in the same order; then the groups become numbers and names, then numbers alone; last,
+whole lines of the notices at the bottom go. `--details` prints the lessons, the ledger, the
+page and the legend whole. A line is never cut in the middle, and a tag, a reminder
 or a warning line never goes. When anything was shortened, the full board is written to
 `baton.board.full.txt` in Baton's data folder (`${CLAUDE_PLUGIN_DATA}`, or beside the hooks) and
 one line says so and where. If the reminders and the warning lines alone are over the budget,

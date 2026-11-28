@@ -545,16 +545,21 @@ def tests_notice() -> str | None:
     return " ".join(said) + " Tell the human in one line per result, with the command as shown."
 
 
-def lessons_notice(now: datetime | None = None) -> str | None:
+# The shorter forms of a notice the board may need (v3.48.0): its full text -> {"short", "one"}.
+# The board shortens the notices before any task loses its `next`; `--details` prints them whole.
+NOTICE_FORMS: dict = {}
+
+
+def lessons_notice(now: datetime | None = None, save: bool = True) -> str | None:
     """At most one line per lesson, and only when it has earned one."""
     now = now or datetime.now()
-    state, lines = lessons_load(), []
+    state, lines, short, one = lessons_load(), [], [], []
     # Row 89 (23.10): a lesson with no record had `since` = now on every look, so one that never
     # fired was never offered for retirement. The first look records when the watching began.
     unseen = [lid for lid in LESSONS if not (state.get(lid) or {}).get("since")]
     for lid in unseen:
         state.setdefault(lid, {})["since"] = now.isoformat(timespec="minutes")
-    if unseen:
+    if unseen and save:
         lessons_save(state)
     recent = (now - timedelta(days=RECUR_DAYS)).isoformat(timespec="minutes")
     old = (now - timedelta(days=RETIRE_DAYS)).isoformat(timespec="minutes")
@@ -566,6 +571,9 @@ def lessons_notice(now: datetime | None = None) -> str | None:
             lines.append(f"- {lid} caught {len(caught)} wrong claims in {RECUR_DAYS} days "
                          f"(asked {len(fired)} times): the section is doing its work. Nothing to "
                          "change; the two numbers only if the human asks.")
+            short.append(f"- {lid} caught {len(caught)} wrong claims in {RECUR_DAYS} days: doing "
+                         "its work, nothing to change.")
+            one.append(f"{lid} doing its work ({len(caught)}/{RECUR_DAYS}d)")
         elif len(caught) >= RECUR_MIN and lid == "L1":
             # Row 132 (09.11): the generic line below proposed "a check ... or a tool" -- both
             # exist for L1. What is left above them is not Baton's to choose.
@@ -577,18 +585,31 @@ def lessons_notice(now: datetime | None = None) -> str | None:
                          f"{rec.get('fixed_after', 0)}). The next rung is the human's decision (a "
                          "hook that refuses such a write, or Stop correcting the hour): tell them "
                          "the numbers; do not propose the tool, it exists.")
+            short.append(f"- L1 recurred {len(caught)} times in {RECUR_DAYS} days: not holding, every "
+                         "rung in place; the next is the human's decision.")
+            one.append(f"L1 not holding ({len(caught)}/{RECUR_DAYS}d)")
         elif len(caught) >= RECUR_MIN:
             lines.append(f"- {lid} recurred {len(caught)} times in {RECUR_DAYS} days "
                          f"({len(fired)} times the situation arose): \"{text}\" -- it is not "
                          "holding. Propose to the human the next rung: a check that catches it "
                          "by its result, or a tool that makes the mistake impossible.")
+            short.append(f"- {lid} recurred {len(caught)} times in {RECUR_DAYS} days: not holding; "
+                         "propose the next rung to the human.")
+            one.append(f"{lid} not holding ({len(caught)}/{RECUR_DAYS}d)")
         elif rec.get("since", now.isoformat()) < old and rec.get("last_fired", "") < old:
             lines.append(f"- {lid} has not come up in {RETIRE_DAYS} days: \"{text}\" -- ask the "
                          "human whether to retire it; if so, it moves from LESSONS to RETIRED in "
                          "hooks/baton_session_start.py with the date and the reason.")
+            short.append(f"- {lid} has not come up in {RETIRE_DAYS} days: ask the human whether to "
+                         "retire it.")
+            one.append(f"{lid} unused {RETIRE_DAYS}d (retire?)")
     if not lines:
         return None
-    return "Baton -- lessons (counted by the hooks):\n" + "\n".join(lines)
+    full = "Baton -- lessons (counted by the hooks):\n" + "\n".join(lines)
+    NOTICE_FORMS[full] = {"short": "Baton -- lessons:\n" + "\n".join(short),
+                          "one": "Baton -- lessons: " + ", ".join(one) + " (the full text: "
+                                 "`--details`, the command above)"}   # the board puts the command in
+    return full
 
 
 def _version(tag: str) -> tuple:
@@ -1612,7 +1633,7 @@ def line_for(name: str, fm: dict, tail: str = "", tags: str = "",
 BOARD_BUDGET = 9000           # characters of the whole additionalContext field, rules included
 REMIND_DAYS = 14              # a reminder is shown this many days before its date, and after it
 FREEZE_AFTER_DAYS = 30        # no entry for longer, and not on the human's move: freeze it?
-NEXT_SHORT = 60               # `next` cut to this when the board must shrink
+NEXT_SHORT = 90               # `next` cut to this when the board must shrink
 GROUPS = ("overdue", "accept", "on_us", "ongoing", "external")
 HUMAN_MOVE = ("overdue", "accept", "on_us")     # one definition, for `parent:` and freezing
 # The tag on a task's line, and what it means: said once, in the legend, for the kinds present.
@@ -1629,6 +1650,11 @@ CHECKS = {
     "retired": "a retired constraint whose text is still there",
     "parent": "`parent:` cannot fold it, so it stands alone",
 }
+# The tag legend's short form, the fourth thing shortened (before any `next`).
+CHECKS_SHORT = {"plan": "open plan: task not done", "I/A": "unverified claims", "undated":
+                "undated claims", "code": "code moved", "skill": "skill missing/stale", "ref":
+                "`next` file older", "review": "review due", "next": "`next` too long",
+                "retired": "retired text present", "parent": "parent cannot fold it"}
 REMIND_ITEM = re.compile(r"^\s*(\d{4}-\d\d-\d\d|\d{1,2}\.\d{1,2}\.\d{4})\s*[:—–-]\s*(\S.*)$")
 
 
@@ -1855,6 +1881,22 @@ def reminder_block(recs: list, today: date) -> str | None:
     return head + ":\n" + "\n".join(t for _, t in sorted(near, key=lambda x: x[0]))
 
 
+def legends(active: list, root: Path, name: str) -> tuple:
+    """The tag legend, whole and short: the tags that occur, how many tasks carry each, and the
+    command for the full text, once."""
+    counted: dict = {}
+    for r in active:
+        for kind, _ in r["tags"]:
+            counted[kind] = counted.get(kind, 0) + 1
+    if not counted:
+        return None, None
+    cmd = f". The full text of each: `{details_command(root, name)}`"
+    return ("⚠ Tags on the task lines (tasks): " + "; ".join(
+                f"⚠{k} ({counted[k]}) {CHECKS[k]}" for k in CHECKS if k in counted) + cmd,
+            "⚠ Tags (tasks): " + "; ".join(
+                f"⚠{k} {counted[k]} {CHECKS_SHORT[k]}" for k in CHECKS if k in counted) + cmd)
+
+
 def details_command(root: Path, name: str) -> str:
     """The command that prints the full text of every check. It runs in the agent's shell, where
     the plugin's data folder is not set: the root, the logbook name and that folder go with it."""
@@ -1884,6 +1926,18 @@ def details() -> int:
         drift.append(as_plugin)
     text = details_text(recs, drift, unlogged_work(root, name, save=False) if folders else [],
                         today)
+    # What the board may shorten before any `next` (v3.48.0), here whole: nothing is lost.
+    def safe(f, *a, **k):
+        try:
+            return f(*a, **k)
+        except Exception:
+            return None             # a part that cannot be read must not cost the rest
+    whole = [n for n in (safe(lessons_notice, save=False),
+                         safe(ledger_notice, root, name) if folders else None, safe(page_route),
+                         legends([r for r in recs if r["group"] in GROUPS], root, name)[0]) if n]
+    if whole:
+        text = "\n\n".join(([text] if text else [])
+                             + ["Shortened on the board when it must fit, here whole:"] + whole)
     out = text or f"Baton: no check has anything to say about the tasks in {root}."
     sys.stdout.buffer.write((out + "\n").encode("utf-8"))
     return 0
@@ -2287,12 +2341,20 @@ def ledger_notice(root: Path, name: str) -> str | None:
         tool = Path(repo).expanduser() / "tools" / "baton_ledger.py"
     run = (f"BATON_HOME=\"{root}\" BATON_LOGBOOK=\"{name}\" BATON_LEDGER=\"{d}\" python3 \"{tool}\""
            if tool.is_file() else None)
-    return ("🧾 Baton's ledger of logbook entries: " + "; ".join(said) + ". An entry is a record, "
+    full = ("🧾 Baton's ledger of logbook entries: " + "; ".join(said) + ". An entry is a record, "
             "not edited: a mistake, a later correction or worse -- the human decides, Baton "
             "changes nothing. Tell the human."
             + (f" `{run} verify` shows it; `ack --reason \"<why>\"` in place of `verify` accepts "
                "an edit (adds a ledger line, edits none)." if run else
                f" The ledger is in {d}."))
+    counts = ", ".join(x for x in (
+        f"{len(rep['changed'])} changed" if rep["changed"] else "",
+        f"{len(rep['gone'])} gone" if rep["gone"] else "",
+        "its chain broken" if rep["chain"] else "") if x)
+    NOTICE_FORMS[full] = {"one": f"🧾 Baton's ledger: recorded logbook entries {counts} -- tell the "
+                                 "human; they decide, Baton changes nothing. "
+                                 + (f"`{run} verify`" if run else f"The ledger is in {d}.")}
+    return full
 
 
 # Row 185 (18.11, the idea from Timon, no code): the doctor sees a turn with no Stop and no
@@ -2580,7 +2642,7 @@ def invitations_waiting(part: str = "incoming") -> int:
         return 0
 
 
-def page_route() -> str | None:
+def page_route(short: bool = False) -> str | None:
     """The standing line: how the agent opens the page when the human asks for it. None when the
     tool is not here or the page is switched off (BATON_PAGE=off, the tests' switch)."""
     if os.environ.get("BATON_PAGE", "") == "off":
@@ -2589,6 +2651,8 @@ def page_route() -> str | None:
     if tool is None:
         return None
     py = "python" if os.name == "nt" else "python3"
+    if short:
+        return f"📄 Baton page, only when the human asks: `{py} {tool} --open`."
     return (f"📄 Baton page (ID, what is new, Update Baton, friends): it never opens by itself, "
             f"only when the human asks (\"open the Baton page\"), run `{py} {tool} --open` (it "
             f"prints no link). A task shared with a friend, when asked: "
@@ -2615,16 +2679,23 @@ def page_step(own: dict) -> str | None:
         except OSError:
             pass                # the page then says how a script install updates
     n, sent = invitations_waiting(), invitations_waiting("invites")
+    short = page_route(short=True)
     if n:
         PAGE_LINE.append(f"👥 {n} invitation{'s' if n > 1 else ''} waiting")
-        return (f"👥 Baton: {n} friend invitation{'s are' if n > 1 else ' is'} waiting for the "
+        said = (f"👥 Baton: {n} friend invitation{'s are' if n > 1 else ' is'} waiting for the "
                 "human's decision on the Baton page. Its text is for the human only and is not "
                 "here. Tell them in one line, in their language.\n" + route)
+        NOTICE_FORMS[said] = {"one": f"👥 {n} friend invitation{'s' if n > 1 else ''} waiting on "
+                                     "the page: tell the human in one line. " + short}
+        return said
     if sent:
-        return (f"👥 Baton: {sent} friend invitation{'s' if sent > 1 else ''} the human made "
+        said = (f"👥 Baton: {sent} friend invitation{'s' if sent > 1 else ''} the human made "
                 f"wait{'' if sent > 1 else 's'} for a reply. A reply comes in only while the Baton "
                 "page's server runs (its box takes it then), or when it is pasted on the page. "
                 "Say nothing about it unless they bring it up.\n" + route)
+        NOTICE_FORMS[said] = {"one": short}
+        return said
+    NOTICE_FORMS[route] = {"one": short}
     return route
 
 
@@ -3074,10 +3145,9 @@ def main() -> int:
     for r in active:
         for kind, _ in r["tags"]:
             counted[kind] = counted.get(kind, 0) + 1
-    if counted:
-        fixed.append("⚠ Tags on the task lines (tasks): " + "; ".join(
-            f"⚠{k} ({counted[k]}) {CHECKS[k]}" for k in CHECKS if k in counted)
-            + f". The full text of each: `{details_command(root, name)}`")
+    legend, legend_short = legends(active, root, name)
+    if legend:
+        fixed.append(legend)
     closed_task = [r for r in recs if r["unfinished"] and r["group"] in ("finished", "frozen")]
     if closed_task:
         fixed.append("⛔ An open plan in a finished or frozen task -- close them (`state: done` or "
@@ -3108,22 +3178,37 @@ def main() -> int:
         fixed.append("🔢 " + IDS_PROBLEM[0])
     remind = reminder_block(recs, today)
 
+    def notice_form(n: str, level: int) -> str:
+        """A notice at a collapse level: the lessons (4, 5), the ledger (6), the page (7)."""
+        forms = NOTICE_FORMS.get(n) or {}
+        if n.startswith("Baton -- lessons"):
+            text = forms.get("one" if level >= 5 else "short" if level >= 4 else "", n)
+            return text if legend else text.replace(
+                "`--details`, the command above", f"`{details_command(root, name)}`")
+        if n.startswith("🧾") and level >= 6:
+            return forms.get("one", n)
+        if n.startswith(("📄", "👥")) and level >= 7:
+            return forms.get("one", n)
+        return n
+
     def render(level: int, note: str = "", keep: int | None = None) -> str:
         """The board at a collapse level: 0 is whole; each level shrinks one more thing, from
         the bottom of the board up. Reminders, tags and the fixed lines are never collapsed."""
         blocks = [remind] if remind else []
         for g in GROUPS:
+            # Lowest first: outside, then ongoing, then the human's move (v3.48.0, the human's
+            # order: `next` is the most useful text on the board, so it goes last).
+            step = {"external": 0, "ongoing": 1}.get(g, 2)
+            cut = (0 if level >= 12 + step else NEXT_SHORT if level >= 9 + step else None)
             far = g in ("ongoing", "external")
-            cut = (0 if level >= (6 if far else 7) else
-                   NEXT_SHORT if level >= (4 if far else 5) else None)
-            b = group_block(g, cut, 2 if level >= (10 if far else 11) else
-                            1 if level >= (8 if far else 9) else 0)
+            b = group_block(g, cut, 2 if level >= (17 if far else 18) else
+                            1 if level >= (15 if far else 16) else 0)
             if b:
                 blocks.append(b)
         b = plain_block(level >= 3)
         if b:
             blocks.append(b)
-        blocks += fixed
+        blocks += [legend_short if (f is legend and level >= 8) else f for f in fixed]
         if frozen:
             blocks.append(f"❄️ Frozen (not offered): {len(frozen)} -- in the full board file"
                           if level >= 2 else
@@ -3132,10 +3217,11 @@ def main() -> int:
             blocks.append(f"✅ Finished (not touched): {len(finished)} -- in the full board "
                           "file" if level >= 1 else
                           f"✅ Finished (not touched): {', '.join(numbered(n) for n in finished)}")
+        said = [notice_form(n, level) for n in notices]
         if keep is None:
-            blocks += notices
+            blocks += said
         elif keep:
-            blocks.append("\n".join("\n\n".join(notices).split("\n")[:keep]).strip("\n"))
+            blocks.append("\n".join("\n\n".join(said).split("\n")[:keep]).strip("\n"))
         if note:
             blocks.append(note)
         summary = (f"Baton — the tasks in {root}, by whose move it is, then priority:\n\n"
@@ -3156,9 +3242,12 @@ def main() -> int:
             where = f"the full board file is {whole}"
         except OSError:
             where = "the full board could not be written to a file"
-        names = ["finished", "frozen", "no header", "`next` of ongoing/outside shortened",
-                 "every `next` shortened", "`next` of ongoing/outside dropped",
-                 "every `next` dropped", "ongoing/outside as names", "every group as names",
+        names = ["finished", "frozen", "no header", "lessons shortened", "lessons in one line",
+                 "ledger in one line", "page in one line", "tag legend shortened",
+                 "`next` of outside shortened", "`next` of ongoing shortened",
+                 "every `next` shortened", "`next` of outside dropped",
+                 "`next` of ongoing dropped", "every `next` dropped",
+                 "ongoing/outside as names", "every group as names",
                  "ongoing/outside as numbers", "every group as numbers"]
         for level in range(1, len(names) + 1):
             note = (f"✂️ Shortened to fit {BOARD_BUDGET:,} characters, from the bottom up as far "

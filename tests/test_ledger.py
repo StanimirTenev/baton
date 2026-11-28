@@ -412,6 +412,29 @@ def test_an_older_entry_edited_is_named_by_verify_and_session_start(w):
 
 
 @needs_git
+def test_the_ledgers_one_line_form_keeps_counts_and_the_command_and_details_keeps_titles(w, monkeypatch):
+    """v3.48.0: a board that must shrink says the ledger in one line -- counts, "tell the human",
+    the verify command -- and `--details` still prints the titles of the entries."""
+    log = w.task()
+    w.stop()
+    log.write_text(BOOK.replace("parser reads 3 formats", "parser reads 4 formats"), "utf-8")
+    for k, v in w.env().items():
+        monkeypatch.setenv(k, v)
+    spec = importlib.util.spec_from_file_location("bss_ledger", HOOKS / "baton_session_start.py")
+    ss = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ss)
+    full = ss.ledger_notice(w.root, "LOGBOOK.md")
+    one = ss.NOTICE_FORMS[full]["one"]
+    assert "2026-10-20 09:00 — first" in full and "2026-10-20 09:00 — first" not in one
+    assert "1 changed" in one and "tell the human" in one and "verify`" in one
+    assert len(one) < len(full)
+    det = subprocess.run([sys.executable, str(HOOKS / "baton_session_start.py"), "--details"],
+                         capture_output=True, text=True, env=w.env(), timeout=60)
+    assert det.returncode == 0, det.stderr
+    assert "2026-10-20 09:00 — first" in det.stdout
+
+
+@needs_git
 def test_a_recorded_entry_that_is_gone_is_named(w):
     log = w.task()
     w.stop()
